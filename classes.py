@@ -72,7 +72,7 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(callback.message.chat.id, callback.from_user.id)
             self.record_message(answer, callback.from_user.id, callback.data, 0)
             await self.timer.start(callback.message.chat.id, callback.from_user.id)
-            await callback.answer(text="Спасибо, что воспользовались ботом!", show_alert=False)
+            await callback.answer()
 
         @self.message(Command("random"))
         async def cmd_random(message: Message):

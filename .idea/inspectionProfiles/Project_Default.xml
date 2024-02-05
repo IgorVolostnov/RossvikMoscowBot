@@ -1,0 +1,38 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="tkinter.Misc.create_window" />
+          <option value="tkinter.Misc.delete" />
+          <option value="tkinter.Misc.find_withtag" />
+          <option value="tkinter.Misc.title_picture" />
+          <option value="tkinter.Misc.indent" />
+          <option value="tkinter.Misc.picture_info" />
+          <option value="tkinter.Misc.description_canvas_alien" />
+          <option value="tkinter.Misc.itemconfigure" />
+          <option value="tkinter.Misc.arr_catalog_label_Level_3" />
+          <option value="tkinter.Misc.record_point" />
+          <option value="tkinter.Misc.show_cross_table" />
+          <option value="tkinter.Misc.show_label" />
+          <option value="tkinter.Misc.move_higher_in_mass" />
+          <option value="tkinter.Misc.move_higher_in_mass_price" />
+          <option value="tkinter.Misc.fill_catalog" />
+          <option value="tkinter.Misc.arr_catalog_frame" />
+          <option value="tkinter.Misc.arr_catalog_label" />
+          <option value="tkinter.Misc.arr_catalog_label_Level_1" />
+          <option value="tkinter.Misc.arr_catalog_label_Level_2" />
+          <option value="tkinter.Misc.show_catalog" />
+          <option value="tkinter.Misc.arr_level_1" />
+          <option value="tkinter.Misc.id_level_1" />
+          <option value="tkinter.Misc.id_level_3" />
+          <option value="tkinter.Misc.create_text" />
+          <option value="tkinter.Misc.data_cross" />
+          <option value="tkinter.Misc.cross" />
+          <option value="tkinter.Misc.name_save" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

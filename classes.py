@@ -47,11 +47,18 @@ class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
         Dispatcher.__init__(self, **kw)
         self.timer = TimerClean(self, 300)
-        self.dict_first_keyboard = {'Новости': ['Новости'], 'Курс валют': ['Курс валют'],
-                                    'Каталог': ['Каталог']}
-        self.user_data = {}
-        self.button = {'-2': ['change', -2], '-1': ['change', -1], '1': ['change', 1], '2': ['change', 2],
-                       'Подтвердить': ['finish', 0]}
+        self.dict_first_keyboard = {'news': ['Новости 📣🌐💬'], 'exchange': ['Курс валют 💰💲'],
+                                    'catalog': ['Каталог🛒🧾👀']}
+        self.menu_button = {'back': ['◀ 👈 Назад'], 'further': ['Далее 👉🏻 ▶']}
+        self.item_catalog = {'equipment': ['Оборудование для автосервиса 🗜🚗', 'Оборудование для автосервиса'],
+                             'extruders': ['Вулканизаторы и экструдеры 🔌⛓️💥', 'Вулканизаторы и экструдеры'],
+                             'repair': ['Расходные материалы и инструмент для ремонта шин 🧑‍🚒✂⚒',
+                                        'Расходные материалы и инструмент для шиноремонта'],
+                             'tools': ['Слесарно-монтажный инструмент 🔧', 'Слесарно-монтажный инструмент'],
+                             'air': ['Оборудование для подготовки воздуха  и пневмолинии 💨💧🧬', 'Подготовка воздуха'],
+                             'thorns': ['Ремонтные комплекты дошиповки 🌵', 'Шипы ремонтные'],
+                             'part': ['Запчасти для оборудования 🧩📋📐', 'Запчасти']
+                             }
         self.bot = parent
 
         @self.message(Command("start"))
@@ -63,30 +70,31 @@ class DispatcherMessage(Dispatcher):
             self.record_message(answer, message.from_user.id, message.text, 0)
             await self.timer.start(message.chat.id, message.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data == 'Назад'))
+        @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             return_history = self.going_back(callback.from_user.id)
             if return_history == '/start':
                 await self.return_start(callback)
-            elif return_history == 'Каталог':
+            elif return_history == 'catalog':
                 await self.return_catalog(callback)
 
-        @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data == 'Каталог'))
+        @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data == 'catalog'))
         async def send_catalog_message(callback: CallbackQuery):
             print(callback.data)
             await self.catalog(callback)
 
         @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data.in_(self.catalog_button)))
         async def send_group_message(callback: CallbackQuery):
-            name_group = self.catalog_button[callback.data][0]
-            print(f'группа: {name_group}')
-            await self.group(callback, name_group)
+            await self.group(callback, self.catalog_button[callback.data][1])
 
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def edit_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.edit_text(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    async def edit_text(self, message: Message, text: str):
+        return await message.edit_text(text=self.format_text(text), parse_mode=ParseMode.HTML)
 
     @property
     def auth_user(self):
@@ -229,8 +237,10 @@ class DispatcherMessage(Dispatcher):
             return arr_history[len(arr_history)-1]
 
     async def catalog(self, call_back):
-        answer = await self.edit_message(call_back.message, "Каталог товаров ROSSVIK 📖",
-                                         self.build_keyboard(self.catalog_button, 1, {'Назад': ['Назад']}))
+        answer = await self.edit_text(call_back.message, "Каталог товаров ROSSVIK 📖")
+        for key, price in self.item_catalog.items():
+            await self.answer_message(answer, price[0], self.build_keyboard(self.menu_button, 2))
+        # await self.delete_messages(call_back.message.chat.id, call_back.message.from_user.id)
         self.record_message(answer, call_back.from_user.id, call_back.data, 1)
         await self.timer.start(call_back.message.chat.id, call_back.from_user.id)
 
@@ -330,7 +340,7 @@ class DispatcherMessage(Dispatcher):
         return menu
 
     @staticmethod
-    def format_text(text_message):
+    def format_text(text_message: str):
         return f'<b>{text_message}</b>'
 
     @staticmethod

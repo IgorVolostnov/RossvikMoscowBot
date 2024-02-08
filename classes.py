@@ -6,14 +6,13 @@ import re
 import pyodbc
 import os
 from typing import Optional
-from random import randint
 from operator import itemgetter
 from aiogram import F
 from aiogram import Bot, Dispatcher
 from aiogram.filters.callback_data import CallbackData
 from aiogram.filters.command import Command
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
-from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardMarkup
 from aiogram.enums.parse_mode import ParseMode
 
 logging.basicConfig(level=logging.INFO)
@@ -50,8 +49,8 @@ class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
         Dispatcher.__init__(self, **kw)
         self.timer = TimerClean(self, 300)
-        self.dict_first_keyboard = {'Новости': ['Новости', 1], 'Курс валют': ['Курс валют', 2],
-                                    'Каталог': ['Каталог', 3]}
+        self.dict_first_keyboard = {'Новости': ['Новости'], 'Курс валют': ['Курс валют'],
+                                    'Каталог': ['Каталог']}
         self.user_data = {}
         self.button = {'-2': ['change', -2], '-1': ['change', -1], '1': ['change', 1], '2': ['change', 2],
                        'Подтвердить': ['finish', 0]}
@@ -66,31 +65,14 @@ class DispatcherMessage(Dispatcher):
             self.record_message(answer, message.from_user.id, message.text, 0)
             await self.timer.start(message.chat.id, message.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.auth_user))
+        @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data == 'Каталог'))
         async def send_select_message(callback: CallbackQuery):
             print(callback.data)
-            await self.selected_button(callback)
+            await self.catalog(callback)
 
-        @self.message(Command("random"))
-        async def cmd_random(message: Message):
-            builder = InlineKeyboardBuilder()
-            builder.add(InlineKeyboardButton(text="Нажми меня", callback_data="random_value"))
-            await message.answer("Нажмите на кнопку, чтобы бот отправил число от 1 до 10",
-                                 reply_markup=builder.as_markup())
-
-        @self.callback_query(F.data == "random_value")
-        async def send_random_value(callback: CallbackQuery):
-            await callback.message.answer(str(randint(1, 10)))
-            await callback.answer(
-                text="Спасибо, что воспользовались ботом!",
-                show_alert=False)
-
-        @self.message(Command("numbers_fab"))
-        async def cmd_numbers_fab(message: Message):
-            self.user_data[message.from_user.id] = 0
-            await message.answer("Укажите число: 0", reply_markup=self.get_keyboard(self.button, 4,
-                                                                                    footer_buttons={
-                                                                                        'Назад': ['return', 0]}))
+        @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data.in_(self.catalog_button)))
+        async def send_select_message(callback: CallbackQuery):
+            print(f'группа: {callback.data}')
 
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
@@ -118,12 +100,6 @@ class DispatcherMessage(Dispatcher):
             for item in curs.fetchall():
                 dict_user[int(item[0])] = item[1]
             return dict_user
-
-    async def selected_button(self, call_back):
-        if call_back.data == 'Каталог':
-            await self.catalog(call_back)
-        elif call_back.data in (self.catalog_button.keys()):
-            print(f'группа: {call_back.data}')
 
     def record_message(self, answer: Message, id_user, text: str, amount: int):
         try:
@@ -266,21 +242,6 @@ class DispatcherMessage(Dispatcher):
         else:
             callback_key = key
         return callback_key
-
-    @staticmethod
-    def get_keyboard(buttons, n_cols, header_buttons=None, footer_buttons=None):
-        builder = InlineKeyboardBuilder()
-        for key, value in buttons.items():
-            builder.button(text=key, callback_data=NumbersCallbackFactory(action=value[0], value=value[1]))
-        builder.adjust(n_cols)
-        if header_buttons:
-            for key, value in header_buttons.items():
-                builder.button(text=key, callback_data=NumbersCallbackFactory(action=value[0], value=value[1]))
-                builder.adjust(4)
-        if footer_buttons:
-            for key, value in footer_buttons.items():
-                builder.button(text=key, callback_data=NumbersCallbackFactory(action=value[0], value=value[1]))
-        return builder.as_markup()
 
     @staticmethod
     def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):

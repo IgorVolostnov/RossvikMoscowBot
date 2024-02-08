@@ -5,11 +5,9 @@ import json
 import re
 import pyodbc
 import os
-from typing import Optional
 from operator import itemgetter
 from aiogram import F
 from aiogram import Bot, Dispatcher
-from aiogram.filters.callback_data import CallbackData
 from aiogram.filters.command import Command
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardMarkup
@@ -65,14 +63,24 @@ class DispatcherMessage(Dispatcher):
             self.record_message(answer, message.from_user.id, message.text, 0)
             await self.timer.start(message.chat.id, message.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data == 'Назад'))
+        async def send_return_message(callback: CallbackQuery):
+            return_history = self.going_back(callback.from_user.id)
+            if return_history == '/start':
+                await self.return_start(callback)
+            elif return_history == 'Каталог':
+                await self.return_catalog(callback)
+
         @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data == 'Каталог'))
-        async def send_select_message(callback: CallbackQuery):
+        async def send_catalog_message(callback: CallbackQuery):
             print(callback.data)
             await self.catalog(callback)
 
         @self.callback_query(F.from_user.id.in_(self.auth_user) & (F.data.in_(self.catalog_button)))
-        async def send_select_message(callback: CallbackQuery):
-            print(f'группа: {callback.data}')
+        async def send_group_message(callback: CallbackQuery):
+            name_group = self.catalog_button[callback.data][0]
+            print(f'группа: {name_group}')
+            await self.group(callback, name_group)
 
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
@@ -155,6 +163,11 @@ class DispatcherMessage(Dispatcher):
             row_table = curs.fetchone()[0]
             return row_table.split()
 
+    async def return_start(self, call_back):
+        await self.edit_message(call_back.message, "Выберете, что Вас интересует",
+                                self.build_keyboard(self.dict_first_keyboard, 2))
+        await self.timer.start(call_back.message.chat.id, call_back.from_user.id)
+
     def start_message(self, message):
         try:
             connect_string = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=\\' + f'{os.getenv("CONNECTION")}'
@@ -188,10 +201,42 @@ class DispatcherMessage(Dispatcher):
                 print(f'Клиент возобновил работу с сообщением: {str(message.message_id)}')
                 self.conn.commit()
 
+    def going_back(self, user_id):
+        try:
+            connect_string = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=\\' + f'{os.getenv("CONNECTION")}'
+            with pyodbc.connect(connect_string) as self.conn:
+                return self.execute_going_back(user_id)
+        except pyodbc.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_going_back(self, user_id):
+        with self.conn.cursor() as curs:
+            return_catalog = f"SELECT [HISTORY] FROM [TELEGRAMMBOT] " \
+                              f"WHERE [ID_USER] = {self.quote(user_id)} "
+            curs.execute(return_catalog)
+            arr_history = curs.fetchone()[0].split()
+            arr_history.pop()
+            new_history = " ".join(arr_history)
+            sql_record = f"UPDATE [TELEGRAMMBOT] SET " \
+                         f"[HISTORY] = '{new_history}' " \
+                         f"WHERE [ID_USER] = {self.quote(user_id)} "
+            curs.execute(sql_record)
+            self.conn.commit()
+            print(arr_history[len(arr_history)-1])
+            return arr_history[len(arr_history)-1]
+
     async def catalog(self, call_back):
         answer = await self.edit_message(call_back.message, "Каталог товаров ROSSVIK 📖",
-                                         self.build_keyboard(self.catalog_button, 1))
+                                         self.build_keyboard(self.catalog_button, 1, {'Назад': ['Назад']}))
         self.record_message(answer, call_back.from_user.id, call_back.data, 1)
+        await self.timer.start(call_back.message.chat.id, call_back.from_user.id)
+
+    async def return_catalog(self, call_back):
+        await self.edit_message(call_back.message, "Каталог товаров ROSSVIK 📖",
+                                self.build_keyboard(self.catalog_button, 1, {'Назад': ['Назад']}))
         await self.timer.start(call_back.message.chat.id, call_back.from_user.id)
 
     @property
@@ -212,11 +257,51 @@ class DispatcherMessage(Dispatcher):
             curs.execute(sql_price)
             curs_table = curs.fetchall()
             dict_user = {}
+            i = 1
             for item in sorted(curs_table, key=itemgetter(1), reverse=False):
                 if item[0] == 'Нет в каталоге' or item[0] is None:
                     continue
                 else:
-                    dict_user[self.get_key_for_callback(item[0])] = [item[0], item[1]]
+                    dict_user[str(i)] = [item[0]]
+                    i += 1
+            return dict_user
+
+    async def group(self, call_back, name_group: str):
+        answer = await self.edit_message(call_back.message, name_group,
+                                         self.build_keyboard(self.group_button(name_group), 1, {'Назад': ['Назад']}))
+        self.record_message(answer, call_back.from_user.id, call_back.data, 1)
+        await self.timer.start(call_back.message.chat.id, call_back.from_user.id)
+
+    async def return_group(self, call_back, name_group: str):
+        await self.edit_message(call_back.message, name_group,
+                                self.build_keyboard(self.group_button(name_group), 1, {'Назад': ['Назад']}))
+        await self.timer.start(call_back.message.chat.id, call_back.from_user.id)
+
+    def group_button(self, data_price: str):
+        try:
+            connect_string = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=\\' + f'{os.getenv("CONNECTION")}'
+            with pyodbc.connect(connect_string) as self.conn:
+                return self.execute_group_button(data_price)
+        except pyodbc.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_group_button(self, data_price: str):
+        with self.conn.cursor() as curs:
+            sql_group = f"SELECT DISTINCT [Уровень2], [СортировкаУровень2] FROM [Nomenclature] " \
+                        f"WHERE [Уровень1] = {self.quote(data_price)}"
+            curs.execute(sql_group)
+            curs_table = curs.fetchall()
+            dict_user = {}
+            i = 1
+            for item in sorted(curs_table, key=itemgetter(1), reverse=False):
+                if item[0] == 'Нет в каталоге' or item[0] is None:
+                    continue
+                else:
+                    dict_user[str(i)] = [item[0]]
+                    i += 1
             return dict_user
 
     def build_keyboard(self, dict_button: dict, column: int, dict_return_button=None):
@@ -229,19 +314,10 @@ class DispatcherMessage(Dispatcher):
         button_list = []
         if dict_button:
             for key, value in dict_button.items():
-                button_list.append(InlineKeyboardButton(text=f"{value[0]}",
-                                                        callback_data=f"{key}"))
+                button_list.append(InlineKeyboardButton(text=value[0], callback_data=key))
         else:
             button_list = None
         return button_list
-
-    @staticmethod
-    def get_key_for_callback(key: str):
-        if len(key) > 32:
-            callback_key = key[0:32]
-        else:
-            callback_key = key
-        return callback_key
 
     @staticmethod
     def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
@@ -254,12 +330,6 @@ class DispatcherMessage(Dispatcher):
         return menu
 
     @staticmethod
-    def add_record(record: str, text: str):
-        arr_record = record.split()
-        arr_record.append(text)
-        return ' '.join(arr_record)
-
-    @staticmethod
     def format_text(text_message):
         return f'<b>{text_message}</b>'
 
@@ -267,11 +337,6 @@ class DispatcherMessage(Dispatcher):
     # Функция для оборота переменных для запроса
     def quote(request):
         return f"'{str(request)}'"
-
-
-class NumbersCallbackFactory(CallbackData, prefix="rossvik"):
-    action: str
-    value: Optional[int] = None
 
 
 class Currency:

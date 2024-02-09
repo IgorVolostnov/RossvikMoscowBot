@@ -12,6 +12,7 @@ from aiogram.filters.command import Command
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardMarkup
 from aiogram.enums.parse_mode import ParseMode
+from dict_menu import menu_button, price
 
 logging.basicConfig(level=logging.INFO)
 
@@ -49,16 +50,8 @@ class DispatcherMessage(Dispatcher):
         self.timer = TimerClean(self, 300)
         self.dict_first_keyboard = {'news': ['Новости 📣🌐💬'], 'exchange': ['Курс валют 💰💲'],
                                     'catalog': ['Каталог🛒🧾👀']}
-        self.menu_button = {'back': ['◀ 👈 Назад'], 'further': ['Далее 👉🏻 ▶']}
-        self.item_catalog = {'equipment': ['Оборудование для автосервиса 🗜🚗', 'Оборудование для автосервиса'],
-                             'extruders': ['Вулканизаторы и экструдеры 🔌⛓️💥', 'Вулканизаторы и экструдеры'],
-                             'repair': ['Расходные материалы и инструмент для ремонта шин 🧑‍🚒✂⚒',
-                                        'Расходные материалы и инструмент для шиноремонта'],
-                             'tools': ['Слесарно-монтажный инструмент 🔧', 'Слесарно-монтажный инструмент'],
-                             'air': ['Оборудование для подготовки воздуха  и пневмолинии 💨💧🧬', 'Подготовка воздуха'],
-                             'thorns': ['Ремонтные комплекты дошиповки 🌵', 'Шипы ремонтные'],
-                             'part': ['Запчасти для оборудования 🧩📋📐', 'Запчасти']
-                             }
+        self.menu_button = menu_button
+        self.item_catalog = price
         self.bot = parent
 
         @self.message(Command("start"))

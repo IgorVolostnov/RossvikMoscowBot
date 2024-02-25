@@ -52,6 +52,7 @@ class DispatcherMessage(Dispatcher):
         self.first_keyboard = self.data.get_first_keyboard
         self.price_keyboard = self.data.get_prices
         self.category = self.data.get_category
+        self.pages = self.data.get_pages
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
@@ -77,6 +78,12 @@ class DispatcherMessage(Dispatcher):
                 self.add_element_history(callback.from_user.id, callback.data)
             else:
                 self.add_element_history(callback.from_user.id, callback.data + ' ' + 'Стр.1')
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages)))
+        async def send_next_page(callback: CallbackQuery):
+            if await self.next_page(callback):
+                self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         # @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.price_keyboard)))
@@ -191,14 +198,37 @@ class DispatcherMessage(Dispatcher):
                                                  self.build_keyboard(current_category, 1, menu_button))
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
 
+    async def next_page(self, call_back: CallbackQuery):
+        if self.pages[call_back.data] == call_back.message.text[-1]:
+            print('Уже на этой странице')
+            return False
+        else:
+            id_category = self.delete_element_history(call_back.from_user.id)
+            current_nomenclature = self.current_nomenclature(id_category)
+            pages = {}
+            for page in current_nomenclature.keys():
+                pages[page] = page
+            heading = await self.edit_message(call_back.message,
+                                              call_back.message.text[:-1] + self.pages[call_back.data],
+                                              self.build_keyboard(pages, 5))
+            await self.delete_messages(call_back.from_user.id, heading.message_id)
+            arr_answers = []
+            for key, value in current_nomenclature[call_back.data].items():
+                menu_button = {'back': '◀ 👈 Назад', 'key': 'Подробнее 👀📸'}
+                answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+                arr_answers.append(str(answer.message_id))
+            self.add_arr_messages(call_back.from_user.id, arr_answers)
+            return True
+
     async def list_nomenclature(self, call_back: CallbackQuery):
+        number_page = '\n' + 'Страница №1'
         current_nomenclature = self.current_nomenclature(call_back.data)
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
-        heading = await self.edit_message(call_back.message, self.text_category(call_back.data),
+        heading = await self.edit_message(call_back.message, self.text_category(call_back.data) + number_page,
                                           self.build_keyboard(pages, 5))
-        arr_answers = [str(heading.message_id)]
+        arr_answers = []
         for key, value in current_nomenclature['Стр.1'].items():
             menu_button = {'back': '◀ 👈 Назад', 'key': 'Подробнее 👀📸'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
@@ -1052,6 +1082,13 @@ class DATA:
         for item in range(2000):
             dict_category[str(item)] = str(item)
         return dict_category
+
+    @property
+    def get_pages(self):
+        dict_pages = {}
+        for item in range(100):
+            dict_pages['Стр.' + str(item)] = str(item)
+        return dict_pages
     #
     # def groups(self, item_price: str):
     #     try:

@@ -221,9 +221,9 @@ class DispatcherMessage(Dispatcher):
             availability = "Нет на складе"
         else:
             availability = arr_description[7]
-        info_nomenclature = f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
+        info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
+                            f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
                             f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                            f'{self.format_text(arr_description[2])}{whitespace}' \
                             f'Цена: {self.format_text(arr_description[8])} RUB{whitespace}' \
                             f'Наличие: {self.format_text(availability)}{whitespace}'
         description_text = f'{arr_description[4]}{whitespace}' \

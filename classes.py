@@ -119,7 +119,7 @@ class DispatcherMessage(Dispatcher):
     async def send_photo(self, message: Message, photo: str, text: str):
         media_group = MediaGroupBuilder(caption=text)
         if photo:
-            arr_photo = photo.split()
+            arr_photo = photo.split()[:10]
         else:
             arr_photo = ["https://www.rossvik.moscow/images/no_foto.png"]
         for item in arr_photo:
@@ -199,18 +199,20 @@ class DispatcherMessage(Dispatcher):
         number_page = '\n' + 'Страница №' + self.pages[current_page]
         id_category = self.delete_element_history(call_back.from_user.id)
         current_nomenclature = self.current_nomenclature(id_category)
+        text = self.text_category(id_category)
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
-        heading = await self.edit_message(call_back.message, self.text_category(id_category) + number_page,
-                                          self.build_keyboard(pages, 5))
+        heading = await self.edit_message(call_back.message, text + number_page, self.build_keyboard(pages, 5))
         await self.delete_messages(call_back.from_user.id, heading.message_id)
+        await asyncio.sleep(0.5)
         arr_answers = []
         for key, value in current_nomenclature[current_page].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         self.add_arr_messages(call_back.from_user.id, arr_answers)
+        return True
 
     async def description(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -636,7 +638,9 @@ class DispatcherMessage(Dispatcher):
 
     @staticmethod
     def format_text(text_message: str):
-        return f'<b>{text_message}</b>'
+        cleaner = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
+        clean_text = re.sub(cleaner, '', text_message)
+        return f'<b>{clean_text}</b>'
 
     @staticmethod
     # Функция для оборота переменных для запроса

@@ -53,6 +53,7 @@ class DispatcherMessage(Dispatcher):
         self.category = self.data.get_category
         self.pages = self.data.get_pages
         self.nomenclatures = self.data.get_nomenclature
+        self.button_calculater = self.data.get_button_calculater
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
@@ -96,6 +97,11 @@ class DispatcherMessage(Dispatcher):
         async def send_basket(callback: CallbackQuery):
             await self.add_nomenclature(callback)
             self.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_calculater)))
+        async def send_change_amount(callback: CallbackQuery):
+            await self.change_amount(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
@@ -275,9 +281,26 @@ class DispatcherMessage(Dispatcher):
         await self.edit_message(call_back.message, description_text, self.build_keyboard(menu_button, 2))
 
     async def add_nomenclature(self, call_back: CallbackQuery):
-        id_nomenclature = self.get_info_user(call_back.from_user.id)[0].split()[-1]
+        whitespace = '\n'
+        text = f"Введите количество, которое нужно добавить в корзину:{whitespace}"
+        menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
+        await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+
+    async def change_amount(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        id_nomenclature = self.previous_history(call_back.from_user.id)
         arr_description = self.current_description(id_nomenclature)
-        text = f"Введите количество, которое нужно добавить в корзину.\n{arr_description[2]}: "
+        if len(call_back.message.text.split(whitespace)) == 2:
+            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1] + call_back.data
+        else:
+            amount = call_back.data
+        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            price = arr_description[9]
+        else:
+            price = arr_description[8]
+        sum_nomenclature = int(amount) * int(price)
+        text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+               f"{amount} шт. х {price} руб. = {str(sum_nomenclature)} руб."
         menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
         await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
 
@@ -295,6 +318,25 @@ class DispatcherMessage(Dispatcher):
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         self.add_arr_messages(call_back.from_user.id, arr_answers)
+
+    def previous_history(self, id_user: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_previous_history(id_user)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_previous_history(self, id_user: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_history = f"SELECT HISTORY FROM TELEGRAMMBOT " \
+                      f"WHERE ID_USER = {self.quote(id_user)} "
+        curs.execute(sql_history)
+        row_table = curs.fetchone()[0]
+        return row_table.split()[-2]
 
     def current_category(self, id_parent: str):
         try:
@@ -390,8 +432,8 @@ class DispatcherMessage(Dispatcher):
     def execute_start_message(self, message: Message):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_auth = f"SELECT [ID_USER] FROM [TELEGRAMMBOT] " \
-                   f"WHERE [ID_USER] = {self.quote(message.from_user.id)} "
+        sql_auth = f"SELECT ID_USER FROM TELEGRAMMBOT " \
+                   f"WHERE ID_USER = {self.quote(message.from_user.id)} "
         curs.execute(sql_auth)
         row_table = curs.fetchone()
         if row_table is None:
@@ -879,6 +921,13 @@ class DATA:
         for item in range(4000, 30000):
             dict_nomenclature[str(item)] = str(item)
         return dict_nomenclature
+
+    @property
+    def get_button_calculater(self):
+        dict_button_calculater = {}
+        for item in range(10):
+            dict_button_calculater[str(item)] = str(item)
+        return dict_button_calculater
 
     def current_basket(self, id_user: int):
         try:

@@ -7,6 +7,7 @@ import os
 import sqlite3
 from aiogram import F
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters.command import Command
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardMarkup
@@ -21,8 +22,6 @@ class BotTelegram:
     def __init__(self, token_from_telegram):
         self.bot = BotMessage(token_from_telegram)
         self.dispatcher = DispatcherMessage(self.bot)
-        self.list_emoji_numbers = {1: '1⃣', 2: '2⃣', 3: '3⃣', 4: '4⃣', 5: '5⃣', 6: '6⃣', 7: '7⃣', 8: 'м', 9: '9⃣',
-                                   10: '🔟'}
         self.data = Currency()
         self.list_currency = {}
         self.conn = None
@@ -93,6 +92,12 @@ class DispatcherMessage(Dispatcher):
             self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add'))
+        async def send_basket(callback: CallbackQuery):
+            await self.add_nomenclature(callback)
+            self.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             current = self.delete_element_history(callback.from_user.id)
@@ -109,6 +114,9 @@ class DispatcherMessage(Dispatcher):
                 await self.return_page(callback, current)
                 self.add_element_history(callback.from_user.id, current)
                 await self.timer.start(callback.from_user.id)
+            elif current in self.nomenclatures:
+                await self.return_description(callback, current)
+                await self.timer.start(callback.from_user.id)
 
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
@@ -124,7 +132,14 @@ class DispatcherMessage(Dispatcher):
             arr_photo = ["https://www.rossvik.moscow/images/no_foto.png"]
         for item in arr_photo:
             media_group.add_photo(media=item, parse_mode=ParseMode.HTML)
-        return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
+        try:
+            return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
+        except TelegramBadRequest as error:
+            media_group = MediaGroupBuilder(caption=text)
+            arr_photo = ["https://www.rossvik.moscow/images/no_foto.png"]
+            for item in arr_photo:
+                media_group.add_photo(media=item, parse_mode=ParseMode.HTML)
+            return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
 
     async def start(self, message: Message):
         return await self.answer_message(message, "Выберете, что Вас интересует",
@@ -221,17 +236,25 @@ class DispatcherMessage(Dispatcher):
             availability = "Нет на складе"
         else:
             availability = arr_description[7]
-        info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                            f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                            f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                            f'Цена: {self.format_text(arr_description[8])} RUB{whitespace}' \
-                            f'Наличие: {self.format_text(availability)}{whitespace}'
+        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
+                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
+                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
+                                f'Цена: {self.format_text(arr_description[8])} RUB{whitespace}' \
+                                f'Дилерская цена: {self.format_text(arr_description[9])} RUB{whitespace}' \
+                                f'Наличие: {self.format_text(availability)}{whitespace}'
+        else:
+            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
+                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
+                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
+                                f'Цена: {self.format_text(arr_description[8])} RUB{whitespace}' \
+                                f'Наличие: {self.format_text(availability)}{whitespace}'
         description_text = f'{arr_description[4]}{whitespace}' \
                            f'{arr_description[5]}'
         if re.sub('\W+', '', description_text) == "":
             description_text = "Нет подробной информации"
         arr_answer = await self.send_photo(call_back.message, arr_description[6], info_nomenclature)
-        menu_button = {'back': '◀ 👈 Назад', 'add': 'В корзину 🛒'}
+        menu_button = self.data.get_description_button(call_back.from_user.id)
         answer_description = await self.answer_message(arr_answer[0], description_text,
                                                        self.build_keyboard(menu_button, 2))
         arr_answer.append(answer_description)
@@ -240,6 +263,23 @@ class DispatcherMessage(Dispatcher):
             arr_message.append(str(item_message.message_id))
         await self.delete_messages(call_back.from_user.id)
         self.add_arr_messages(call_back.from_user.id, arr_message)
+
+    async def return_description(self, call_back: CallbackQuery, id_nomenclature: str):
+        whitespace = '\n'
+        arr_description = self.current_description(id_nomenclature)
+        description_text = f'{arr_description[4]}{whitespace}' \
+                           f'{arr_description[5]}'
+        if re.sub('\W+', '', description_text) == "":
+            description_text = "Нет подробной информации"
+        menu_button = self.data.get_description_button(call_back.from_user.id)
+        await self.edit_message(call_back.message, description_text, self.build_keyboard(menu_button, 2))
+
+    async def add_nomenclature(self, call_back: CallbackQuery):
+        id_nomenclature = self.get_info_user(call_back.from_user.id)[0].split()[-1]
+        arr_description = self.current_description(id_nomenclature)
+        text = f"Введите количество, которое нужно добавить в корзину.\n{arr_description[2]}: "
+        menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
+        await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
 
     async def list_nomenclature(self, call_back: CallbackQuery):
         number_page = '\n' + 'Страница №1'
@@ -414,7 +454,7 @@ class DispatcherMessage(Dispatcher):
     def execute_auth_user(self):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_auth = f"SELECT [ID_USER], [HISTORY] FROM [TELEGRAMMBOT] "
+        sql_auth = f"SELECT ID_USER, STATUS FROM TELEGRAMMBOT "
         curs.execute(sql_auth)
         dict_user = {}
         for item in curs.fetchall():
@@ -805,6 +845,11 @@ class DATA:
                       '1100': 'Автотовары 🍱',
                       '1101': 'Садовый инвентарь 👩‍🌾',
                       '1104': 'Акции 📢'}
+        self.calculater = {'1': '1⃣', '2': '2⃣', '3': '3⃣', '4': '4⃣', '5': '5⃣', '6': '6⃣', '7': '7⃣', '8': '8️⃣',
+                           '9': '9⃣', 'back': '◀👈 Назад', '0': '0️⃣', 'done': 'Готово ✅🗑️',
+                           'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
+        self.description_button = {'back': '◀ 👈 Назад', 'add': 'Добавить ✅🗑️',
+                                   'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
 
     @property
     def get_first_keyboard(self):
@@ -834,3 +879,53 @@ class DATA:
         for item in range(4000, 30000):
             dict_nomenclature[str(item)] = str(item)
         return dict_nomenclature
+
+    def current_basket(self, id_user: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_current_basket(id_user)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_current_basket(self, id_user: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
+        curs.execute(sql_basket)
+        basket = curs.fetchone()[0]
+        if basket is None:
+            return None
+        else:
+            return basket.split()
+
+    def get_calculater_keyboard(self, id_user: int):
+        arr_basket = self.current_basket(id_user)
+        if arr_basket is None:
+            self.calculater['basket'] = f"Корзина 🛒(0 шт на 0 руб.)"
+        else:
+            sum_item = 0
+            for item in arr_basket:
+                arr_item = item.split('///')
+                sum_item += arr_item[2]
+            self.calculater['basket'] = f"Корзина 🛒({len(arr_basket)} шт на {sum_item} руб.)"
+        return self.calculater
+
+    def get_description_button(self, id_user: int):
+        arr_basket = self.current_basket(id_user)
+        if arr_basket is None:
+            self.description_button['basket'] = f"Корзина 🛒(0 шт на 0 руб.)"
+        else:
+            sum_item = 0
+            for item in arr_basket:
+                arr_item = item.split('///')
+                sum_item += arr_item[2]
+            self.description_button['basket'] = f"Корзина 🛒({len(arr_basket)} шт на {sum_item} руб.)"
+        return self.description_button
+
+    @staticmethod
+    # Функция для оборота переменных для запроса
+    def quote(request):
+        return f"'{str(request)}'"

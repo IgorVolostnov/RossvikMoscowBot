@@ -104,6 +104,21 @@ class DispatcherMessage(Dispatcher):
             await self.change_amount(callback)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'minus'))
+        async def send_change_minus(callback: CallbackQuery):
+            await self.minus_nomenclature(callback)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'plus'))
+        async def send_change_plus(callback: CallbackQuery):
+            await self.plus_nomenclature(callback)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'delete'))
+        async def send_change_delete(callback: CallbackQuery):
+            await self.delete_nomenclature(callback)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             current = self.delete_element_history(callback.from_user.id)
@@ -292,6 +307,8 @@ class DispatcherMessage(Dispatcher):
         arr_description = self.current_description(id_nomenclature)
         if len(call_back.message.text.split(whitespace)) == 2:
             amount = call_back.message.text.split(' шт')[0].split(whitespace)[1] + call_back.data
+            if amount[0] == '0':
+                amount = call_back.data
         else:
             amount = call_back.data
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
@@ -302,7 +319,94 @@ class DispatcherMessage(Dispatcher):
         text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                f"{amount} шт. х {price} руб. = {str(sum_nomenclature)} руб."
         menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
-        await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+        try:
+            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+        except TelegramBadRequest as error:
+            pass
+
+    async def minus_nomenclature(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        id_nomenclature = self.previous_history(call_back.from_user.id)
+        arr_description = self.current_description(id_nomenclature)
+        if len(call_back.message.text.split(whitespace)) == 2:
+            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
+            if int(amount) == 0:
+                amount = 0
+            else:
+                amount = int(amount) - 1
+        else:
+            amount = None
+        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            price = arr_description[9]
+        else:
+            price = arr_description[8]
+        if amount is not None:
+            sum_nomenclature = int(amount) * int(price)
+            text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+                   f"{amount} шт. х {price} руб. = {str(sum_nomenclature)} руб."
+            menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
+            try:
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+            except TelegramBadRequest as error:
+                pass
+        else:
+            pass
+
+    async def plus_nomenclature(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        id_nomenclature = self.previous_history(call_back.from_user.id)
+        arr_description = self.current_description(id_nomenclature)
+        if len(call_back.message.text.split(whitespace)) == 2:
+            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
+            if int(amount) == 0:
+                amount = 1
+            else:
+                amount = int(amount) + 1
+        else:
+            amount = None
+        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            price = arr_description[9]
+        else:
+            price = arr_description[8]
+        if amount is not None:
+            sum_nomenclature = int(amount) * int(price)
+            text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+                   f"{amount} шт. х {price} руб. = {str(sum_nomenclature)} руб."
+            menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
+            try:
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+            except TelegramBadRequest as error:
+                pass
+        else:
+            pass
+
+    async def delete_nomenclature(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        id_nomenclature = self.previous_history(call_back.from_user.id)
+        arr_description = self.current_description(id_nomenclature)
+        if len(call_back.message.text.split(whitespace)) == 2:
+            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
+            if len(amount) > 1:
+                amount = amount[:-1]
+            else:
+                amount = 0
+        else:
+            amount = None
+        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            price = arr_description[9]
+        else:
+            price = arr_description[8]
+        if amount is not None:
+            sum_nomenclature = int(amount) * int(price)
+            text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+                   f"{amount} шт. х {price} руб. = {str(sum_nomenclature)} руб."
+            menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
+            try:
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+            except TelegramBadRequest as error:
+                pass
+        else:
+            pass
 
     async def list_nomenclature(self, call_back: CallbackQuery):
         number_page = '\n' + 'Страница №1'
@@ -889,6 +993,7 @@ class DATA:
                       '1104': 'Акции 📢'}
         self.calculater = {'1': '1⃣', '2': '2⃣', '3': '3⃣', '4': '4⃣', '5': '5⃣', '6': '6⃣', '7': '7⃣', '8': '8️⃣',
                            '9': '9⃣', 'back': '◀👈 Назад', '0': '0️⃣', 'done': 'Готово ✅🗑️',
+                           'minus': '➖', 'delete': '⌫', 'plus': '➕',
                            'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
         self.description_button = {'back': '◀ 👈 Назад', 'add': 'Добавить ✅🗑️',
                                    'basket': f'Корзина 🛒(0 шт на 0 руб.)'}

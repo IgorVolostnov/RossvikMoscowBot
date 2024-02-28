@@ -106,17 +106,17 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'minus'))
         async def send_change_minus(callback: CallbackQuery):
-            await self.minus_nomenclature(callback)
+            await self.minus_amount(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'plus'))
         async def send_change_plus(callback: CallbackQuery):
-            await self.plus_nomenclature(callback)
+            await self.plus_amount(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'delete'))
         async def send_change_delete(callback: CallbackQuery):
-            await self.delete_nomenclature(callback)
+            await self.delete_amount(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
@@ -324,7 +324,7 @@ class DispatcherMessage(Dispatcher):
         except TelegramBadRequest as error:
             pass
 
-    async def minus_nomenclature(self, call_back: CallbackQuery):
+    async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
         id_nomenclature = self.previous_history(call_back.from_user.id)
         arr_description = self.current_description(id_nomenclature)
@@ -352,7 +352,7 @@ class DispatcherMessage(Dispatcher):
         else:
             pass
 
-    async def plus_nomenclature(self, call_back: CallbackQuery):
+    async def plus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
         id_nomenclature = self.previous_history(call_back.from_user.id)
         arr_description = self.current_description(id_nomenclature)
@@ -380,7 +380,7 @@ class DispatcherMessage(Dispatcher):
         else:
             pass
 
-    async def delete_nomenclature(self, call_back: CallbackQuery):
+    async def delete_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
         id_nomenclature = self.previous_history(call_back.from_user.id)
         arr_description = self.current_description(id_nomenclature)
@@ -829,7 +829,6 @@ class DispatcherMessage(Dispatcher):
         return f'<b>{clean_text}</b>'
 
     @staticmethod
-    # Функция для оборота переменных для запроса
     def quote(request):
         return f"'{str(request)}'"
 
@@ -1080,6 +1079,5 @@ class DATA:
         return self.description_button
 
     @staticmethod
-    # Функция для оборота переменных для запроса
     def quote(request):
         return f"'{str(request)}'"

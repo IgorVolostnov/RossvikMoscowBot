@@ -40,6 +40,9 @@ class BotMessage(Bot):
     async def delete_messages_chat(self, chat_id: int, list_message: list):
         await self.delete_messages(chat_id=chat_id, message_ids=list_message)
 
+    async def alert_message(self, id_call_back: str, text: str):
+        await self.answer_callback_query(id_call_back, text=text, show_alert=True)
+
 
 class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
@@ -155,7 +158,7 @@ class DispatcherMessage(Dispatcher):
         async def send_return_message(callback: CallbackQuery):
             current = self.delete_element_history(callback.from_user.id)
             if current in self.nomenclatures:
-                await self.description_from_basket(callback, current)
+                await self.description(callback, current)
                 await self.timer.start(callback.from_user.id)
             elif current == 'add':
                 previous_history = self.previous_history(callback.from_user.id)
@@ -273,70 +276,16 @@ class DispatcherMessage(Dispatcher):
         self.add_arr_messages(call_back.from_user.id, arr_answers)
         return True
 
-    async def description(self, call_back: CallbackQuery):
-        whitespace = '\n'
-        arr_description = self.current_description(call_back.data)
-        if arr_description[7] == "0":
-            availability = "Нет на складе"
+    async def description(self, call_back: CallbackQuery, id_nomenclature: str = None):
+        if id_nomenclature:
+            current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
+                                                                      call_back.id)
         else:
-            availability = arr_description[7]
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text("{:.2f} ₽".format(float(arr_description[8])))}{whitespace}' \
-                                f'Дилерская цена: {self.format_text("{:.2f} ₽".format(float(arr_description[9])))}' \
-                                f'{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
-        else:
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text("{:.2f} ₽".format(float(arr_description[8])))}{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
-        description_text = f'{arr_description[4]}{whitespace}' \
-                           f'{arr_description[5]}'
-        if re.sub('\W+', '', description_text) == "":
-            description_text = "Нет подробной информации"
-        arr_answer = await self.send_photo(call_back.message, arr_description[6], info_nomenclature)
+            current_description = await self.description_nomenclature(call_back.data, call_back.from_user.id,
+                                                                      call_back.id)
+        arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1])
         menu_button = self.data.get_description_button(call_back.from_user.id)
-        answer_description = await self.answer_message(arr_answer[0], description_text,
-                                                       self.build_keyboard(menu_button, 2))
-        arr_answer.append(answer_description)
-        arr_message = []
-        for item_message in arr_answer:
-            arr_message.append(str(item_message.message_id))
-        await self.delete_messages(call_back.from_user.id)
-        self.add_arr_messages(call_back.from_user.id, arr_message)
-
-    async def description_from_basket(self, call_back: CallbackQuery, id_nomenclature: str):
-        whitespace = '\n'
-        arr_description = self.current_description(id_nomenclature)
-        if arr_description[7] == "0":
-            availability = "Нет на складе"
-        else:
-            availability = arr_description[7]
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text("{:.2f} ₽".format(float(arr_description[8])))}{whitespace}' \
-                                f'Дилерская цена: {self.format_text("{:.2f} ₽".format(float(arr_description[9])))}' \
-                                f'{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
-        else:
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text("{:.2f} ₽".format(float(arr_description[8])))}{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
-        description_text = f'{arr_description[4]}{whitespace}' \
-                           f'{arr_description[5]}'
-        if re.sub('\W+', '', description_text) == "":
-            description_text = "Нет подробной информации"
-        arr_answer = await self.send_photo(call_back.message, arr_description[6], info_nomenclature)
-        menu_button = self.data.get_description_button(call_back.from_user.id)
-        answer_description = await self.answer_message(arr_answer[0], description_text,
+        answer_description = await self.answer_message(arr_answer[0], current_description[2],
                                                        self.build_keyboard(menu_button, 2))
         arr_answer.append(answer_description)
         arr_message = []
@@ -363,27 +312,9 @@ class DispatcherMessage(Dispatcher):
 
     async def add_nomenclature_from_basket(self, call_back: CallbackQuery, id_nomenclature: str):
         whitespace = '\n'
-        arr_description = self.current_description(id_nomenclature)
-        if arr_description[7] == "0":
-            availability = "Нет на складе"
-        else:
-            availability = arr_description[7]
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text("{:.2f} ₽".format(float(arr_description[8])))}{whitespace}' \
-                                f'Дилерская цена: {self.format_text("{:.2f} ₽".format(float(arr_description[9])))}' \
-                                f'{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
-        else:
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text("{:.2f} ₽".format(float(arr_description[8])))}{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
+        current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id, call_back.id)
         description_text = f"Введите количество, которое нужно добавить в корзину:{whitespace}"
-        arr_answer = await self.send_photo(call_back.message, arr_description[6], info_nomenclature)
+        arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1])
         menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
         answer_description = await self.answer_message(arr_answer[0], description_text,
                                                        self.build_keyboard(menu_button, 3))
@@ -410,7 +341,7 @@ class DispatcherMessage(Dispatcher):
             price = arr_description[8]
         sum_nomenclature = float(amount) * float(price)
         text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-               f"{amount} шт. х {'{:.2f} ₽'.format(float(price))} = {'{:.2f} ₽'.format(float(sum_nomenclature))}"
+               f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
         menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
         try:
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
@@ -436,7 +367,7 @@ class DispatcherMessage(Dispatcher):
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {'{:.2f} ₽'.format(float(price))} = {'{:.2f} ₽'.format(float(sum_nomenclature))}"
+                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
             menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
@@ -464,7 +395,7 @@ class DispatcherMessage(Dispatcher):
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {'{:.2f} ₽'.format(float(price))} = {'{:.2f} ₽'.format(float(sum_nomenclature))}"
+                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
             menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
@@ -492,7 +423,7 @@ class DispatcherMessage(Dispatcher):
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {'{:.2f} ₽'.format(float(price))} = {'{:.2f} ₽'.format(float(sum_nomenclature))}"
+                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
             menu_button = self.data.get_calculater_keyboard(call_back.from_user.id)
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
@@ -512,7 +443,11 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = None
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            price = arr_description[9]
+            if arr_description[9] is None or arr_description[9] == '':
+                await self.bot.alert_message(call_back.id, 'На данный товар нет дилерской цены!')
+                price = 0
+            else:
+                price = arr_description[9]
         else:
             price = arr_description[8]
         if amount is not None:
@@ -525,7 +460,7 @@ class DispatcherMessage(Dispatcher):
                 basket.append(add_item)
                 self.add_basket_base(call_back.from_user.id, ' '.join(basket))
             text = f"Вы добавили {arr_description[2]} в количестве " \
-                   f"{amount} шт. на сумму {'{:.2f} ₽'.format(float(sum_nomenclature))} в корзину."
+                   f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
             menu_button = self.data.get_description_button(call_back.from_user.id)
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
@@ -546,7 +481,7 @@ class DispatcherMessage(Dispatcher):
             for item in current_basket:
                 arr_item = item.split('///')
                 sum_item += float(arr_item[2])
-            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {'{:.2f} ₽'.format(float(sum_item))}:"
+            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_item))}:"
             menu_button = {'back_basket': '◀ 👈 Назад', 'post': 'Отправить заказ 📧📦📲'}
             heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
@@ -554,11 +489,43 @@ class DispatcherMessage(Dispatcher):
             for item in current_basket:
                 row = item.split('///')
                 name = self.current_description(row[0])[2]
-                text = f"{name}:{whitespace}{row[1]} шт. на сумму {'{:.2f} ₽'.format(float(row[2]))}"
+                text = f"{name}:{whitespace}{row[1]} шт. на сумму {self.format_price(float(row[2]))}"
                 menu_button = {'basket_minus': '➖', 'basket_plus': '➕'}
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             self.add_arr_messages(call_back.from_user.id, arr_answers)
+
+    async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
+        whitespace = '\n'
+        arr_description = self.current_description(id_item)
+        if arr_description[7] == "0":
+            availability = "Нет на складе"
+        else:
+            availability = arr_description[7]
+        if self.arr_auth_user[id_user] == 'diler':
+            if arr_description[9] is None or arr_description[9] == '':
+                await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
+                dealer = 0
+            else:
+                dealer = arr_description[9]
+            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
+                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
+                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
+                                f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}{whitespace}' \
+                                f'Дилерская цена: {self.format_text(self.format_price(float(dealer)))}' \
+                                f'{whitespace}' \
+                                f'Наличие: {self.format_text(availability)}{whitespace}'
+        else:
+            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
+                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
+                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
+                                f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}{whitespace}' \
+                                f'Наличие: {self.format_text(availability)}{whitespace}'
+        description_text = f'{arr_description[4]}{whitespace}' \
+                           f'{arr_description[5]}'
+        if re.sub('\W+', '', description_text) == "":
+            description_text = "Нет подробной информации"
+        return arr_description[6], info_nomenclature, description_text
 
     async def list_nomenclature(self, call_back: CallbackQuery):
         number_page = '\n' + 'Страница №1'
@@ -751,7 +718,7 @@ class DispatcherMessage(Dispatcher):
     def execute_start_record_new_user(self, message: Message):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"INSERT INTO [TELEGRAMMBOT] ([ID_USER], [HISTORY], [MESSAGES], [EMAIL]) " \
+        sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, EMAIL) " \
                      f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}, '') "
         curs.execute(sql_record)
         self.arr_auth_user[message.from_user.id] = '/start'
@@ -816,8 +783,8 @@ class DispatcherMessage(Dispatcher):
     def execute_get_arr_messages(self, user_id: int, except_id_message: int = None):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_number_chat = f"SELECT [MESSAGES] FROM [TELEGRAMMBOT] " \
-                          f"WHERE [ID_USER] = {self.quote(user_id)} "
+        sql_number_chat = f"SELECT MESSAGES FROM TELEGRAMMBOT " \
+                          f"WHERE ID_USER = {self.quote(user_id)} "
         curs.execute(sql_number_chat)
         row_table = curs.fetchone()[0]
         arr_messages = row_table.split()
@@ -842,9 +809,9 @@ class DispatcherMessage(Dispatcher):
             record_message = str(except_id_message)
         else:
             record_message = ''
-        sql_record = f"UPDATE [TELEGRAMMBOT] SET " \
-                     f"[MESSAGES] = '{record_message}' " \
-                     f"WHERE [ID_USER] = {self.quote(user_id)} "
+        sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                     f"MESSAGES = '{record_message}' " \
+                     f"WHERE ID_USER = {self.quote(user_id)} "
         curs.execute(sql_record)
         self.conn.commit()
 
@@ -861,8 +828,8 @@ class DispatcherMessage(Dispatcher):
     def execute_get_info_user(self, id_user: int):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_auth = f"SELECT [HISTORY], [MESSAGES], [EMAIL] FROM [TELEGRAMMBOT] " \
-                   f"WHERE [ID_USER] = {self.quote(id_user)} "
+        sql_auth = f"SELECT HISTORY, MESSAGES, EMAIL FROM TELEGRAMMBOT " \
+                   f"WHERE ID_USER = {self.quote(id_user)} "
         curs.execute(sql_auth)
         row_table = curs.fetchone()
         return row_table
@@ -1019,6 +986,10 @@ class DispatcherMessage(Dispatcher):
         cleaner = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
         clean_text = re.sub(cleaner, '', text_message)
         return f'<b>{clean_text}</b>'
+
+    @staticmethod
+    def format_price(item: float):
+        return '{0:,} ₽'.format(item).replace(',', ' ')
 
     @staticmethod
     def quote(request):
@@ -1255,7 +1226,7 @@ class DATA:
             for item in arr_basket:
                 arr_item = item.split('///')
                 sum_item += float(arr_item[2])
-            self.calculater['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {'{:.2f} ₽'.format(float(sum_item))})"
+            self.calculater['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {self.format_price(float(sum_item))})"
         return self.calculater
 
     def get_description_button(self, id_user: int):
@@ -1268,9 +1239,13 @@ class DATA:
                 arr_item = item.split('///')
                 sum_item += float(arr_item[2])
             self.description_button['basket'] = f"Корзина 🛒({len(arr_basket)} шт. " \
-                                                f"на {'{:.2f} ₽'.format(float(sum_item))})"
+                                                f"на {self.format_price(float(sum_item))})"
         return self.description_button
 
     @staticmethod
     def quote(request):
         return f"'{str(request)}'"
+
+    @staticmethod
+    def format_price(item: float):
+        return '{0:,} ₽'.format(item).replace(',', ' ')

@@ -124,15 +124,29 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'done'))
         async def send_done_basket(callback: CallbackQuery):
-            await self.add_to_basket(callback)
-            self.delete_element_history(callback.from_user.id)
-            await self.timer.start(callback.from_user.id)
+            if await self.add_to_basket(callback):
+                self.delete_element_history(callback.from_user.id)
+                await self.timer.start(callback.from_user.id)
+            else:
+                await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'basket'))
         async def send_show_basket(callback: CallbackQuery):
             await self.show_basket(callback)
             self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
+        async def send_clean_basket(callback: CallbackQuery):
+            self.clean_basket(callback.from_user.id)
+            current = self.delete_element_history(callback.from_user.id)
+            if current in self.nomenclatures:
+                await self.description(callback, current)
+                await self.timer.start(callback.from_user.id)
+            elif current == 'add':
+                previous_history = self.previous_history(callback.from_user.id)
+                await self.add_nomenclature_from_basket(callback, previous_history)
+                await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
@@ -336,7 +350,10 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = call_back.data
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            price = arr_description[9]
+            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
+                price = arr_description[8]
+            else:
+                price = arr_description[9]
         else:
             price = arr_description[8]
         sum_nomenclature = float(amount) * float(price)
@@ -361,7 +378,10 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = None
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            price = arr_description[9]
+            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
+                price = arr_description[8]
+            else:
+                price = arr_description[9]
         else:
             price = arr_description[8]
         if amount is not None:
@@ -389,7 +409,10 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = None
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            price = arr_description[9]
+            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
+                price = arr_description[8]
+            else:
+                price = arr_description[9]
         else:
             price = arr_description[8]
         if amount is not None:
@@ -416,8 +439,11 @@ class DispatcherMessage(Dispatcher):
                 amount = 0
         else:
             amount = None
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            price = arr_description[9]
+        if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
+            if arr_description[9] is None or arr_description[9] == '':
+                price = arr_description[8]
+            else:
+                price = arr_description[9]
         else:
             price = arr_description[8]
         if amount is not None:
@@ -439,35 +465,40 @@ class DispatcherMessage(Dispatcher):
         if len(call_back.message.text.split(whitespace)) == 2:
             amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
             if int(amount) == 0:
+                await self.bot.alert_message(call_back.id, 'Вы хотите добавить 0 товара в корзину!')
                 amount = None
         else:
+            await self.bot.alert_message(call_back.id, 'Вы не выбрали количество товара, которое нужно добавить!')
             amount = None
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            if arr_description[9] is None or arr_description[9] == '':
-                await self.bot.alert_message(call_back.id, 'На данный товар нет дилерской цены!')
-                price = 0
+            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
+                price = arr_description[8]
             else:
                 price = arr_description[9]
         else:
             price = arr_description[8]
         if amount is not None:
-            sum_nomenclature = float(amount) * float(price)
-            add_item = f"{id_nomenclature}///{amount}///{sum_nomenclature}"
-            basket = self.current_basket(call_back.from_user.id)
-            if basket is None:
-                self.add_basket_base(call_back.from_user.id, add_item)
+            if int(amount) > int(arr_description[7]) or arr_description[7] == 'Нет на складе':
+                await self.bot.alert_message(call_back.id, 'Нельзя добавить товара больше, чем есть на остатках!')
             else:
-                basket.append(add_item)
-                self.add_basket_base(call_back.from_user.id, ' '.join(basket))
-            text = f"Вы добавили {arr_description[2]} в количестве " \
-                   f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
-            menu_button = self.data.get_description_button(call_back.from_user.id)
-            try:
-                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-            except TelegramBadRequest as error:
-                pass
+                sum_nomenclature = float(amount) * float(price)
+                add_item = f"{id_nomenclature}///{amount}///{sum_nomenclature}"
+                basket = self.current_basket(call_back.from_user.id)
+                if basket is None:
+                    self.add_basket_base(call_back.from_user.id, add_item)
+                else:
+                    basket.append(add_item)
+                    self.add_basket_base(call_back.from_user.id, ' '.join(basket))
+                text = f"Вы добавили {arr_description[2]} в количестве " \
+                       f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
+                menu_button = self.data.get_description_button(call_back.from_user.id)
+                try:
+                    await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                    return True
+                except TelegramBadRequest as error:
+                    pass
         else:
-            pass
+            return False
 
     async def show_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -482,7 +513,8 @@ class DispatcherMessage(Dispatcher):
                 arr_item = item.split('///')
                 sum_item += float(arr_item[2])
             text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_item))}:"
-            menu_button = {'back_basket': '◀ 👈 Назад', 'post': 'Отправить заказ 📧📦📲'}
+            menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
+                           'post': 'Отправить заказ 📧📦📲'}
             heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
@@ -503,9 +535,9 @@ class DispatcherMessage(Dispatcher):
         else:
             availability = arr_description[7]
         if self.arr_auth_user[id_user] == 'diler':
-            if arr_description[9] is None or arr_description[9] == '':
+            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
                 await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
-                dealer = 0
+                dealer = arr_description[8]
             else:
                 dealer = arr_description[9]
             info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
@@ -562,6 +594,25 @@ class DispatcherMessage(Dispatcher):
             return None
         else:
             return basket.split()
+
+    def clean_basket(self, id_user: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_clean_basket(id_user)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_clean_basket(self, id_user: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                     f"BASKET = NULL " \
+                     f"WHERE ID_USER = {self.quote(id_user)} "
+        curs.execute(sql_record)
+        self.conn.commit()
 
     def add_basket_base(self, id_user: int, record_item: str):
         try:

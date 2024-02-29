@@ -57,6 +57,8 @@ class DispatcherMessage(Dispatcher):
         self.pages = self.data.get_pages
         self.nomenclatures = self.data.get_nomenclature
         self.button_calculater = self.data.get_button_calculater
+        self.button_basket_minus = self.data.get_basket_minus
+        self.button_basket_plus = self.data.get_basket_plus
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
@@ -134,6 +136,11 @@ class DispatcherMessage(Dispatcher):
         async def send_show_basket(callback: CallbackQuery):
             await self.show_basket(callback)
             self.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_basket_minus)))
+        async def send_basket_minus(callback: CallbackQuery):
+            await self.minus_amount_basket(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
@@ -260,7 +267,7 @@ class DispatcherMessage(Dispatcher):
             for page in current_nomenclature.keys():
                 pages[page] = page
             heading = await self.edit_message(call_back.message,
-                                              call_back.message.text[:-1] + self.pages[call_back.data],
+                                              call_back.message.text.split('№')[0] + '№' + self.pages[call_back.data],
                                               self.build_keyboard(pages, 5))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
@@ -522,10 +529,28 @@ class DispatcherMessage(Dispatcher):
                 row = item.split('///')
                 name = self.current_description(row[0])[2]
                 text = f"{name}:{whitespace}{row[1]} шт. на сумму {self.format_price(float(row[2]))}"
-                menu_button = {'basket_minus': '➖', 'basket_plus': '➕'}
+                menu_button = {f'basket_minus{row[0]}': '➖', f'basket_plus{row[0]}': '➕'}
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             self.add_arr_messages(call_back.from_user.id, arr_answers)
+
+    async def minus_amount_basket(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        current_basket_dict = self.current_basket_dict(call_back.from_user.id)
+        current_amount = float(current_basket_dict[self.button_basket_minus[call_back.data]][0])
+        price = float(current_basket_dict[self.button_basket_minus[call_back.data]][1]) / float(current_amount)
+        if current_amount > 1:
+            current_amount -= 1
+            current_basket_dict[self.button_basket_minus[call_back.data]] = [str(current_amount),
+                                                                             str(price*current_amount)]
+            self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
+            name = self.current_description(self.button_basket_minus[call_back.data])[2]
+            text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price*current_amount)}"
+            menu_button = {f'basket_minus{self.button_basket_minus[call_back.data]}': '➖',
+                           f'basket_plus{self.button_basket_minus[call_back.data]}': '➕'}
+            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+        else:
+            print('Удалить позицию')
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         whitespace = '\n'
@@ -594,6 +619,28 @@ class DispatcherMessage(Dispatcher):
             return None
         else:
             return basket.split()
+
+    def current_basket_dict(self, id_user: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_current_basket_dict(id_user)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_current_basket_dict(self, id_user: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
+        curs.execute(sql_basket)
+        basket = curs.fetchone()[0]
+        basket_dict = {}
+        for item in basket.split():
+            row = item.split('///')
+            basket_dict[row[0]] = [row[1], row[2]]
+        return basket_dict
 
     def clean_basket(self, id_user: int):
         try:
@@ -973,6 +1020,14 @@ class DispatcherMessage(Dispatcher):
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
+    def assembling_basket_dict(basket_dict: dict):
+        list_basket = []
+        for key, value in basket_dict.items():
+            item = f'{key}///{value[0]}///{value[1]}'
+            list_basket.append(item)
+        return ' '.join(list_basket)
+
+    @staticmethod
     def add_element(arr: str, element: str):
         arr_history = arr.split()
         arr_history.append(element)
@@ -1292,6 +1347,20 @@ class DATA:
             self.description_button['basket'] = f"Корзина 🛒({len(arr_basket)} шт. " \
                                                 f"на {self.format_price(float(sum_item))})"
         return self.description_button
+
+    @property
+    def get_basket_minus(self):
+        dict_basket_minus = {}
+        for item in range(4000, 30000):
+            dict_basket_minus['basket_minus' + str(item)] = str(item)
+        return dict_basket_minus
+
+    @property
+    def get_basket_plus(self):
+        dict_basket_plus = {}
+        for item in range(4000, 30000):
+            dict_basket_plus['basket_plus' + str(item)] = str(item)
+        return dict_basket_plus
 
     @staticmethod
     def quote(request):

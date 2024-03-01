@@ -587,10 +587,12 @@ class DispatcherMessage(Dispatcher):
             current_basket_dict.pop(self.button_basket_minus[call_back.data])
             if len(current_basket_dict) == 0:
                 self.clean_basket(call_back.from_user.id)
-                text = 'Ваша корзина пуста 😭😔💔'
-                menu_button = {'back': '◀ 👈 Назад'}
-                answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+                await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
+                head_text = 'Ваша корзина пуста 😭😔💔'
+                head_menu_button = {'back_basket': '◀ 👈 Назад'}
+                await self.bot.edit_head_message(head_text, call_back.message.chat.id,
+                                                 self.get_arr_messages(call_back.from_user.id)[0],
+                                                 self.build_keyboard(head_menu_button, 1))
             else:
                 self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
                 await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
@@ -598,7 +600,7 @@ class DispatcherMessage(Dispatcher):
                 sum_basket = self.sum_basket(current_basket)
                 head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
                 head_menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
-                               'post': 'Отправить заказ 📧📦📲'}
+                                    'post': 'Отправить заказ 📧📦📲'}
                 await self.bot.edit_head_message(head_text, call_back.message.chat.id,
                                                  self.get_arr_messages(call_back.from_user.id)[0],
                                                  self.build_keyboard(head_menu_button, 2))

@@ -43,6 +43,16 @@ class BotMessage(Bot):
     async def alert_message(self, id_call_back: str, text: str):
         await self.answer_callback_query(id_call_back, text=text, show_alert=True)
 
+    async def edit_head_message(self, text_message: str, chat_message: int, id_message: int,
+                                keyboard: InlineKeyboardMarkup):
+        await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
+                                     parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    @staticmethod
+    def format_text(text_message: str):
+        cleaner = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
+        clean_text = re.sub(cleaner, '', text_message)
+        return f'<b>{clean_text}</b>'
 
 class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
@@ -469,43 +479,54 @@ class DispatcherMessage(Dispatcher):
         whitespace = '\n'
         id_nomenclature = self.previous_history(call_back.from_user.id)
         arr_description = self.current_description(id_nomenclature)
-        if len(call_back.message.text.split(whitespace)) == 2:
-            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
-            if int(amount) == 0:
-                await self.bot.alert_message(call_back.id, 'Вы хотите добавить 0 товара в корзину!')
-                amount = None
-        else:
-            await self.bot.alert_message(call_back.id, 'Вы не выбрали количество товара, которое нужно добавить!')
-            amount = None
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
-                price = arr_description[8]
-            else:
-                price = arr_description[9]
-        else:
-            price = arr_description[8]
+        amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
+        price = self.check_price(call_back.from_user.id, arr_description[9], arr_description[8])
         if amount is not None:
-            if int(amount) > int(arr_description[7]) or arr_description[7] == 'Нет на складе':
-                await self.bot.alert_message(call_back.id, 'Нельзя добавить товара больше, чем есть на остатках!')
+            sum_nomenclature = float(amount) * float(price)
+            add_item = f"{id_nomenclature}///{amount}///{sum_nomenclature}"
+            basket = self.current_basket(call_back.from_user.id)
+            if basket is None:
+                self.add_basket_base(call_back.from_user.id, add_item)
             else:
-                sum_nomenclature = float(amount) * float(price)
-                add_item = f"{id_nomenclature}///{amount}///{sum_nomenclature}"
-                basket = self.current_basket(call_back.from_user.id)
-                if basket is None:
-                    self.add_basket_base(call_back.from_user.id, add_item)
-                else:
-                    basket.append(add_item)
-                    self.add_basket_base(call_back.from_user.id, ' '.join(basket))
-                text = f"Вы добавили {arr_description[2]} в количестве " \
-                       f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
-                menu_button = self.data.get_description_button(call_back.from_user.id)
-                try:
-                    await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-                    return True
-                except TelegramBadRequest as error:
-                    pass
+                basket.append(add_item)
+                self.add_basket_base(call_back.from_user.id, ' '.join(basket))
+            text = f"Вы добавили {arr_description[2]} в количестве:{whitespace}" \
+                   f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
+            menu_button = self.data.get_description_button(call_back.from_user.id)
+            try:
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+                return True
+            except TelegramBadRequest as error:
+                pass
         else:
             return False
+
+    async def check_amount(self, text_message: str, id_call_back: str, amount_in_base: str):
+        whitespace = '\n'
+        if amount_in_base == 'Нет на складе':
+            amount_in_base = '0'
+        if len(text_message.split(whitespace)) == 2:
+            amount = text_message.split(' шт')[0].split(whitespace)[1]
+            if int(amount) == 0:
+                await self.bot.alert_message(id_call_back, 'Вы хотите добавить 0 товара в корзину!')
+                amount = None
+            elif int(amount) > int(amount_in_base):
+                await self.bot.alert_message(id_call_back, 'Нельзя добавить товара больше, чем есть на остатках!')
+                amount = None
+        else:
+            await self.bot.alert_message(id_call_back, 'Выберете количество товара, которое нужно добавить в корзину!')
+            amount = None
+        return amount
+
+    def check_price(self, id_user: int, dealer_price: str, retail_price: str):
+        if self.arr_auth_user[id_user] == 'diler':
+            if dealer_price is None or dealer_price == '' or dealer_price == '0':
+                price = retail_price
+            else:
+                price = dealer_price
+        else:
+            price = retail_price
+        return price
 
     async def show_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -515,11 +536,8 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
         else:
-            sum_item = 0
-            for item in current_basket:
-                arr_item = item.split('///')
-                sum_item += float(arr_item[2])
-            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_item))}:"
+            sum_basket = self.sum_basket(current_basket)
+            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                            'post': 'Отправить заказ 📧📦📲'}
             heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
@@ -533,6 +551,14 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             self.add_arr_messages(call_back.from_user.id, arr_answers)
+
+    @staticmethod
+    def sum_basket(current_basket: list):
+        sum_item = 0
+        for item in current_basket:
+            arr_item = item.split('///')
+            sum_item += float(arr_item[2])
+        return sum_item
 
     async def minus_amount_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -548,9 +574,34 @@ class DispatcherMessage(Dispatcher):
             text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price*current_amount)}"
             menu_button = {f'basket_minus{self.button_basket_minus[call_back.data]}': '➖',
                            f'basket_plus{self.button_basket_minus[call_back.data]}': '➕'}
+            current_basket = self.current_basket(call_back.from_user.id)
+            sum_basket = self.sum_basket(current_basket)
+            head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
+            head_menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
+                                'post': 'Отправить заказ 📧📦📲'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+            await self.bot.edit_head_message(head_text, call_back.message.chat.id,
+                                             self.get_arr_messages(call_back.from_user.id)[0],
+                                             self.build_keyboard(head_menu_button, 2))
         else:
-            print('Удалить позицию')
+            current_basket_dict.pop(self.button_basket_minus[call_back.data])
+            if len(current_basket_dict) == 0:
+                self.clean_basket(call_back.from_user.id)
+                text = 'Ваша корзина пуста 😭😔💔'
+                menu_button = {'back': '◀ 👈 Назад'}
+                answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
+                await self.delete_messages(call_back.from_user.id, answer.message_id)
+            else:
+                self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
+                await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
+                current_basket = self.current_basket(call_back.from_user.id)
+                sum_basket = self.sum_basket(current_basket)
+                head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
+                head_menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
+                               'post': 'Отправить заказ 📧📦📲'}
+                await self.bot.edit_head_message(head_text, call_back.message.chat.id,
+                                                 self.get_arr_messages(call_back.from_user.id)[0],
+                                                 self.build_keyboard(head_menu_button, 2))
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         whitespace = '\n'
@@ -864,9 +915,20 @@ class DispatcherMessage(Dispatcher):
             dict_user[int(item[0])] = item[1]
         return dict_user
 
-    async def delete_messages(self, user_id: int, except_id_message: int = None):
-        await self.bot.delete_messages_chat(user_id, self.get_arr_messages(user_id, except_id_message))
-        self.clean_messages_from_base(user_id, except_id_message)
+    async def delete_messages(self, user_id: int, except_id_message: int = None, individual: bool = False):
+        if individual:
+            arr_messages = self.get_arr_messages(user_id, except_id_message)
+            await self.bot.delete_messages_chat(user_id, [except_id_message])
+            self.record_messages_in_base(user_id, ' '.join(arr_messages))
+        else:
+            if except_id_message:
+                arr_messages = self.get_arr_messages(user_id, except_id_message)
+                await self.bot.delete_messages_chat(user_id, arr_messages)
+                self.record_messages_in_base(user_id, str(except_id_message))
+            else:
+                arr_messages = self.get_arr_messages(user_id, except_id_message)
+                await self.bot.delete_messages_chat(user_id, arr_messages)
+                self.record_messages_in_base(user_id, '')
 
     def get_arr_messages(self, user_id: int, except_id_message: int = None):
         try:
@@ -890,23 +952,19 @@ class DispatcherMessage(Dispatcher):
             arr_messages.remove(str(except_id_message))
         return arr_messages
 
-    def clean_messages_from_base(self, user_id: int, except_id_message: int = None):
+    def record_messages_in_base(self, user_id: int, record_message: str):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                self.execute_clean_messages_from_base(user_id, except_id_message)
+                self.execute_record_messages_in_base(user_id, record_message)
         except sqlite3.Error as error:
             print("Ошибка чтения данных из таблицы", error)
         finally:
             if self.conn:
                 self.conn.close()
 
-    def execute_clean_messages_from_base(self, user_id: int, except_id_message: int = None):
+    def execute_record_messages_in_base(self, user_id: int, record_message: str):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        if except_id_message:
-            record_message = str(except_id_message)
-        else:
-            record_message = ''
         sql_record = f"UPDATE TELEGRAMMBOT SET " \
                      f"MESSAGES = '{record_message}' " \
                      f"WHERE ID_USER = {self.quote(user_id)} "

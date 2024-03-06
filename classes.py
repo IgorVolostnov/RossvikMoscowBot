@@ -89,6 +89,17 @@ class DispatcherMessage(Dispatcher):
             self.add_element_message(message.from_user.id, answer.message_id)
             await self.timer.start(message.from_user.id)
 
+        @self.message(Command("catalog"))
+        async def cmd_catalog(message: Message):
+            menu_button = {'back': '◀ 👈 Назад'}
+            answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                               self.build_keyboard(self.price_keyboard, 2, menu_button))
+            self.add_element_message(message.from_user.id, message.message_id)
+            await self.delete_messages(message.from_user.id)
+            self.add_element_message(message.from_user.id, answer.message_id)
+            self.restart_catalog(message)
+            await self.timer.start(message.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'catalog'))
         async def send_catalog_message(callback: CallbackQuery):
             await self.catalog(callback)
@@ -238,7 +249,7 @@ class DispatcherMessage(Dispatcher):
 
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.bot.push_photo(call_back.message.chat.id, "Каталог товаров ROSSVIK 📖",
+        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
                                            self.build_keyboard(self.price_keyboard, 2, menu_button))
         await self.delete_messages(call_back.from_user.id)
         self.add_element_message(call_back.from_user.id, answer.message_id)
@@ -267,12 +278,13 @@ class DispatcherMessage(Dispatcher):
             if new_current == 'catalog':
                 menu_button = {'back': '◀ 👈 Назад'}
                 answer = await self.edit_caption(call_back.message,
-                                                 "Каталог товаров ROSSVIK 📖",
+                                                 self.format_text("Каталог товаров ROSSVIK 📖"),
                                                  self.build_keyboard(self.price_keyboard, 2, menu_button))
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
             else:
                 current_category = self.current_category(new_current)
-                answer = await self.bot.push_photo(call_back.message.chat.id, self.text_category(new_current),
+                answer = await self.bot.push_photo(call_back.message.chat.id,
+                                                   self.format_text(self.text_category(new_current)),
                                                    self.build_keyboard(current_category, 1, menu_button))
                 await self.delete_messages(call_back.from_user.id)
                 self.add_element_message(call_back.from_user.id, answer.message_id)
@@ -653,7 +665,8 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
-        heading = await self.edit_caption(call_back.message, self.text_category(call_back.data) + number_page,
+        heading = await self.edit_caption(call_back.message,
+                                          self.format_text(self.text_category(call_back.data) + number_page),
                                           self.build_keyboard(pages, 5))
         arr_answers = []
         for key, value in current_nomenclature['Стр.1'].items():
@@ -901,6 +914,26 @@ class DispatcherMessage(Dispatcher):
         curs.execute('PRAGMA journal_mode=wal')
         sql_record = f"UPDATE TELEGRAMMBOT SET " \
                      f"HISTORY = '/start' " \
+                     f"WHERE ID_USER = {self.quote(message.from_user.id)} "
+        curs.execute(sql_record)
+        print(f'Клиент возобновил работу с сообщением: {str(message.message_id)}')
+        self.conn.commit()
+
+    def restart_catalog(self, message: Message):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_restart_catalog(message)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_restart_catalog(self, message: Message):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                     f"HISTORY = '/start catalog' " \
                      f"WHERE ID_USER = {self.quote(message.from_user.id)} "
         curs.execute(sql_record)
         print(f'Клиент возобновил работу с сообщением: {str(message.message_id)}')

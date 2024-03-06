@@ -171,6 +171,11 @@ class DispatcherMessage(Dispatcher):
             await self.minus_amount_basket(callback)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_basket_plus)))
+        async def send_basket_plus(callback: CallbackQuery):
+            await self.plus_amount_basket(callback)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             self.clean_basket(callback.from_user.id)
@@ -569,13 +574,6 @@ class DispatcherMessage(Dispatcher):
                 arr_answers.append(str(answer.message_id))
             self.add_arr_messages(call_back.from_user.id, arr_answers)
 
-    @staticmethod
-    def sum_basket(current_basket: dict):
-        sum_item = 0
-        for item in current_basket.values():
-            sum_item += float(item[1])
-        return sum_item
-
     async def minus_amount_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
         current_basket_dict = self.current_basket_dict(call_back.from_user.id)
@@ -619,6 +617,32 @@ class DispatcherMessage(Dispatcher):
                 await self.bot.edit_head_message(head_text, call_back.message.chat.id,
                                                  self.get_arr_messages(call_back.from_user.id)[0],
                                                  self.build_keyboard(head_menu_button, 2))
+
+    async def plus_amount_basket(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        current_basket_dict = self.current_basket_dict(call_back.from_user.id)
+        current_amount = float(current_basket_dict[self.button_basket_plus[call_back.data]][0])
+        price = float(current_basket_dict[self.button_basket_plus[call_back.data]][1]) / float(current_amount)
+        availability = self.current_description(self.button_basket_plus[call_back.data])[7]
+        if str(int(current_amount)) == availability or availability == "Нет на складе":
+            await self.bot.alert_message(call_back.id, 'Нельзя добавить товара больше, чем есть на остатках!')
+        else:
+            current_amount += 1
+            current_basket_dict[self.button_basket_plus[call_back.data]] = [str(current_amount),
+                                                                             str(price*current_amount)]
+            self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
+            name = self.current_description(self.button_basket_plus[call_back.data])[2]
+            text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price*current_amount)}"
+            menu_button = {f'basket_minus{self.button_basket_plus[call_back.data]}': '➖',
+                           f'basket_plus{self.button_basket_plus[call_back.data]}': '➕'}
+            sum_basket = self.sum_basket(current_basket_dict)
+            head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
+            head_menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
+                                'post': 'Отправить заказ 📧📦📲'}
+            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+            await self.bot.edit_head_message(head_text, call_back.message.chat.id,
+                                             self.get_arr_messages(call_back.from_user.id)[0],
+                                             self.build_keyboard(head_menu_button, 2))
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         whitespace = '\n'
@@ -1096,6 +1120,13 @@ class DispatcherMessage(Dispatcher):
         keyboard = self.build_menu(self.get_list_keyboard_button(dict_button), column,
                                    footer_buttons=self.get_list_keyboard_button(dict_return_button))
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    @staticmethod
+    def sum_basket(current_basket: dict):
+        sum_item = 0
+        for item in current_basket.values():
+            sum_item += float(item[1])
+        return sum_item
 
     @staticmethod
     def assembling_basket_dict(basket_dict: dict):

@@ -9,7 +9,7 @@ from aiogram import F
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters.command import Command
-from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, InlineKeyboardButton, CallbackQuery, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardMarkup
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.media_group import MediaGroupBuilder
@@ -48,11 +48,17 @@ class BotMessage(Bot):
         await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
+        photo_to_read = os.path.join(os.path.dirname(__file__), 'Catalog.png')
+        return await self.send_photo(chat_id=message_chat_id, photo=FSInputFile(photo_to_read), caption=text,
+                                     parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
     @staticmethod
     def format_text(text_message: str):
         cleaner = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
         clean_text = re.sub(cleaner, '', text_message)
         return f'<b>{clean_text}</b>'
+
 
 class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
@@ -72,7 +78,8 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
-            answer = await self.start(message)
+            answer = await self.answer_message(message, "Выберете, что Вас интересует",
+                                               self.build_keyboard(self.first_keyboard, 2))
             if self.start_message(message):
                 self.restart_record(message)
                 self.add_element_message(message.from_user.id, message.message_id)
@@ -202,6 +209,10 @@ class DispatcherMessage(Dispatcher):
     async def edit_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.edit_text(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def edit_caption(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
+        return await message.edit_caption(caption=self.format_text(text), parse_mode=ParseMode.HTML,
+                                          reply_markup=keyboard)
+
     async def send_photo(self, message: Message, photo: str, text: str):
         media_group = MediaGroupBuilder(caption=text)
         if photo:
@@ -219,25 +230,24 @@ class DispatcherMessage(Dispatcher):
                 media_group.add_photo(media=item, parse_mode=ParseMode.HTML)
             return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
 
-    async def start(self, message: Message):
-        return await self.answer_message(message, "Выберете, что Вас интересует",
-                                         self.build_keyboard(self.first_keyboard, 2))
-
     async def return_start(self, call_back: CallbackQuery):
-        await self.edit_message(call_back.message, "Выберете, что Вас интересует",
-                                self.build_keyboard(self.first_keyboard, 2))
+        answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует",
+                                           self.build_keyboard(self.first_keyboard, 2))
+        await self.delete_messages(call_back.from_user.id)
+        self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
-        return await self.edit_message(call_back.message,
-                                       "Каталог товаров ROSSVIK 📖",
-                                       self.build_keyboard(self.price_keyboard, 1, menu_button))
+        answer = await self.bot.push_photo(call_back.message.chat.id, "Каталог товаров ROSSVIK 📖",
+                                           self.build_keyboard(self.price_keyboard, 2, menu_button))
+        await self.delete_messages(call_back.from_user.id)
+        self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_category(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
         current_category = self.current_category(call_back.data)
         if current_category:
-            await self.edit_message(call_back.message,
+            await self.edit_caption(call_back.message,
                                     self.text_category(call_back.data),
                                     self.build_keyboard(current_category, 1, menu_button))
             return True
@@ -249,23 +259,23 @@ class DispatcherMessage(Dispatcher):
         menu_button = {'back': '◀ 👈 Назад'}
         current_category = self.current_category(current_history)
         if current_category:
-            return await self.edit_message(call_back.message,
+            return await self.edit_caption(call_back.message,
                                            self.text_category(current_history),
                                            self.build_keyboard(current_category, 1, menu_button))
         else:
             new_current = self.delete_element_history(call_back.from_user.id)
             if new_current == 'catalog':
                 menu_button = {'back': '◀ 👈 Назад'}
-                answer = await self.edit_message(call_back.message,
+                answer = await self.edit_caption(call_back.message,
                                                  "Каталог товаров ROSSVIK 📖",
-                                                 self.build_keyboard(self.price_keyboard, 1, menu_button))
+                                                 self.build_keyboard(self.price_keyboard, 2, menu_button))
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
             else:
                 current_category = self.current_category(new_current)
-                answer = await self.edit_message(call_back.message,
-                                                 self.text_category(new_current),
-                                                 self.build_keyboard(current_category, 1, menu_button))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+                answer = await self.bot.push_photo(call_back.message.chat.id, self.text_category(new_current),
+                                                   self.build_keyboard(current_category, 1, menu_button))
+                await self.delete_messages(call_back.from_user.id)
+                self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_page(self, call_back: CallbackQuery):
         if self.pages[call_back.data] == call_back.message.text[-1]:
@@ -643,7 +653,7 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
-        heading = await self.edit_message(call_back.message, self.text_category(call_back.data) + number_page,
+        heading = await self.edit_caption(call_back.message, self.text_category(call_back.data) + number_page,
                                           self.build_keyboard(pages, 5))
         arr_answers = []
         for key, value in current_nomenclature['Стр.1'].items():

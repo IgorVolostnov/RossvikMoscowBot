@@ -295,7 +295,7 @@ class DispatcherMessage(Dispatcher):
                 self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_page(self, call_back: CallbackQuery):
-        if self.pages[call_back.data] == call_back.message.text[-1]:
+        if self.pages[call_back.data] == call_back.message.caption.split('№')[1]:
             return False
         else:
             id_category = self.delete_element_history(call_back.from_user.id)
@@ -303,8 +303,9 @@ class DispatcherMessage(Dispatcher):
             pages = {}
             for page in current_nomenclature.keys():
                 pages[page] = page
-            heading = await self.edit_message(call_back.message,
-                                              call_back.message.text.split('№')[0] + '№' + self.pages[call_back.data],
+            heading = await self.edit_caption(call_back.message,
+                                              f"{call_back.message.caption.split('№')[0]}"
+                                              f"№{self.pages[call_back.data]}",
                                               self.build_keyboard(pages, 5))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
@@ -323,16 +324,16 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
-        heading = await self.edit_message(call_back.message, text + number_page, self.build_keyboard(pages, 5))
-        await self.delete_messages(call_back.from_user.id, heading.message_id)
+        heading = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text + number_page),
+                                            self.build_keyboard(pages, 5))
+        await self.delete_messages(call_back.from_user.id)
         await asyncio.sleep(0.5)
-        arr_answers = []
+        arr_answers = [str(heading.message_id)]
         for key, value in current_nomenclature[current_page].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         self.add_arr_messages(call_back.from_user.id, arr_answers)
-        return True
 
     async def description(self, call_back: CallbackQuery, id_nomenclature: str = None):
         if id_nomenclature:

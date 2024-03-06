@@ -505,13 +505,9 @@ class DispatcherMessage(Dispatcher):
         price = self.check_price(call_back.from_user.id, arr_description[9], arr_description[8])
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
-            add_item = f"{id_nomenclature}///{amount}///{sum_nomenclature}"
-            basket = self.current_basket(call_back.from_user.id)
-            if basket is None:
-                self.add_basket_base(call_back.from_user.id, add_item)
-            else:
-                basket.append(add_item)
-                self.add_basket_base(call_back.from_user.id, ' '.join(basket))
+            basket = self.current_basket_dict(call_back.from_user.id)
+            basket[id_nomenclature] = [amount, sum_nomenclature]
+            self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(basket))
             text = f"Вы добавили {arr_description[2]} в количестве:{whitespace}" \
                    f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
             menu_button = self.data.get_description_button(call_back.from_user.id)
@@ -552,34 +548,32 @@ class DispatcherMessage(Dispatcher):
 
     async def show_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
-        current_basket = self.current_basket(call_back.from_user.id)
-        if current_basket is None:
+        current_basket_dict = self.current_basket_dict(call_back.from_user.id)
+        if len(current_basket_dict) == 0:
             text = 'Ваша корзина пуста 😭😔💔'
             menu_button = {'back': '◀ 👈 Назад'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
         else:
-            sum_basket = self.sum_basket(current_basket)
+            sum_basket = self.sum_basket(current_basket_dict)
             text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                            'post': 'Отправить заказ 📧📦📲'}
             heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
-            for item in current_basket:
-                row = item.split('///')
-                name = self.current_description(row[0])[2]
-                text = f"{name}:{whitespace}{row[1]} шт. на сумму {self.format_price(float(row[2]))}"
-                menu_button = {f'basket_minus{row[0]}': '➖', f'basket_plus{row[0]}': '➕'}
+            for key, item in current_basket_dict.items():
+                name = self.current_description(key)[2]
+                text = f"{name}:{whitespace}{item[0]} шт. на сумму {self.format_price(float(item[1]))}"
+                menu_button = {f'basket_minus{key}': '➖', f'basket_plus{key}': '➕'}
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             self.add_arr_messages(call_back.from_user.id, arr_answers)
 
     @staticmethod
-    def sum_basket(current_basket: list):
+    def sum_basket(current_basket: dict):
         sum_item = 0
-        for item in current_basket:
-            arr_item = item.split('///')
-            sum_item += float(arr_item[2])
+        for item in current_basket.values():
+            sum_item += float(item[1])
         return sum_item
 
     async def minus_amount_basket(self, call_back: CallbackQuery):
@@ -596,8 +590,7 @@ class DispatcherMessage(Dispatcher):
             text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price*current_amount)}"
             menu_button = {f'basket_minus{self.button_basket_minus[call_back.data]}': '➖',
                            f'basket_plus{self.button_basket_minus[call_back.data]}': '➕'}
-            current_basket = self.current_basket(call_back.from_user.id)
-            sum_basket = self.sum_basket(current_basket)
+            sum_basket = self.sum_basket(current_basket_dict)
             head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             head_menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                 'post': 'Отправить заказ 📧📦📲'}
@@ -618,9 +611,9 @@ class DispatcherMessage(Dispatcher):
             else:
                 self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
                 await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
-                current_basket = self.current_basket(call_back.from_user.id)
-                sum_basket = self.sum_basket(current_basket)
-                head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
+                sum_basket = self.sum_basket(current_basket_dict)
+                head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
+                            f"{self.format_price(float(sum_basket))}:"
                 head_menu_button = {'back_basket': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'post': 'Отправить заказ 📧📦📲'}
                 await self.bot.edit_head_message(head_text, call_back.message.chat.id,
@@ -675,27 +668,6 @@ class DispatcherMessage(Dispatcher):
             arr_answers.append(str(answer.message_id))
         self.add_arr_messages(call_back.from_user.id, arr_answers)
 
-    def current_basket(self, id_user: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_current_basket(id_user)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_current_basket(self, id_user: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_basket)
-        basket = curs.fetchone()[0]
-        if basket is None:
-            return None
-        else:
-            return basket.split()
-
     def current_basket_dict(self, id_user: int):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
@@ -713,9 +685,12 @@ class DispatcherMessage(Dispatcher):
         curs.execute(sql_basket)
         basket = curs.fetchone()[0]
         basket_dict = {}
-        for item in basket.split():
-            row = item.split('///')
-            basket_dict[row[0]] = [row[1], row[2]]
+        if basket is None:
+            basket_dict = {}
+        else:
+            for item in basket.split():
+                row = item.split('///')
+                basket_dict[row[0]] = [row[1], row[2]]
         return basket_dict
 
     def clean_basket(self, id_user: int):

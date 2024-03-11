@@ -68,13 +68,14 @@ class DispatcherMessage(Dispatcher):
         self.arr_auth_user = self.auth_user
         self.data = DATA()
         self.first_keyboard = self.data.get_first_keyboard
-        self.price_keyboard = self.data.get_prices
         self.category = self.data.get_category
         self.pages = self.data.get_pages
         self.nomenclatures = self.data.get_nomenclature
         self.button_calculater = self.data.get_button_calculater
         self.button_basket_minus = self.data.get_basket_minus
         self.button_basket_plus = self.data.get_basket_plus
+        self.levels_in_keyboard = self.data.get_levels_category
+        self.level_numbers = self.data.get_level_numbers
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
@@ -91,9 +92,14 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("catalog"))
         async def cmd_catalog(message: Message):
-            menu_button = {'back': '◀ 👈 Назад'}
-            answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                               self.build_keyboard(self.price_keyboard, 2, menu_button))
+            if self.arr_auth_user[message.from_user.id] == 'creator':
+                menu_button = {'back': '◀ 👈 Назад'}
+                answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                                   self.build_keyboard(self.data.get_price_creator, 2, menu_button))
+            else:
+                menu_button = {'back': '◀ 👈 Назад'}
+                answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                                   self.build_keyboard(self.data.get_prices, 1, menu_button))
             self.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             self.add_element_message(message.from_user.id, answer.message_id)
@@ -219,6 +225,33 @@ class DispatcherMessage(Dispatcher):
                 await self.add_nomenclature_from_basket(callback, previous_history)
                 await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.levels_in_keyboard)))
+        async def send_change_level(callback: CallbackQuery):
+            current_history = self.current_history(callback.from_user.id)
+            if current_history == 'catalog':
+                await self.show_level_price(callback)
+                self.add_element_history(callback.from_user.id, 'level')
+            elif current_history in self.category:
+                await self.show_level_category(callback, current_history)
+                self.add_element_history(callback.from_user.id, 'level')
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.level_numbers)))
+        async def send_new_level(callback: CallbackQuery):
+            current_history = self.delete_element_history(callback.from_user.id)
+            if current_history == 'catalog':
+                kod_nomenclature = callback.message.caption.split('Код:')[1]
+                kod_install = self.level_numbers[callback.data]
+                self.data.set_price_level(kod_nomenclature, int(kod_install))
+                await self.catalog(callback)
+            elif current_history in self.category:
+                kod_parent = current_history
+                kod_category = callback.message.caption.split('Код:')[1]
+                level_install = self.level_numbers[callback.data]
+                self.set_category_level(kod_parent, kod_category, int(level_install))
+                await self.return_category(callback, current_history)
+            await self.timer.start(callback.from_user.id)
+
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
@@ -228,6 +261,10 @@ class DispatcherMessage(Dispatcher):
     async def edit_caption(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.edit_caption(caption=self.format_text(text), parse_mode=ParseMode.HTML,
                                           reply_markup=keyboard)
+
+    @staticmethod
+    async def edit_keyboard(message: Message, keyboard: InlineKeyboardMarkup):
+        return await message.edit_reply_markup(reply_markup=keyboard)
 
     async def send_photo(self, message: Message, photo: str, text: str):
         media_group = MediaGroupBuilder(caption=text)
@@ -253,46 +290,83 @@ class DispatcherMessage(Dispatcher):
         self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def catalog(self, call_back: CallbackQuery):
-        menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                           self.build_keyboard(self.price_keyboard, 2, menu_button))
+        if self.arr_auth_user[call_back.from_user.id] == 'creator':
+            menu_button = {'back': '◀ 👈 Назад'}
+            answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                               self.build_keyboard(self.data.get_price_creator, 2, menu_button))
+        else:
+            menu_button = {'back': '◀ 👈 Назад'}
+            answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                               self.build_keyboard(self.data.get_prices, 1, menu_button))
         await self.delete_messages(call_back.from_user.id)
         self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_category(self, call_back: CallbackQuery):
-        menu_button = {'back': '◀ 👈 Назад'}
         current_category = self.current_category(call_back.data)
         if current_category:
-            await self.edit_caption(call_back.message,
-                                    self.text_category(call_back.data),
-                                    self.build_keyboard(current_category, 1, menu_button))
+            await self.create_keyboard_edit_caption(call_back, current_category, call_back.data)
             return True
         else:
             await self.list_nomenclature(call_back)
             return False
 
     async def return_category(self, call_back: CallbackQuery, current_history):
-        menu_button = {'back': '◀ 👈 Назад'}
         current_category = self.current_category(current_history)
         if current_category:
-            return await self.edit_caption(call_back.message,
-                                           self.text_category(current_history),
-                                           self.build_keyboard(current_category, 1, menu_button))
+            await self.create_keyboard_edit_caption(call_back, current_category, current_history)
         else:
             new_current = self.delete_element_history(call_back.from_user.id)
             if new_current == 'catalog':
-                menu_button = {'back': '◀ 👈 Назад'}
-                answer = await self.edit_caption(call_back.message,
-                                                 self.format_text("Каталог товаров ROSSVIK 📖"),
-                                                 self.build_keyboard(self.price_keyboard, 2, menu_button))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+                if call_back.message.caption:
+                    answer_message = await self.create_price_edit_caption(call_back)
+                    await self.delete_messages(call_back.from_user.id, answer_message.message_id)
+                else:
+                    await self.catalog(call_back)
             else:
                 current_category = self.current_category(new_current)
-                answer = await self.bot.push_photo(call_back.message.chat.id,
-                                                   self.format_text(self.text_category(new_current)),
-                                                   self.build_keyboard(current_category, 1, menu_button))
-                await self.delete_messages(call_back.from_user.id)
-                self.add_element_message(call_back.from_user.id, answer.message_id)
+                await self.create_keyboard_push_photo(call_back, current_category, new_current)
+
+    async def create_price_edit_caption(self, call_back: CallbackQuery):
+        menu_button = {'back': '◀ 👈 Назад'}
+        if self.arr_auth_user[call_back.from_user.id] == 'creator':
+            answer = await self.edit_caption(call_back.message,
+                                             self.format_text("Каталог товаров ROSSVIK 📖"),
+                                             self.build_keyboard(self.data.get_price_creator, 2, menu_button))
+        else:
+            answer = await self.edit_caption(call_back.message,
+                                             self.format_text("Каталог товаров ROSSVIK 📖"),
+                                             self.build_keyboard(self.data.get_prices, 1, menu_button))
+        return answer
+
+    async def create_keyboard_edit_caption(self, call_back: CallbackQuery, list_category: list, id_category: str):
+        menu_button = {'back': '◀ 👈 Назад'}
+        if self.arr_auth_user[call_back.from_user.id] == 'creator':
+            await self.edit_caption(call_back.message,
+                                    self.text_category(id_category),
+                                    self.build_keyboard(self.data.get_category_creator(list_category),
+                                                        2, menu_button))
+        else:
+            await self.edit_caption(call_back.message,
+                                    self.text_category(id_category),
+                                    self.build_keyboard(self.assembling_category_dict(list_category),
+                                                        1, menu_button))
+
+    async def create_keyboard_push_photo(self, call_back: CallbackQuery, list_category: list, id_category: str):
+        menu_button = {'back': '◀ 👈 Назад'}
+        if self.arr_auth_user[call_back.from_user.id] == 'creator':
+            answer = await self.bot.push_photo(call_back.message.chat.id,
+                                               self.format_text(self.text_category(id_category)),
+                                               self.build_keyboard(self.data.get_category_creator(list_category),
+                                                                   2, menu_button))
+            await self.delete_messages(call_back.from_user.id)
+            self.add_element_message(call_back.from_user.id, answer.message_id)
+        else:
+            answer = await self.bot.push_photo(call_back.message.chat.id,
+                                               self.format_text(self.text_category(id_category)),
+                                               self.build_keyboard(self.assembling_category_dict(list_category),
+                                                                   1, menu_button))
+            await self.delete_messages(call_back.from_user.id)
+            self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_page(self, call_back: CallbackQuery):
         if self.pages[call_back.data] == call_back.message.caption.split('№')[1]:
@@ -693,6 +767,84 @@ class DispatcherMessage(Dispatcher):
             arr_answers.append(str(answer.message_id))
         self.add_arr_messages(call_back.from_user.id, arr_answers)
 
+    async def show_level_price(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        menu_button = {'back': '◀ 👈 Назад'}
+        amount_price = len(self.data.price)
+        level_keyboard = self.data.level_numbers(amount_price)
+        kod = f"Код:{call_back.data.split('level')[1]}"
+        name_category = f"{self.text_category(call_back.data.split('level')[1])}{whitespace}" \
+                        f"{self.data.get_price_creator[call_back.data]}{whitespace}" \
+                        f"{kod}"
+        await self.edit_caption(call_back.message, name_category, self.build_keyboard(level_keyboard, 5,
+                                                                                      menu_button))
+
+    async def show_level_category(self, call_back: CallbackQuery, id_category: str):
+        whitespace = '\n'
+        menu_button = {'back': '◀ 👈 Назад'}
+        list_category = self.current_category(id_category)
+        amount_price = len(list_category)
+        level_keyboard = self.data.level_numbers(amount_price)
+        kod = f"Код:{call_back.data.split('level')[1]}"
+        name_category = f"{self.text_category(call_back.data.split('level')[1])}{whitespace}" \
+                        f"{self.data.get_category_creator(list_category)[call_back.data]}{whitespace}" \
+                        f"{kod}"
+        await self.edit_caption(call_back.message, name_category, self.build_keyboard(level_keyboard, 5,
+                                                                                      menu_button))
+
+    def set_category_level(self, kod_parent: str, kod_category: str, level: int):
+        end_number = 1
+        list_category = sorted(self.current_category(kod_parent), key=itemgetter(2), reverse=False)
+        for item in list_category:
+            if item[0] == kod_category:
+                self.set_level(kod_category, level)
+            else:
+                if end_number == level:
+                    end_number += 1
+                    self.set_level(item[0], end_number)
+                    end_number += 1
+                else:
+                    self.set_level(item[0], end_number)
+                    end_number += 1
+
+    def get_category_by_level(self, level: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_get_category_by_level(level)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_get_category_by_level(self, level: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_category_by_level = f"SELECT KOD FROM CATEGORY " \
+                                f"WHERE SORT_CATEGORY = '{level}' "
+        curs.execute(sql_category_by_level)
+        basket = curs.fetchall()
+        return basket
+
+    def set_level(self, kod_nomenclature: str, current_level: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_set_level(kod_nomenclature, current_level)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_set_level(self, kod_nomenclature: str, current_level: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_record = f"UPDATE CATEGORY SET " \
+                     f"SORT_CATEGORY = '{current_level}' " \
+                     f"WHERE KOD = '{kod_nomenclature}' "
+        curs.execute(sql_record)
+        self.conn.commit()
+
     def current_basket_dict(self, id_user: int):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
@@ -756,6 +908,25 @@ class DispatcherMessage(Dispatcher):
         curs.execute(sql_record)
         self.conn.commit()
 
+    def current_history(self, id_user: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_current_history(id_user)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_current_history(self, id_user: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_history = f"SELECT HISTORY FROM TELEGRAMMBOT " \
+                      f"WHERE ID_USER = {self.quote(id_user)} "
+        curs.execute(sql_history)
+        row_table = curs.fetchone()[0]
+        return row_table.split()[-1]
+
     def previous_history(self, id_user: int):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
@@ -788,14 +959,11 @@ class DispatcherMessage(Dispatcher):
     def execute_current_category(self, id_parent: str):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_category = f"SELECT KOD, NAME_CATEGORY FROM CATEGORY " \
+        sql_category = f"SELECT KOD, NAME_CATEGORY, SORT_CATEGORY FROM CATEGORY " \
                        f"WHERE PARENT_ID = '{id_parent}' "
         curs.execute(sql_category)
         row_table = curs.fetchall()
-        dict_category = {}
-        for item in row_table:
-            dict_category[item[0]] = item[1]
-        return dict_category
+        return row_table
 
     def current_nomenclature(self, id_parent: str):
         try:
@@ -810,7 +978,7 @@ class DispatcherMessage(Dispatcher):
     def execute_current_nomenclature(self, id_parent: str):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_nomenclature = f"SELECT KOD, NAME FROM NOMENCLATURE " \
+        sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
                            f"WHERE CATEGORY_ID = '{id_parent}' "
         curs.execute(sql_nomenclature)
         row_table = curs.fetchall()
@@ -1123,6 +1291,13 @@ class DispatcherMessage(Dispatcher):
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
+    def assembling_category_dict(list_category: list):
+        dict_category = {}
+        for item in sorted(list_category, key=itemgetter(2), reverse=False):
+            dict_category[item[0]] = item[1]
+        return dict_category
+
+    @staticmethod
     def sum_basket(current_basket: dict):
         sum_item = 0
         for item in current_basket.values():
@@ -1162,7 +1337,7 @@ class DispatcherMessage(Dispatcher):
         dict_m = {}
         i = 1
         y = 1
-        for item_nomenclature in sorted(arr, key=itemgetter(1), reverse=False):
+        for item_nomenclature in sorted(arr, key=itemgetter(2), reverse=False):
             if i < 7:
                 dict_m[item_nomenclature[0]] = item_nomenclature[1]
                 i += 1
@@ -1342,33 +1517,33 @@ class DATA:
     def __init__(self):
         self.first_keyboard = {'news': 'Новости 📣🌐💬', 'exchange': 'Курс валют 💰💲',
                                'catalog': 'Каталог🛒🧾👀'}
-        self.price = {'506': 'Шиноремонтные материалы ✂⚒',
-                      '507': 'Вентили 🗜',
-                      '556': 'Ремонтные шипы ‍🌵',
-                      '552': 'Шиномонтажное оборудование 🚗🔧',
-                      '600': 'Подъемное оборудование ⛓',
-                      '547': 'Инструмент 🔧',
-                      '608': 'Специнструмент 🛠',
-                      '726': 'Заправки кондиционеров ❄',
-                      '549': 'Компрессоры ⛽',
-                      '597': 'Пневмоинструмент 🎣',
-                      '707': 'Пневмолинии 💨💧',
-                      '623': 'Расходные материалы для автосервиса 📜🚗',
-                      '946': 'Моечно-уборочное оборудование 🧹',
-                      '493': 'АвтоХимия ☣⚗️',
-                      '580': 'Гаражное оборудование 👨🏾‍🔧',
-                      '593': 'Диагностическое оборудование 🕵️‍♀',
-                      '603': 'Маслосменное оборудование 💦🛢️',
-                      '738': 'Электроинструмент 🔋',
-                      '660': 'Сход/развалы 🔩📐',
-                      '663': 'Мойки деталей 🛁',
-                      '1095': 'Вытяжка отработанных газов ♨',
-                      '692': 'Экспресс-сервис 🚅🤝🏻',
-                      '688': 'Мебель для автосервиса 🗄️',
-                      '702': 'Запчасти 🧩⚙️',
-                      '1100': 'Автотовары 🍱',
-                      '1101': 'Садовый инвентарь 👩‍🌾',
-                      '1104': 'Акции 📢'}
+        self.price = [['506', 'Шиноремонтные материалы ✂⚒', 100],
+                      ['507', 'Вентили 🔌', 100],
+                      ['556', 'Ремонтные шипы ‍🌵', 100],
+                      ['658', 'Грузики балансировочные ⚖', 100],
+                      ['552', 'Шиномонтажное оборудование 🚗🔧', 100],
+                      ['600', 'Подъемное оборудование ⛓', 100],
+                      ['547', 'Инструмент 🔧', 100],
+                      ['608', 'Специнструмент 🛠', 100],
+                      ['726', 'Заправки кондиционеров ❄', 100],
+                      ['549', 'Компрессоры ⛽', 100],
+                      ['597', 'Пневмоинструмент 🎣', 100],
+                      ['707', 'Пневмолинии 💨💧', 100],
+                      ['623', 'Расходные материалы для автосервиса 📜🚗', 100],
+                      ['946', 'Моечно-уборочное оборудование 🧹', 100],
+                      ['493', 'АвтоХимия ☣⚗ ', 100],
+                      ['580', 'Гаражное оборудование 👨🏾‍🔧', 100],
+                      ['593', 'Диагностическое оборудование 🕵️‍♀', 100],
+                      ['603', 'Маслосменное оборудование 💦🛢️', 100],
+                      ['738', 'Электроинструмент 🔋', 100],
+                      ['660', 'Сход/развалы 🔩📐', 100],
+                      ['663', 'Мойки деталей 🛁', 100],
+                      ['1095', 'Вытяжка отработанных газов ♨', 100],
+                      ['692', 'Экспресс-сервис 🚅🤝🏻', 100],
+                      ['688', 'Мебель для автосервиса 🗄️', 100],
+                      ['702', 'Запчасти 🧩⚙️', 100],
+                      ['1100', 'Автотовары 🍱', 100],
+                      ['1101', 'Садовый инвентарь 👩‍🌾', 100]]
         self.calculater = {'1': '1⃣', '2': '2⃣', '3': '3⃣', '4': '4⃣', '5': '5⃣', '6': '6⃣', '7': '7⃣', '8': '8️⃣',
                            '9': '9⃣', 'minus': '➖', '0': '0️⃣', 'plus': '➕',
                            'back': '◀👈 Назад', 'delete': '⌫', 'done': 'Готово ✅🗑️',
@@ -1382,7 +1557,10 @@ class DATA:
 
     @property
     def get_prices(self):
-        return self.price
+        dict_price = {}
+        for item in sorted(self.price, key=itemgetter(2), reverse=False):
+            dict_price[item[0]] = item[1]
+        return dict_price
 
     @property
     def get_category(self):
@@ -1411,6 +1589,68 @@ class DATA:
         for item in range(10):
             dict_button_calculater[str(item)] = str(item)
         return dict_button_calculater
+
+    @property
+    def get_price_creator(self):
+        dict_price_creator = {}
+        number = 1
+        for item in sorted(self.price, key=itemgetter(2), reverse=False):
+            dict_price_creator[item[0]] = item[1]
+            dict_price_creator[f"level{item[0]}"] = f"Уровень{str(number)}"
+            number += 1
+        return dict_price_creator
+
+    @staticmethod
+    def get_category_creator(list_category: list):
+        dict_category_creator = {}
+        number = 1
+        for item in sorted(list_category, key=itemgetter(2), reverse=False):
+            dict_category_creator[item[0]] = item[1]
+            dict_category_creator[f"level{item[0]}"] = f"Уровень{str(number)}"
+            number += 1
+        return dict_category_creator
+
+    @property
+    def get_levels_category(self):
+        dict_levels = {}
+        for item in range(400, 2000):
+            dict_levels[f"level{str(item)}"] = str(item)
+        return dict_levels
+
+    @staticmethod
+    def level_numbers(amount_nomenclatures: int):
+        dict_numbers = {}
+        for item in range(1, amount_nomenclatures + 1):
+            dict_numbers[f"number_level{str(item)}"] = str(item)
+        return dict_numbers
+
+    @property
+    def get_level_numbers(self):
+        dict_level_numbers = {}
+        for item in range(1, 200):
+            dict_level_numbers[f"number_level{str(item)}"] = str(item)
+        return dict_level_numbers
+
+    def get_price_by_level(self, level: int):
+        list_nomenclature = []
+        for item in self.price:
+            if item[2] == level:
+                list_nomenclature.append(item[0])
+        return list_nomenclature
+
+    def set_price_level(self, kod_price: str, level: int):
+        end_number = 1
+        for item in sorted(self.price, key=itemgetter(2), reverse=False):
+            if item[0] == kod_price:
+                item[2] = level
+            else:
+                if end_number == level:
+                    end_number += 1
+                    item[2] = end_number
+                    end_number += 1
+                else:
+                    item[2] = end_number
+                    end_number += 1
 
     def current_basket(self, id_user: int):
         try:

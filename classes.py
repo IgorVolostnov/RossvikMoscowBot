@@ -5,10 +5,12 @@ import json
 import re
 import os
 import sqlite3
+from asyncio import Queue
 from aiogram import F
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters.command import Command
+from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardMarkup
 from aiogram.enums.parse_mode import ParseMode
@@ -70,12 +72,14 @@ class DispatcherMessage(Dispatcher):
         self.first_keyboard = self.data.get_first_keyboard
         self.category = self.data.get_category
         self.pages = self.data.get_pages
+        self.pages_search = self.data.get_pages_search
         self.nomenclatures = self.data.get_nomenclature
         self.button_calculater = self.data.get_button_calculater
         self.button_basket_minus = self.data.get_basket_minus
         self.button_basket_plus = self.data.get_basket_plus
         self.levels_in_keyboard = self.data.get_levels_category
         self.level_numbers = self.data.get_level_numbers
+        self.queue = Queue
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
@@ -106,6 +110,40 @@ class DispatcherMessage(Dispatcher):
             self.restart_catalog(message)
             await self.timer.start(message.from_user.id)
 
+        @self.message(F.from_user.id.in_(self.arr_auth_user) & F.content_type.in_({
+            "text", "audio", "document", "photo", "sticker", "video", "video_note", "voice", "location", "contact",
+            "new_chat_members", "left_chat_member", "new_chat_title", "new_chat_photo", "delete_chat_photo",
+            "group_chat_created", "supergroup_chat_created", "channel_chat_created", "migrate_to_chat_id",
+            "migrate_from_chat_id", "pinned_message"}))
+        async def send_message_search(message: Message):
+            id_user = message.from_user.id
+            result_search = self.search(message.text)
+            current_history = self.current_history(id_user)
+            if len(result_search['Поиск_Стр.1']) == 0:
+                await self.find_nothing(id_user, message)
+                if 'search' in current_history:
+                    await self.timer.start(id_user)
+                elif 'Поиск' in current_history:
+                    self.delete_element_history(id_user)
+                    await self.timer.start(id_user)
+                else:
+                    self.add_element_history(id_user, f'search___{self.change_record_search(message.text)}')
+                    await self.timer.start(id_user)
+            else:
+                await self.show_result_search(id_user, message, result_search)
+                if 'search' in current_history:
+                    self.delete_element_history(id_user)
+                    self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
+                    await self.timer.start(id_user)
+                elif 'Поиск' in current_history:
+                    self.delete_element_history(id_user)
+                    self.delete_element_history(id_user)
+                    self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
+                    await self.timer.start(id_user)
+                else:
+                    self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
+                    await self.timer.start(id_user)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'catalog'))
         async def send_catalog_message(callback: CallbackQuery):
             await self.catalog(callback)
@@ -117,12 +155,20 @@ class DispatcherMessage(Dispatcher):
             if await self.next_category(callback):
                 self.add_element_history(callback.from_user.id, callback.data)
             else:
-                self.add_element_history(callback.from_user.id, callback.data + ' ' + 'Стр.1')
+                self.add_element_history(callback.from_user.id, f"{callback.data} Стр.1")
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages)))
         async def send_next_page(callback: CallbackQuery):
             if await self.next_page(callback):
+                self.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages_search)))
+        async def send_next_page_search(callback: CallbackQuery):
+            previous_history = self.delete_element_history(callback.from_user.id)
+            result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
+            if await self.next_page_search(callback, result_search):
                 self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
@@ -197,6 +243,8 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             current = self.delete_element_history(callback.from_user.id)
+            if 'search' in current:
+                current = self.delete_element_history(callback.from_user.id)
             if current == '/start':
                 await self.return_start(callback)
                 await self.timer.start(callback.from_user.id)
@@ -212,6 +260,12 @@ class DispatcherMessage(Dispatcher):
                 await self.timer.start(callback.from_user.id)
             elif current in self.nomenclatures:
                 await self.return_description(callback, current)
+                await self.timer.start(callback.from_user.id)
+            elif current in self.pages_search:
+                previous_history = self.delete_element_history(callback.from_user.id)
+                result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
+                await self.return_page_search(callback, result_search, current)
+                self.add_element_history(callback.from_user.id, current)
                 await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back_basket'))
@@ -282,6 +336,82 @@ class DispatcherMessage(Dispatcher):
             for item in arr_photo:
                 media_group.add_photo(media=item, parse_mode=ParseMode.HTML)
             return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
+
+    @staticmethod
+    async def checkout_admin(queue: Queue, admin_number: int):
+        while not queue.empty():
+            user: USER = await queue.get()
+            print(f"The Admin_{admin_number} "
+                  f"will checkout User_{user.id_user}")
+            # for product in customer.products:
+            #     print(f"The Cashier_{cashier_number} "
+            #           f"will checkout Customer_{customer.customer_id}'s "
+            #           f"Product_{product.product_name}")
+            #     await asyncio.sleep(product.checkout_time)
+            # print(f"The Cashier_{cashier_number} "
+            #       f"finished checkout Customer_{customer.customer_id}")
+            queue.task_done()
+
+    async def find_nothing(self, id_user: int, message: Message):
+        self.add_element_message(id_user, message.message_id)
+        menu_button = {'back': '◀ 👈 Назад'}
+        answer = await self.answer_message(message, "Сожалеем, но ничего не найдено.",
+                                           self.build_keyboard(menu_button, 1))
+        await self.delete_messages(id_user)
+        self.add_element_message(id_user, answer.message_id)
+
+    async def show_result_search(self, id_user: int, message: Message, result_search: dict):
+        self.add_element_message(id_user, message.message_id)
+        number_page = '\n' + 'Страница №1'
+        pages = {}
+        for page in result_search.keys():
+            pages[page] = page
+        heading = await self.answer_message(message, self.format_text(f"Результаты поиска:{number_page}"),
+                                            self.build_keyboard(pages, 5))
+        await self.delete_messages(id_user)
+        arr_answers = [str(heading.message_id)]
+        for key, value in result_search['Поиск_Стр.1'].items():
+            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+            answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+            arr_answers.append(str(answer.message_id))
+        self.add_arr_messages(id_user, arr_answers)
+
+    async def next_page_search(self, call_back: CallbackQuery, result_search: dict):
+        if self.pages_search[call_back.data] == call_back.message.text.split('№')[1]:
+            return False
+        else:
+            pages = {}
+            for page in result_search.keys():
+                pages[page] = page
+            heading = await self.edit_message(call_back.message,
+                                              f"{call_back.message.text.split('№')[0]}"
+                                              f"№{self.pages_search[call_back.data]}",
+                                              self.build_keyboard(pages, 5))
+            await self.delete_messages(call_back.from_user.id, heading.message_id)
+            arr_answers = []
+            for key, value in result_search[call_back.data].items():
+                menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+                answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+                arr_answers.append(str(answer.message_id))
+            self.add_arr_messages(call_back.from_user.id, arr_answers)
+            return True
+
+    async def return_page_search(self, call_back: CallbackQuery, result_search: dict, current_page: str):
+        number_page = '\n' + 'Страница №' + self.pages_search[current_page]
+        pages = {}
+        for page in result_search.keys():
+            pages[page] = page
+        heading = await self.edit_message(call_back.message,
+                                          self.format_text(f"Результаты поиска:{number_page}"),
+                                          self.build_keyboard(pages, 5))
+        await self.delete_messages(call_back.from_user.id, heading.message_id)
+        await asyncio.sleep(0.5)
+        arr_answers = []
+        for key, value in result_search[current_page].items():
+            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+            answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+            arr_answers.append(str(answer.message_id))
+        self.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def return_start(self, call_back: CallbackQuery):
         answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует",
@@ -657,10 +787,10 @@ class DispatcherMessage(Dispatcher):
         if current_amount > 1:
             current_amount -= 1
             current_basket_dict[self.button_basket_minus[call_back.data]] = [str(current_amount),
-                                                                             str(price*current_amount)]
+                                                                             str(price * current_amount)]
             self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
             name = self.current_description(self.button_basket_minus[call_back.data])[2]
-            text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price*current_amount)}"
+            text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price * current_amount)}"
             menu_button = {f'basket_minus{self.button_basket_minus[call_back.data]}': '➖',
                            f'basket_plus{self.button_basket_minus[call_back.data]}': '➕'}
             sum_basket = self.sum_basket(current_basket_dict)
@@ -704,10 +834,10 @@ class DispatcherMessage(Dispatcher):
         else:
             current_amount += 1
             current_basket_dict[self.button_basket_plus[call_back.data]] = [str(current_amount),
-                                                                             str(price*current_amount)]
+                                                                            str(price * current_amount)]
             self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
             name = self.current_description(self.button_basket_plus[call_back.data])[2]
-            text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price*current_amount)}"
+            text = f"{name}:{whitespace}{int(current_amount)} шт. на сумму {self.format_price(price * current_amount)}"
             menu_button = {f'basket_minus{self.button_basket_plus[call_back.data]}': '➖',
                            f'basket_plus{self.button_basket_plus[call_back.data]}': '➕'}
             sum_basket = self.sum_basket(current_basket_dict)
@@ -844,6 +974,44 @@ class DispatcherMessage(Dispatcher):
                      f"WHERE KOD = '{kod_nomenclature}' "
         curs.execute(sql_record)
         self.conn.commit()
+
+    def search_in_base_article(self, search_text: str):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_search_in_base_article(search_text)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_search_in_base_article(self, search_text: str):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+                           f"WHERE ARTICLE_CHANGE LIKE '%{search_text}%' "
+        curs.execute(sql_nomenclature)
+        row_table = curs.fetchall()
+        return set(row_table)
+
+    def search_in_base_name(self, search_text: str):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_search_in_base_name(search_text)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_search_in_base_name(self, search_text: str):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+                           f"WHERE NAME LIKE '%{search_text}%' "
+        curs.execute(sql_nomenclature)
+        row_table = curs.fetchall()
+        return set(row_table)
 
     def current_basket_dict(self, id_user: int):
         try:
@@ -1290,6 +1458,55 @@ class DispatcherMessage(Dispatcher):
                                    footer_buttons=self.get_list_keyboard_button(dict_return_button))
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
+    def search(self, text: str):
+        total_search = set()
+        i = 1
+        for item in self.change_for_search_name(text):
+            if i == 1:
+                search_variant = self.search_in_base_article(self.translit_rus(re.sub('\W+', '', item[0]).upper()))
+                for variant in item:
+                    search_result_by_name = self.search_in_base_name(variant)
+                    search_variant.update(search_result_by_name)
+                total_search = search_variant
+                i += 1
+            else:
+                search_variant = self.search_in_base_article(self.translit_rus(re.sub('\W+', '', item[0]).upper()))
+                for variant in item:
+                    search_result_by_name = self.search_in_base_name(variant)
+                    search_variant.update(search_result_by_name)
+                total_search = total_search.intersection(search_variant)
+                i += 1
+        return self.assembling_search(list(total_search))
+
+    @staticmethod
+    def change_record_search(text: str):
+        list_record = text.split()
+        return '/////'.join(list_record)
+
+    @staticmethod
+    def get_text_for_search(text: str):
+        list_search = text.split('/////')
+        return ' '.join(list_search)
+
+    @staticmethod
+    def translit_rus(text_cross: str):
+        text_list = list(text_cross)
+        dict_letters = {'А': 'A', 'а': 'a', 'В': 'B', 'Е': 'E', 'е': 'e', 'К': 'K', 'к': 'k', 'М': 'M', 'Н': 'H',
+                        'О': 'O', 'о': 'o', 'Р': 'P', 'р': 'p', 'С': 'C', 'с': 'c', 'Т': 'T', 'Х': 'X', 'х': 'x'}
+        for i in range(len(text_list)):
+            if text_list[i] in dict_letters.keys():
+                text_list[i] = dict_letters[text_list[i]]
+        return ''.join(text_list)
+
+    @staticmethod
+    def change_for_search_name(text_cross: str):
+        text_list = text_cross.split()
+        new_text_list = []
+        for item in text_list:
+            if re.sub('\W+', '', item) != '':
+                new_text_list.append([item, item.lower(), item.title()])
+        return new_text_list
+
     @staticmethod
     def assembling_category_dict(list_category: list):
         dict_category = {}
@@ -1351,6 +1568,27 @@ class DispatcherMessage(Dispatcher):
                 i += 1
         assembling_dict_nomenclatures['Стр.' + str(y)] = dict_m
         return assembling_dict_nomenclatures
+
+    @staticmethod
+    def assembling_search(arr: list):
+        assembling_dict_search = {}
+        dict_m = {}
+        i = 1
+        y = 1
+        for item_nomenclature in sorted(arr, key=itemgetter(2), reverse=False):
+            if i < 7:
+                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                i += 1
+
+            else:
+                assembling_dict_search['Поиск_Стр.' + str(y)] = dict_m
+                i = 1
+                dict_m = {}
+                y += 1
+                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                i += 1
+        assembling_dict_search['Поиск_Стр.' + str(y)] = dict_m
+        return assembling_dict_search
 
     @staticmethod
     def get_list_keyboard_button(dict_button: dict):
@@ -1577,6 +1815,13 @@ class DATA:
         return dict_pages
 
     @property
+    def get_pages_search(self):
+        dict_pages_search = {}
+        for item in range(100):
+            dict_pages_search['Поиск_Стр.' + str(item)] = str(item)
+        return dict_pages_search
+
+    @property
     def get_nomenclature(self):
         dict_nomenclature = {}
         for item in range(4000, 30000):
@@ -1719,3 +1964,27 @@ class DATA:
     @staticmethod
     def format_price(item: float):
         return '{0:,} ₽'.format(item).replace(',', ' ')
+
+
+class USER:
+    def __init__(self, id_user: int, in_queue: bool = False, last_admin: int = None):
+        self.id_user = id_user
+        self.in_queue = in_queue
+        self.last_admin = last_admin
+        self.list_message = []
+
+    def add_message(self, message: Message, queue: Queue):
+        if self.in_queue:
+            self.list_message.append(message)
+        else:
+            self.in_queue = True
+            queue.put(self)
+
+
+class ADMIN:
+    def __init__(self, admin_id: int):
+        self.admin_id = admin_id
+
+
+class MessageUser(StatesGroup):
+    answer = State()

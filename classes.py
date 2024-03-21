@@ -124,7 +124,7 @@ class DispatcherMessage(Dispatcher):
                 if 'search' in current_history:
                     await self.timer.start(id_user)
                 elif 'Поиск' in current_history:
-                    self.delete_element_history(id_user)
+                    self.delete_element_history(id_user, 1)
                     await self.timer.start(id_user)
                 else:
                     self.add_element_history(id_user, f'search___{self.change_record_search(message.text)}')
@@ -132,12 +132,11 @@ class DispatcherMessage(Dispatcher):
             else:
                 await self.show_result_search(id_user, message, result_search)
                 if 'search' in current_history:
-                    self.delete_element_history(id_user)
+                    self.delete_element_history(id_user, 1)
                     self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
                     await self.timer.start(id_user)
                 elif 'Поиск' in current_history:
-                    self.delete_element_history(id_user)
-                    self.delete_element_history(id_user)
+                    self.delete_element_history(id_user, 2)
                     self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
                     await self.timer.start(id_user)
                 else:
@@ -166,7 +165,7 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages_search)))
         async def send_next_page_search(callback: CallbackQuery):
-            previous_history = self.delete_element_history(callback.from_user.id)
+            previous_history = self.delete_element_history(callback.from_user.id, 1)
             result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
             if await self.next_page_search(callback, result_search):
                 self.add_element_history(callback.from_user.id, callback.data)
@@ -207,7 +206,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'done'))
         async def send_done_basket(callback: CallbackQuery):
             if await self.add_to_basket(callback):
-                self.delete_element_history(callback.from_user.id)
+                self.delete_element_history(callback.from_user.id, 1)
                 await self.timer.start(callback.from_user.id)
             else:
                 await self.timer.start(callback.from_user.id)
@@ -231,7 +230,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             self.clean_basket(callback.from_user.id)
-            current = self.delete_element_history(callback.from_user.id)
+            current = self.delete_element_history(callback.from_user.id, 1)
             if current in self.nomenclatures:
                 await self.description(callback, current)
                 await self.timer.start(callback.from_user.id)
@@ -242,9 +241,9 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
-            current = self.delete_element_history(callback.from_user.id)
+            current = self.delete_element_history(callback.from_user.id, 1)
             if 'search' in current:
-                current = self.delete_element_history(callback.from_user.id)
+                current = self.delete_element_history(callback.from_user.id, 1)
             if current == '/start':
                 await self.return_start(callback)
                 await self.timer.start(callback.from_user.id)
@@ -262,7 +261,7 @@ class DispatcherMessage(Dispatcher):
                 await self.return_description(callback, current)
                 await self.timer.start(callback.from_user.id)
             elif current in self.pages_search:
-                previous_history = self.delete_element_history(callback.from_user.id)
+                previous_history = self.delete_element_history(callback.from_user.id, 1)
                 result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
                 await self.return_page_search(callback, result_search, current)
                 self.add_element_history(callback.from_user.id, current)
@@ -270,7 +269,7 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back_basket'))
         async def send_return_message(callback: CallbackQuery):
-            current = self.delete_element_history(callback.from_user.id)
+            current = self.delete_element_history(callback.from_user.id, 1)
             if current in self.nomenclatures:
                 await self.description(callback, current)
                 await self.timer.start(callback.from_user.id)
@@ -292,7 +291,7 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.level_numbers)))
         async def send_new_level(callback: CallbackQuery):
-            current_history = self.delete_element_history(callback.from_user.id)
+            current_history = self.delete_element_history(callback.from_user.id, 1)
             if current_history == 'catalog':
                 kod_nomenclature = callback.message.caption.split('Код:')[1]
                 kod_install = self.level_numbers[callback.data]
@@ -367,7 +366,7 @@ class DispatcherMessage(Dispatcher):
         for page in result_search.keys():
             pages[page] = page
         heading = await self.answer_message(message, self.format_text(f"Результаты поиска:{number_page}"),
-                                            self.build_keyboard(pages, 5))
+                                            self.build_keyboard(pages, 4))
         await self.delete_messages(id_user)
         arr_answers = [str(heading.message_id)]
         for key, value in result_search['Поиск_Стр.1'].items():
@@ -386,7 +385,7 @@ class DispatcherMessage(Dispatcher):
             heading = await self.edit_message(call_back.message,
                                               f"{call_back.message.text.split('№')[0]}"
                                               f"№{self.pages_search[call_back.data]}",
-                                              self.build_keyboard(pages, 5))
+                                              self.build_keyboard(pages, 4))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
             for key, value in result_search[call_back.data].items():
@@ -403,7 +402,7 @@ class DispatcherMessage(Dispatcher):
             pages[page] = page
         heading = await self.edit_message(call_back.message,
                                           self.format_text(f"Результаты поиска:{number_page}"),
-                                          self.build_keyboard(pages, 5))
+                                          self.build_keyboard(pages, 4))
         await self.delete_messages(call_back.from_user.id, heading.message_id)
         await asyncio.sleep(0.5)
         arr_answers = []
@@ -445,7 +444,7 @@ class DispatcherMessage(Dispatcher):
         if current_category:
             await self.create_keyboard_edit_caption(call_back, current_category, current_history)
         else:
-            new_current = self.delete_element_history(call_back.from_user.id)
+            new_current = self.delete_element_history(call_back.from_user.id, 1)
             if new_current == 'catalog':
                 if call_back.message.caption:
                     answer_message = await self.create_price_edit_caption(call_back)
@@ -502,7 +501,7 @@ class DispatcherMessage(Dispatcher):
         if self.pages[call_back.data] == call_back.message.caption.split('№')[1]:
             return False
         else:
-            id_category = self.delete_element_history(call_back.from_user.id)
+            id_category = self.delete_element_history(call_back.from_user.id, 1)
             current_nomenclature = self.current_nomenclature(id_category)
             pages = {}
             for page in current_nomenclature.keys():
@@ -522,7 +521,7 @@ class DispatcherMessage(Dispatcher):
 
     async def return_page(self, call_back: CallbackQuery, current_page: str):
         number_page = '\n' + 'Страница №' + self.pages[current_page]
-        id_category = self.delete_element_history(call_back.from_user.id)
+        id_category = self.delete_element_history(call_back.from_user.id, 1)
         current_nomenclature = self.current_nomenclature(id_category)
         text = self.text_category(id_category)
         pages = {}
@@ -1391,9 +1390,9 @@ class DispatcherMessage(Dispatcher):
         curs.execute(sql_record)
         self.conn.commit()
 
-    def delete_element_history(self, id_user: int):
+    def delete_element_history(self, id_user: int, amount_element: int):
         current = self.get_info_user(id_user)
-        current_history = self.delete_element(current[0])
+        current_history = self.delete_element(current[0], amount_element)
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
                 self.execute_delete_element_history(id_user, ' '.join(current_history))
@@ -1543,9 +1542,10 @@ class DispatcherMessage(Dispatcher):
         return ' '.join(arr_history)
 
     @staticmethod
-    def delete_element(arr: str):
+    def delete_element(arr: str, amount: int):
         arr_history = arr.split()
-        arr_history.pop()
+        for item in range(amount):
+            arr_history.pop()
         return arr_history
 
     @staticmethod

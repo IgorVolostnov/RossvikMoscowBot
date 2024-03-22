@@ -55,7 +55,7 @@ class BotMessage(Bot):
 
     async def send_message_order(self, chat_id: int, user: str, order: str, keyboard: InlineKeyboardMarkup):
         await self.send_document(chat_id=chat_id, document=FSInputFile(order),
-                                 caption=f"От пользователя {user} получен новый заказ!", parse_mode=ParseMode.HTML,
+                                 caption=f"От клиента {user} получен новый заказ!", parse_mode=ParseMode.HTML,
                                  reply_markup=keyboard)
 
     async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
@@ -160,6 +160,8 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
         async def post_order(callback: CallbackQuery):
             order = await self.save_order(callback, self.current_basket_dict(callback.from_user.id))
+            number_order = order[0]
+            order_dict = order[1]
             list_user_admin = self.get_user_admin
             menu_button = {'answer_order': '💬 Отправить счет клиенту'}
             for user in list_user_admin:
@@ -167,9 +169,17 @@ class DispatcherMessage(Dispatcher):
                                                   f'{callback.from_user.id} '
                                                   f'{callback.from_user.first_name} '
                                                   f'{callback.from_user.last_name} ',
-                                                  order,
+                                                  order_dict[number_order]['path_order'],
                                                   self.build_keyboard(menu_button, 1))
             print(list_user_admin)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'answer_order'))
+        async def answer_order_user(callback: CallbackQuery):
+            list_user_admin = self.get_user_admin
+            for user in list_user_admin:
+                if callback.from_user.id != int(user[0]):
+                    await self.delete_messages(int(user[0]), callback.message.message_id, True)
+            print('answer')
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.category)))
         async def send_next_category(callback: CallbackQuery):
@@ -398,11 +408,14 @@ class DispatcherMessage(Dispatcher):
         for col, value in dims.items():
             active_list.column_dimensions[col].width = value
         number_order = re.sub('\W+', '', str(datetime.datetime.now()))
-        filepath = f"{os.path.dirname(__file__)}\\basket\\Заказ покупателя {call_back.message.from_user.id} " \
-                   f"№{number_order}.xlsx"
+        filepath = f"{os.path.dirname(__file__)}\\basket\\Заказ покупателя {call_back.message.from_user.id}№" \
+                   f"{number_order}.xlsx"
         new_book.save(filepath)
         new_book.close()
-        return filepath
+        list_filepath = filepath.split()
+        list_order = [number_order, 'no_message', self.assembling_basket_dict_for_order(basket),
+                      '_____'.join(list_filepath), 'no_score', 'new']
+        return number_order, self.get_order_dict('/////'.join(list_order))
 
     async def find_nothing(self, id_user: int, message: Message):
         self.add_element_message(id_user, message.message_id)
@@ -1282,7 +1295,7 @@ class DispatcherMessage(Dispatcher):
     def execute_start_record_new_user(self, message: Message):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, EMAIL) " \
+        sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, ORDER_USER) " \
                      f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}, '') "
         curs.execute(sql_record)
         self.arr_auth_user[message.from_user.id] = '/start'
@@ -1441,7 +1454,7 @@ class DispatcherMessage(Dispatcher):
     def execute_get_info_user(self, id_user: int):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
-        sql_auth = f"SELECT HISTORY, MESSAGES, EMAIL FROM TELEGRAMMBOT " \
+        sql_auth = f"SELECT HISTORY, MESSAGES, ORDER_USER FROM TELEGRAMMBOT " \
                    f"WHERE ID_USER = {self.quote(id_user)} "
         curs.execute(sql_auth)
         row_table = curs.fetchone()
@@ -1554,6 +1567,37 @@ class DispatcherMessage(Dispatcher):
                 i += 1
         return self.assembling_search(list(total_search))
 
+    def get_order_dict(self, order_string: str):
+        list_order = order_string.split()
+        dict_orders = {}
+        dict_order = {}
+        for order in list_order:
+            list_data = order.split('/////')
+            list_message_admin = list_data[1].split('_____')
+            dict_order['id_message_admins'] = list_message_admin
+            composition_order = self.get_dict_basket_for_order(list_data[2])
+            dict_order['composition_order'] = composition_order
+            path_order = list_data[3].split('_____')
+            dict_order['path_order'] = ' '.join(path_order)
+            dict_order['path_score'] = list_data[4]
+            dict_order['status_order'] = list_data[5]
+            dict_orders[list_data[0]] = dict_order
+            dict_order = {}
+        return dict_orders
+
+    def assembling_order_dict(self, order_dict: dict):
+        list_order = []
+        for key, item in order_dict.items():
+            id_message_admins = '_____'.join(item['id_message_admins'])
+            composition_order = self.assembling_basket_dict_for_order(item['composition_order'])
+            filepath = item['path_order']
+            path_score = item['path_score']
+            status_order = item['status_order']
+            order = f"{key}/////{id_message_admins}/////{composition_order}/////{filepath}/////{path_score}" \
+                    f"/////{status_order}"
+            list_order.append(order)
+        return ' '.join(list_order)
+
     @staticmethod
     def change_record_search(text: str):
         list_record = text.split()
@@ -1606,6 +1650,14 @@ class DispatcherMessage(Dispatcher):
         return ' '.join(list_basket)
 
     @staticmethod
+    def assembling_basket_dict_for_order(basket_dict: dict):
+        list_basket = []
+        for key, value in basket_dict.items():
+            item = f'{key}///{value[0]}///{value[1]}'
+            list_basket.append(item)
+        return '_____'.join(list_basket)
+
+    @staticmethod
     def add_element(arr: str, element: str):
         arr_history = arr.split()
         arr_history.append(element)
@@ -1645,6 +1697,17 @@ class DispatcherMessage(Dispatcher):
                 i += 1
         assembling_dict_nomenclatures['Стр.' + str(y)] = dict_m
         return assembling_dict_nomenclatures
+
+    @staticmethod
+    def get_dict_basket_for_order(basket_str: str):
+        basket_dict = {}
+        if basket_str is None:
+            basket_dict = {}
+        else:
+            for item in basket_str.split('_____'):
+                row = item.split('///')
+                basket_dict[row[0]] = [row[1], row[2]]
+        return basket_dict
 
     @staticmethod
     def assembling_search(arr: list):

@@ -5,6 +5,8 @@ import json
 import re
 import os
 import sqlite3
+import openpyxl
+import datetime
 from asyncio import Queue
 from aiogram import F
 from aiogram import Bot, Dispatcher
@@ -16,6 +18,7 @@ from aiogram.utils.keyboard import InlineKeyboardMarkup
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.media_group import MediaGroupBuilder
 from operator import itemgetter
+from openpyxl.styles import GradientFill
 
 logging.basicConfig(level=logging.INFO)
 
@@ -49,6 +52,11 @@ class BotMessage(Bot):
                                 keyboard: InlineKeyboardMarkup):
         await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    async def send_message_order(self, chat_id: int, user: str, order: str, keyboard: InlineKeyboardMarkup):
+        await self.send_document(chat_id=chat_id, document=FSInputFile(order),
+                                 caption=f"От пользователя {user} получен новый заказ!", parse_mode=ParseMode.HTML,
+                                 reply_markup=keyboard)
 
     async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
         photo_to_read = os.path.join(os.path.dirname(__file__), 'Catalog.png')
@@ -149,6 +157,20 @@ class DispatcherMessage(Dispatcher):
             self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
+        async def post_order(callback: CallbackQuery):
+            order = await self.save_order(callback, self.current_basket_dict(callback.from_user.id))
+            list_user_admin = self.get_user_admin
+            menu_button = {'answer_order': '💬 Отправить счет клиенту'}
+            for user in list_user_admin:
+                await self.bot.send_message_order(int(user[0]),
+                                                  f'{callback.from_user.id} '
+                                                  f'{callback.from_user.first_name} '
+                                                  f'{callback.from_user.last_name} ',
+                                                  order,
+                                                  self.build_keyboard(menu_button, 1))
+            print(list_user_admin)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.category)))
         async def send_next_category(callback: CallbackQuery):
             if await self.next_category(callback):
@@ -165,9 +187,7 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages_search)))
         async def send_next_page_search(callback: CallbackQuery):
-            previous_history = self.delete_element_history(callback.from_user.id, 1)
-            result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
-            if await self.next_page_search(callback, result_search):
+            if await self.next_page_search(callback):
                 self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
@@ -351,6 +371,39 @@ class DispatcherMessage(Dispatcher):
             #       f"finished checkout Customer_{customer.customer_id}")
             queue.task_done()
 
+    async def save_order(self, call_back: CallbackQuery, basket: dict):
+        new_book = openpyxl.Workbook()
+        active_list = new_book.active
+        active_list.append(('Артикул', 'Наименование', 'Количество', 'Цена'))
+        current_row = []
+        for key, item in basket.items():
+            description = self.current_description(key)
+            price = float(item[1]) / float(item[0])
+            current_row.append(description[0])
+            current_row.append(description[2])
+            current_row.append(item[0])
+            current_row.append(str(price))
+            active_list.append(current_row)
+            current_row = []
+        active_list.sheet_view.showGridLines = False
+        active_list['A1'].fill = GradientFill('linear', stop=('FBDED3', 'E89E7F'))
+        active_list['B1'].fill = GradientFill('linear', stop=('FBDED3', 'E89E7F'))
+        active_list['C1'].fill = GradientFill('linear', stop=('FBDED3', 'E89E7F'))
+        active_list['D1'].fill = GradientFill('linear', stop=('FBDED3', 'E89E7F'))
+        dims = {}
+        for row in active_list.rows:
+            for cell in row:
+                if cell.value:
+                    dims[cell.column_letter] = max((dims.get(cell.column_letter, 0), len(str(cell.value))))
+        for col, value in dims.items():
+            active_list.column_dimensions[col].width = value
+        number_order = re.sub('\W+', '', str(datetime.datetime.now()))
+        filepath = f"{os.path.dirname(__file__)}\\basket\\Заказ покупателя {call_back.message.from_user.id} " \
+                   f"№{number_order}.xlsx"
+        new_book.save(filepath)
+        new_book.close()
+        return filepath
+
     async def find_nothing(self, id_user: int, message: Message):
         self.add_element_message(id_user, message.message_id)
         menu_button = {'back': '◀ 👈 Назад'}
@@ -366,7 +419,7 @@ class DispatcherMessage(Dispatcher):
         for page in result_search.keys():
             pages[page] = page
         heading = await self.answer_message(message, self.format_text(f"Результаты поиска:{number_page}"),
-                                            self.build_keyboard(pages, 4))
+                                            self.build_keyboard(pages, 3))
         await self.delete_messages(id_user)
         arr_answers = [str(heading.message_id)]
         for key, value in result_search['Поиск_Стр.1'].items():
@@ -375,17 +428,19 @@ class DispatcherMessage(Dispatcher):
             arr_answers.append(str(answer.message_id))
         self.add_arr_messages(id_user, arr_answers)
 
-    async def next_page_search(self, call_back: CallbackQuery, result_search: dict):
+    async def next_page_search(self, call_back: CallbackQuery):
         if self.pages_search[call_back.data] == call_back.message.text.split('№')[1]:
             return False
         else:
+            previous_history = self.delete_element_history(call_back.from_user.id, 1)
+            result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
             pages = {}
             for page in result_search.keys():
                 pages[page] = page
             heading = await self.edit_message(call_back.message,
                                               f"{call_back.message.text.split('№')[0]}"
                                               f"№{self.pages_search[call_back.data]}",
-                                              self.build_keyboard(pages, 4))
+                                              self.build_keyboard(pages, 3))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
             for key, value in result_search[call_back.data].items():
@@ -402,7 +457,7 @@ class DispatcherMessage(Dispatcher):
             pages[page] = page
         heading = await self.edit_message(call_back.message,
                                           self.format_text(f"Результаты поиска:{number_page}"),
-                                          self.build_keyboard(pages, 4))
+                                          self.build_keyboard(pages, 3))
         await self.delete_messages(call_back.from_user.id, heading.message_id)
         await asyncio.sleep(0.5)
         arr_answers = []
@@ -1231,7 +1286,8 @@ class DispatcherMessage(Dispatcher):
                      f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}, '') "
         curs.execute(sql_record)
         self.arr_auth_user[message.from_user.id] = '/start'
-        print(f'Новый клиент {self.arr_auth_user.keys()} зашел с сообщением: {str(message.message_id)}')
+        print(f'Новый клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
+              f'зашел с сообщением: {str(message.message_id)}')
         self.conn.commit()
 
     def restart_record(self, message: Message):
@@ -1251,7 +1307,8 @@ class DispatcherMessage(Dispatcher):
                      f"HISTORY = '/start' " \
                      f"WHERE ID_USER = {self.quote(message.from_user.id)} "
         curs.execute(sql_record)
-        print(f'Клиент возобновил работу с сообщением: {str(message.message_id)}')
+        print(f'Клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
+              f'возобновил работу с сообщением: {str(message.message_id)}')
         self.conn.commit()
 
     def restart_catalog(self, message: Message):
@@ -1294,6 +1351,26 @@ class DispatcherMessage(Dispatcher):
         for item in curs.fetchall():
             dict_user[int(item[0])] = item[1]
         return dict_user
+
+    @property
+    def get_user_admin(self):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_get_user_admin()
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_get_user_admin(self):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_user_admin = f"SELECT ID_USER FROM TELEGRAMMBOT " \
+                         f"WHERE STATUS = 'creator' "
+        curs.execute(sql_user_admin)
+        user_admin = curs.fetchall()
+        return user_admin
 
     async def delete_messages(self, user_id: int, except_id_message: int = None, individual: bool = False):
         if individual:

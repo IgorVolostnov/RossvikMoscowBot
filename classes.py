@@ -912,13 +912,7 @@ class DispatcherMessage(Dispatcher):
                                                        self.build_keyboard(menu_button, 1))
             list_messages_admins.append(str(answer.message_id))
         order_dict[number_order]['id_message_admins'] = list_messages_admins
-        order_for_record = self.assembling_order_dict(order_dict)
-        list_order = self.get_arr_order(call_back.from_user.id)
-        if len(list_order) != 0:
-            new_list_order = self.add_order(list_order, order_for_record)
-            self.record_order(call_back.from_user.id, new_list_order)
-        else:
-            self.record_order(call_back.from_user.id, order_for_record)
+        self.record_order_base(call_back, order_dict)
         self.clean_basket(call_back.from_user.id)
         messages_from_user = self.get_arr_message_from_user(call_back.from_user.id)
         if messages_from_user is None:
@@ -1795,6 +1789,15 @@ class DispatcherMessage(Dispatcher):
                 i += 1
         return self.assembling_search(list(total_search))
 
+    def record_order_base(self, call_back: CallbackQuery, order_dict: dict):
+        order_for_record = self.assembling_order_dict(order_dict)
+        list_order = self.get_arr_order(call_back.from_user.id)
+        if len(list_order) != 0:
+            new_list_order = self.add_order(list_order, order_for_record)
+            self.record_order(call_back.from_user.id, new_list_order)
+        else:
+            self.record_order(call_back.from_user.id, order_for_record)
+
     def get_order_dict(self, order_string: str):
         list_order = order_string.split()
         dict_orders = {}
@@ -1846,8 +1849,20 @@ class DispatcherMessage(Dispatcher):
         if dict_contact[type_delivery][kind_delivery][0] == 'empty':
             dict_contact[type_delivery][kind_delivery][0] = value_delivery
         else:
-            dict_contact[type_delivery][kind_delivery].append(value_delivery)
+            if self.check_contact(dict_contact[type_delivery][kind_delivery], value_delivery):
+                dict_contact[type_delivery][kind_delivery].append(value_delivery)
         return self.assembling_contact_dict(dict_contact)
+
+    @staticmethod
+    def check_contact(arr_contact: list, contact: str):
+        check = True
+        for item in arr_contact:
+            if item == contact:
+                check = False
+                break
+            else:
+                check = True
+        return check
 
     @staticmethod
     def assembling_contact_dict(contact_dict: dict):

@@ -127,14 +127,22 @@ class DispatcherMessage(Dispatcher):
             current_history = self.current_history(message.from_user.id)
             if current_history == 'record_answer_shop':
                 if message.content_type == "text":
-                    arr_message_from_user = self.get_arr_message_from_user(message.from_user.id)
-                    if len(arr_message_from_user) == 0:
+                    head_message = self.get_arr_messages(message.from_user.id)[0]
+                    await self.delete_messages(message.from_user.id, head_message)
+                    arr_message = [str(message.message_id)]
+                    change_text = f"Сообщение получено"
+                    answer = await self.answer_text(message, change_text)
+                    arr_message.append(str(answer.message_id))
+                    self.add_arr_messages(message.from_user.id, arr_message)
+                    messages_from_user = self.get_arr_message_from_user(message.from_user.id)
+                    if messages_from_user is None:
                         self.record_delivery(message.from_user.id, message.text)
                     else:
-                        new_arr_message_from_user = self.add_message_user(arr_message_from_user, message.text)
+                        arr_messages_from_user = self.get_arr_message_user(messages_from_user)
+                        new_arr_message_from_user = self.add_message_user(arr_messages_from_user, message.text)
                         self.record_delivery(message.from_user.id, self.get_arr_messages_user_for_record(
                             new_arr_message_from_user))
-                    # change_contact = self.set_new_delivery(message.from_user.id, 'pickup', 'SHOP', message.text)
+                    await self.timer.start(message.from_user.id)
             else:
                 await self.send_search_result(message)
 
@@ -333,6 +341,10 @@ class DispatcherMessage(Dispatcher):
 
     async def edit_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.edit_text(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    async def answer_text(self, message: Message, text: str):
+        return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML,
+                                    reply_to_message_id=message.message_id)
 
     async def edit_caption(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.edit_caption(caption=self.format_text(text), parse_mode=ParseMode.HTML,
@@ -908,6 +920,14 @@ class DispatcherMessage(Dispatcher):
         else:
             self.record_order(call_back.from_user.id, order_for_record)
         self.clean_basket(call_back.from_user.id)
+        messages_from_user = self.get_arr_message_from_user(call_back.from_user.id)
+        if messages_from_user is None:
+            messages_from_user = 'Частное лицо'
+        arr_messages_from_user = self.get_arr_message_user(messages_from_user)
+        change_contact = self.set_new_contact(call_back.from_user.id, 'pickup', 'SHOP',
+                                              '\n'.join(arr_messages_from_user))
+        self.record_contact(call_back.from_user.id, change_contact)
+        self.clean_delivery(call_back.from_user.id)
         text = 'Мы получили заказ, в ближайшее время пришлем Вам счет для оплаты или свяжемся с Вами, ' \
                'если у нас появятся вопросы 😎👌🔥'
         menu_button = {'back': '◀ 👈 Назад'}
@@ -1710,11 +1730,7 @@ class DispatcherMessage(Dispatcher):
                         f"WHERE ID_USER = {self.quote(user_id)} "
         curs.execute(sql_arr_order)
         row_table = curs.fetchone()[0]
-        if row_table is None:
-            arr_message_from_user = []
-        else:
-            arr_message_from_user = self.get_arr_message_user(row_table)
-        return arr_message_from_user
+        return row_table
 
     def get_arr_contact(self, user_id: int):
         try:
@@ -1815,8 +1831,7 @@ class DispatcherMessage(Dispatcher):
 
     @staticmethod
     def get_dict_contact(arr_contact: str):
-        dict_contact = {'pickup': {},
-                        'delivery': {}}
+        dict_contact = {'pickup': {}, 'delivery': {}}
         dict_contact['pickup']['SHOP'] = arr_contact.split('/////')[0].split('///')[0].split('_____')
         dict_contact['pickup']['STORAGE'] = arr_contact.split('/////')[0].split('///')[1].split('_____')
         dict_contact['delivery']['MOSCOW'] = arr_contact.split('/////')[1].split('///')[0].split('_____')
@@ -1826,7 +1841,7 @@ class DispatcherMessage(Dispatcher):
         dict_contact['delivery']['CDEK'] = arr_contact.split('/////')[1].split('///')[4].split('_____')
         return dict_contact
 
-    def set_new_delivery(self, id_user: int, type_delivery: str, kind_delivery: str, value_delivery: str):
+    def set_new_contact(self, id_user: int, type_delivery: str, kind_delivery: str, value_delivery: str):
         dict_contact = self.get_dict_contact(self.get_arr_contact(id_user))
         if dict_contact[type_delivery][kind_delivery][0] == 'empty':
             dict_contact[type_delivery][kind_delivery][0] = value_delivery

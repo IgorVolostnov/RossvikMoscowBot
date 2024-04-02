@@ -53,10 +53,10 @@ class BotMessage(Bot):
         await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
-    async def send_message_order(self, chat_id: int, user: str, order: str, keyboard: InlineKeyboardMarkup):
+    async def send_message_order(self, chat_id: int, user: str, order: str, contact: str, keyboard: InlineKeyboardMarkup):
         return await self.send_document(chat_id=chat_id, document=FSInputFile(order),
-                                        caption=f"От клиента {user} получен новый заказ!", parse_mode=ParseMode.HTML,
-                                        reply_markup=keyboard)
+                                        caption=f"От клиента {user} получен новый заказ! {contact}",
+                                        parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
         photo_to_read = os.path.join(os.path.dirname(__file__), 'Catalog.png')
@@ -134,7 +134,7 @@ class DispatcherMessage(Dispatcher):
                     answer = await self.answer_text(message, change_text)
                     arr_message.append(str(answer.message_id))
                     self.add_arr_messages(message.from_user.id, arr_message)
-                    messages_from_user = self.get_arr_message_from_user(message.from_user.id)
+                    messages_from_user = self.get_delivery_address_from_user(message.from_user.id)
                     if messages_from_user is None:
                         self.record_delivery(message.from_user.id, message.text)
                     else:
@@ -814,7 +814,7 @@ class DispatcherMessage(Dispatcher):
             sum_basket = self.sum_basket(current_basket_dict)
             text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
-                           'choice_delivery': 'Отправить заказ 📧📦📲'}
+                           'choice_delivery': 'Оформить заказ 📧📦📲'}
             heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
@@ -843,7 +843,7 @@ class DispatcherMessage(Dispatcher):
             sum_basket = self.sum_basket(current_basket_dict)
             head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
-                                'choice_delivery': 'Отправить заказ 📧📦📲'}
+                                'choice_delivery': 'Оформить заказ 📧📦📲'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             await self.bot.edit_head_message(head_text, call_back.message.chat.id,
                                              self.get_arr_messages(call_back.from_user.id)[0],
@@ -865,7 +865,7 @@ class DispatcherMessage(Dispatcher):
                 head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
                             f"{self.format_price(float(sum_basket))}:"
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
-                                    'choice_delivery': 'Отправить заказ 📧📦📲'}
+                                    'choice_delivery': 'Оформить заказ 📧📦📲'}
                 await self.bot.edit_head_message(head_text, call_back.message.chat.id,
                                                  self.get_arr_messages(call_back.from_user.id)[0],
                                                  self.build_keyboard(head_menu_button, 2))
@@ -890,7 +890,7 @@ class DispatcherMessage(Dispatcher):
             sum_basket = self.sum_basket(current_basket_dict)
             head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
-                                'choice_delivery': 'Отправить заказ 📧📦📲'}
+                                'choice_delivery': 'Оформить заказ 📧📦📲'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             await self.bot.edit_head_message(head_text, call_back.message.chat.id,
                                              self.get_arr_messages(call_back.from_user.id)[0],
@@ -902,6 +902,13 @@ class DispatcherMessage(Dispatcher):
         order_dict = order[1]
         list_user_admin = self.get_user_admin
         menu_button = {'take_order': '💬 Взять заказ в обработку'}
+        delivery_address_from_user = self.get_delivery_address_from_user(call_back.from_user.id)
+        if delivery_address_from_user is None:
+            delivery_address_from_user = 'Частное лицо'
+        arr_messages_from_user = self.get_arr_message_user(delivery_address_from_user)
+        change_contact = self.set_new_contact(call_back.from_user.id, 'pickup', 'SHOP',
+                                              '\n'.join(arr_messages_from_user))
+        order_dict[number_order]['contact_order'] = delivery_address_from_user
         list_messages_admins = []
         for user in list_user_admin:
             answer = await self.bot.send_message_order(int(user[0]),
@@ -909,18 +916,13 @@ class DispatcherMessage(Dispatcher):
                                                        f'{call_back.from_user.first_name} '
                                                        f'{call_back.from_user.last_name} ',
                                                        order_dict[number_order]['path_order'],
+                                                       order_dict[number_order]['contact_order'],
                                                        self.build_keyboard(menu_button, 1))
             list_messages_admins.append(str(answer.message_id))
         order_dict[number_order]['id_message_admins'] = list_messages_admins
+        self.record_contact(call_back.from_user.id, change_contact)
         self.record_order_base(call_back, order_dict)
         self.clean_basket(call_back.from_user.id)
-        messages_from_user = self.get_arr_message_from_user(call_back.from_user.id)
-        if messages_from_user is None:
-            messages_from_user = 'Частное лицо'
-        arr_messages_from_user = self.get_arr_message_user(messages_from_user)
-        change_contact = self.set_new_contact(call_back.from_user.id, 'pickup', 'SHOP',
-                                              '\n'.join(arr_messages_from_user))
-        self.record_contact(call_back.from_user.id, change_contact)
         self.clean_delivery(call_back.from_user.id)
         text = 'Мы получили заказ, в ближайшее время пришлем Вам счет для оплаты или свяжемся с Вами, ' \
                'если у нас появятся вопросы 😎👌🔥'
@@ -945,22 +947,24 @@ class DispatcherMessage(Dispatcher):
     async def record_answer_shop(self, call_back: CallbackQuery):
         whitespace = '\n'
         dict_contact = self.get_dict_contact(self.get_arr_contact(call_back.from_user.id))
-        head_menu_button = {'post': 'Отправить заказ для выставления счета 📫',
+        head_menu_button = {'post': 'Отправить заказ 📫',
                             'back': '◀ 👈 Назад'}
         if dict_contact['pickup']['SHOP'][0] == 'empty':
             head_text = f"{call_back.from_user.first_name} {call_back.from_user.last_name} у нас нет контактных " \
-                        f"данных по Вашей учетной записи, если Вы хотите, " \
-                        f"чтобы Мы составили заказ на юридическое лицо, просим отправить нам данные в текстовом виде " \
-                        f"или файл в формате pdf, word, excel и т.д.{whitespace}Если не хотите предоставлять " \
-                        f"контактные данные, заказ будет составлен на Частное лицо. Вы также можете отправить любую " \
-                        f"другую информацию, которую требуется учесть при составлении заказа:"
+                        f"данных по Вашей учетной записи. Мы можем выставить счет на Частное лицо или отправьте нам " \
+                        f"сообщение с Вашими реквизитами, например:{whitespace}ООО «Алькар»{whitespace}" \
+                        f"ИНН 9715341213 КПП 771501001{whitespace}Юридический, фактический и почтовый адрес: " \
+                        f"127562, город Москва, улица Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}" \
+                        f"Тел. +7 (495) 215-000-3, 8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}" \
+                        f"Приеду во вторник!"
             answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
         else:
-            menu_contact = {'choice_contact': 'Выбрать эти данные для составления заказа ☑'}
-            head_text = f"Ранее мы составляли заказы по следующим данным:{whitespace}Можете выбрать из списка ниже " \
-                        f"или отправить нам новые данные в текстовом виде или файл в формате pdf, word, excel и т.д."
-            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
+            menu_contact = {'choice_contact': 'Выбрать эти реквизиты ☑', 'delete_record': 'Удалить запись 🗑️'}
+            head_text = f"Мы сохранили информацию, которую Вы нам отправляли при предыдущих заказах.{whitespace}" \
+                        f"Можете выбрать из списка ниже или отправить нам новые реквизиты и комментарии одним или " \
+                        f"несколькими сообщениями."
+            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
             arr_answers = []
             for contact in dict_contact['pickup']['SHOP']:
@@ -1707,17 +1711,17 @@ class DispatcherMessage(Dispatcher):
             arr_orders = row_table
         return arr_orders
 
-    def get_arr_message_from_user(self, user_id: int):
+    def get_delivery_address_from_user(self, user_id: int):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_get_arr_message_from_user(user_id)
+                return self.execute_get_delivery_address_from_user(user_id)
         except sqlite3.Error as error:
             print("Ошибка чтения данных из таблицы", error)
         finally:
             if self.conn:
                 self.conn.close()
 
-    def execute_get_arr_message_from_user(self, user_id: int):
+    def execute_get_delivery_address_from_user(self, user_id: int):
         curs = self.conn.cursor()
         curs.execute('PRAGMA journal_mode=wal')
         sql_arr_order = f"SELECT DELIVERY_ADDRESS FROM TELEGRAMMBOT " \
@@ -1813,7 +1817,8 @@ class DispatcherMessage(Dispatcher):
             path_score = list_data[4].split('_____')
             dict_order['path_score'] = ' '.join(path_score)
             dict_order['status_order'] = list_data[5]
-            dict_order['contact_order'] = list_data[6]
+            contact_delivery = list_data[6].split('_____')
+            dict_order['contact_order'] = ' '.join(contact_delivery)
             dict_orders[list_data[0]] = dict_order
             dict_order = {}
         return dict_orders
@@ -1826,9 +1831,9 @@ class DispatcherMessage(Dispatcher):
             filepath = item['path_order']
             path_score = item['path_score']
             status_order = item['status_order']
-            contact_order = item['contact_order']
+            contact_order = item['contact_order'].split()
             order = f"{key}/////{id_message_admins}/////{composition_order}/////{filepath}/////{path_score}" \
-                    f"/////{status_order}/////{contact_order}"
+                    f"/////{status_order}/////{'_____'.join(contact_order)}"
             list_order.append(order)
         return ' '.join(list_order)
 

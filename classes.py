@@ -137,13 +137,21 @@ class DispatcherMessage(Dispatcher):
                         arr_message.append(str(answer.message_id))
                         self.add_arr_messages(message.from_user.id, arr_message)
                         messages_from_user = self.get_delivery_address_from_user(message.from_user.id)
+                        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
                         if messages_from_user is None:
                             self.record_delivery(message.from_user.id, message.text)
+                            change_text_head = f"Сообщение для отправки вместе с заказом:\n{message.text}"
+                            await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
+                                                             self.build_keyboard(head_menu_button, 2))
                         else:
                             arr_messages_from_user = self.get_arr_message_user(messages_from_user)
                             new_arr_message_from_user = self.add_message_user(arr_messages_from_user, message.text)
-                            self.record_delivery(message.from_user.id, self.get_arr_messages_user_for_record(
-                                new_arr_message_from_user))
+                            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+                            self.record_delivery(message.from_user.id, new_string_message)
+                            new_string = '\n'.join(new_string_message.split('/////'))
+                            change_text_head = f"Сообщение для отправки вместе с заказом:\n{new_string}"
+                            await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
+                                                             self.build_keyboard(head_menu_button, 2))
                         await self.timer.start(message.from_user.id)
                     except IndexError as e:
                         print(e)
@@ -253,6 +261,7 @@ class DispatcherMessage(Dispatcher):
         async def post_order(callback: CallbackQuery):
             list_history = self.get_arr_history(callback.from_user.id)
             await self.post_admin(callback, list_history[-2], list_history[-1])
+            self.delete_element_history(callback.from_user.id, 3)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_delivery'))
@@ -383,6 +392,7 @@ class DispatcherMessage(Dispatcher):
         try:
             return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
         except TelegramBadRequest as error:
+            print(error)
             media_group = MediaGroupBuilder(caption=text)
             arr_photo = ["https://www.rossvik.moscow/images/no_foto.png"]
             for item in arr_photo:
@@ -677,6 +687,7 @@ class DispatcherMessage(Dispatcher):
         try:
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         except TelegramBadRequest as error:
+            print(error)
             pass
 
     async def minus_amount(self, call_back: CallbackQuery):
@@ -706,6 +717,7 @@ class DispatcherMessage(Dispatcher):
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
             except TelegramBadRequest as error:
+                print(error)
                 pass
         else:
             pass
@@ -737,6 +749,7 @@ class DispatcherMessage(Dispatcher):
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
             except TelegramBadRequest as error:
+                print(error)
                 pass
         else:
             pass
@@ -768,6 +781,7 @@ class DispatcherMessage(Dispatcher):
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
             except TelegramBadRequest as error:
+                print(error)
                 pass
         else:
             pass
@@ -790,6 +804,7 @@ class DispatcherMessage(Dispatcher):
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
                 return True
             except TelegramBadRequest as error:
+                print(error)
                 pass
         else:
             return False

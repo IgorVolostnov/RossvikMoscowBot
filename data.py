@@ -40,6 +40,15 @@ class DATA:
                            'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
         self.description_button = {'back': '◀ 👈 Назад', 'add': 'Добавить ✅🗑️',
                                    'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
+        self.delivery = {'pickup': 'Самовывоз',
+                         'delivery': 'Доставка'}
+        self.kind_pickup = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
+                            'record_answer_storage': 'Мытищи, 1-ая Новая, 57 (Склад)'}
+        self.kind_delivery = {'record_answer_moscow': 'В пределах МКАД',
+                              'record_answer_pek': 'ТК ПЭК',
+                              'record_answer_dl': 'ТК Деловые Линии',
+                              'record_answer_mt': 'ТК Мейджик Транс',
+                              'record_answer_cdek': 'ТК СДЭК'}
 
     @property
     def get_first_keyboard(self):

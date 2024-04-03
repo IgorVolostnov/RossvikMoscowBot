@@ -8,7 +8,6 @@ import sqlite3
 import openpyxl
 import datetime
 from data import DATA
-from asyncio import Queue
 from aiogram import F
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
@@ -87,7 +86,9 @@ class DispatcherMessage(Dispatcher):
         self.button_basket_plus = self.data.get_basket_plus
         self.levels_in_keyboard = self.data.get_levels_category
         self.level_numbers = self.data.get_level_numbers
-        self.queue = Queue
+        self.choice_delivery = self.data.delivery
+        self.kind_pickup = self.data.kind_pickup
+        self.kind_delivery = self.data.kind_delivery
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
@@ -125,24 +126,28 @@ class DispatcherMessage(Dispatcher):
             "migrate_from_chat_id", "pinned_message"}))
         async def get_message(message: Message):
             current_history = self.current_history(message.from_user.id)
-            if current_history == 'record_answer_shop':
+            if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
-                    head_message = self.get_arr_messages(message.from_user.id)[0]
-                    await self.delete_messages(message.from_user.id, head_message)
-                    arr_message = [str(message.message_id)]
-                    change_text = f"Сообщение получено"
-                    answer = await self.answer_text(message, change_text)
-                    arr_message.append(str(answer.message_id))
-                    self.add_arr_messages(message.from_user.id, arr_message)
-                    messages_from_user = self.get_delivery_address_from_user(message.from_user.id)
-                    if messages_from_user is None:
-                        self.record_delivery(message.from_user.id, message.text)
-                    else:
-                        arr_messages_from_user = self.get_arr_message_user(messages_from_user)
-                        new_arr_message_from_user = self.add_message_user(arr_messages_from_user, message.text)
-                        self.record_delivery(message.from_user.id, self.get_arr_messages_user_for_record(
-                            new_arr_message_from_user))
-                    await self.timer.start(message.from_user.id)
+                    try:
+                        head_message = self.get_arr_messages(message.from_user.id)[0]
+                        await self.delete_messages(message.from_user.id, head_message)
+                        arr_message = [str(message.message_id)]
+                        change_text = f"Сообщение получено"
+                        answer = await self.answer_text(message, change_text)
+                        arr_message.append(str(answer.message_id))
+                        self.add_arr_messages(message.from_user.id, arr_message)
+                        messages_from_user = self.get_delivery_address_from_user(message.from_user.id)
+                        if messages_from_user is None:
+                            self.record_delivery(message.from_user.id, message.text)
+                        else:
+                            arr_messages_from_user = self.get_arr_message_user(messages_from_user)
+                            new_arr_message_from_user = self.add_message_user(arr_messages_from_user, message.text)
+                            self.record_delivery(message.from_user.id, self.get_arr_messages_user_for_record(
+                                new_arr_message_from_user))
+                        await self.timer.start(message.from_user.id)
+                    except IndexError as e:
+                        print(e)
+                        await self.send_search_result(message)
             else:
                 await self.send_search_result(message)
 
@@ -246,7 +251,8 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
         async def post_order(callback: CallbackQuery):
-            await self.post_admin(callback)
+            list_history = self.get_arr_history(callback.from_user.id)
+            await self.post_admin(callback, list_history[-2], list_history[-1])
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_delivery'))
@@ -256,16 +262,25 @@ class DispatcherMessage(Dispatcher):
             self.add_element_history(callback.from_user.id, 'choice_delivery')
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'pickup'))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.choice_delivery)))
         async def send_pickup_delivery(callback: CallbackQuery):
-            await self.pickup(callback)
-            self.add_element_history(callback.from_user.id, 'pickup')
+            if callback.data == 'pickup':
+                await self.pickup(callback)
+            elif callback.data == 'delivery':
+                await self.delivery(callback)
+            self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'shop'))
-        async def send_pickup_delivery(callback: CallbackQuery):
-            await self.record_answer_shop(callback)
-            self.add_element_history(callback.from_user.id, 'record_answer_shop')
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_pickup)))
+        async def send_kind_pickup(callback: CallbackQuery):
+            await self.record_answer_pickup(callback)
+            self.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_delivery)))
+        async def send_kind_delivery(callback: CallbackQuery):
+            await self.record_answer_delivery(callback)
+            self.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
@@ -305,8 +320,11 @@ class DispatcherMessage(Dispatcher):
             elif current == 'choice_delivery':
                 await self.choice(callback)
                 await self.timer.start(callback.from_user.id)
-            elif current == 'pickup':
-                await self.pickup(callback)
+            elif current in self.choice_delivery:
+                if current == 'pickup':
+                    await self.pickup(callback)
+                elif current == 'delivery':
+                    await self.delivery(callback)
                 await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.levels_in_keyboard)))
@@ -896,7 +914,7 @@ class DispatcherMessage(Dispatcher):
                                              self.get_arr_messages(call_back.from_user.id)[0],
                                              self.build_keyboard(head_menu_button, 2))
 
-    async def post_admin(self, call_back: CallbackQuery):
+    async def post_admin(self, call_back: CallbackQuery, value_delivery: str, kind_delivery: str):
         order = await self.save_order(call_back, self.current_basket_dict(call_back.from_user.id))
         number_order = order[0]
         order_dict = order[1]
@@ -906,9 +924,16 @@ class DispatcherMessage(Dispatcher):
         if delivery_address_from_user is None:
             delivery_address_from_user = 'Частное лицо'
         arr_messages_from_user = self.get_arr_message_user(delivery_address_from_user)
-        change_contact = self.set_new_contact(call_back.from_user.id, 'pickup', 'SHOP',
+        change_contact = self.set_new_contact(call_back.from_user.id, value_delivery, kind_delivery,
                                               '\n'.join(arr_messages_from_user))
         order_dict[number_order]['contact_order'] = delivery_address_from_user
+        current_contact = '\n'.join(order_dict[number_order]['contact_order'].split('/////'))
+        if value_delivery == 'pickup':
+            value_d = self.choice_delivery[value_delivery]
+            kind_d = self.kind_pickup[kind_delivery]
+        else:
+            value_d = self.choice_delivery[value_delivery]
+            kind_d = self.kind_delivery[kind_delivery]
         list_messages_admins = []
         for user in list_user_admin:
             answer = await self.bot.send_message_order(int(user[0]),
@@ -916,7 +941,7 @@ class DispatcherMessage(Dispatcher):
                                                        f'{call_back.from_user.first_name} '
                                                        f'{call_back.from_user.last_name} ',
                                                        order_dict[number_order]['path_order'],
-                                                       order_dict[number_order]['contact_order'],
+                                                       f"{value_d}\n{kind_d}\n{current_contact}",
                                                        self.build_keyboard(menu_button, 1))
             list_messages_admins.append(str(answer.message_id))
         order_dict[number_order]['id_message_admins'] = list_messages_admins
@@ -937,19 +962,30 @@ class DispatcherMessage(Dispatcher):
         await self.delete_messages(call_back.from_user.id, answer.message_id)
 
     async def pickup(self, call_back: CallbackQuery):
-        head_menu_button = {'shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
-                            'storage': 'Мытищи, 1-ая Новая, 57 (Склад)',
+        head_menu_button = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
+                            'record_answer_storage': 'Мытищи, 1-ая Новая, 57 (Склад)',
                             'back': '◀ 👈 Назад'}
         head_text = f"Выберете откуда будете забирать товар:"
         answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
 
-    async def record_answer_shop(self, call_back: CallbackQuery):
+    async def delivery(self, call_back: CallbackQuery):
+        head_menu_button = {'record_answer_moscow': 'В пределах МКАД',
+                            'record_answer_pek': 'ТК ПЭК',
+                            'record_answer_dl': 'ТК Деловые Линии',
+                            'record_answer_mt': 'ТК Мейджик Транс',
+                            'record_answer_cdek': 'ТК СДЭК',
+                            'back': '◀ 👈 Назад'}
+        head_text = f"Выберете какой транспортной компанией доставить товар, " \
+                    f"либо можем доставить товар своими силами в пределах МКАД:"
+        answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
+        await self.delete_messages(call_back.from_user.id, answer.message_id)
+
+    async def record_answer_pickup(self, call_back: CallbackQuery):
         whitespace = '\n'
         dict_contact = self.get_dict_contact(self.get_arr_contact(call_back.from_user.id))
-        head_menu_button = {'post': 'Отправить заказ 📫',
-                            'back': '◀ 👈 Назад'}
-        if dict_contact['pickup']['SHOP'][0] == 'empty':
+        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
+        if dict_contact['pickup'][call_back.data][0] == 'empty':
             head_text = f"{call_back.from_user.first_name} {call_back.from_user.last_name} у нас нет контактных " \
                         f"данных по Вашей учетной записи. Мы можем выставить счет на Частное лицо или отправьте нам " \
                         f"сообщение с Вашими реквизитами, например:{whitespace}ООО «Алькар»{whitespace}" \
@@ -957,7 +993,7 @@ class DispatcherMessage(Dispatcher):
                         f"127562, город Москва, улица Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}" \
                         f"Тел. +7 (495) 215-000-3, 8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}" \
                         f"Приеду во вторник!"
-            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
+            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
         else:
             menu_contact = {'choice_contact': 'Выбрать эти реквизиты ☑', 'delete_record': 'Удалить запись 🗑️'}
@@ -967,7 +1003,38 @@ class DispatcherMessage(Dispatcher):
             answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
             arr_answers = []
-            for contact in dict_contact['pickup']['SHOP']:
+            for contact in dict_contact['pickup'][call_back.data]:
+                answer_contact = await self.answer_message(answer, contact, self.build_keyboard(menu_contact, 1))
+                arr_answers.append(str(answer_contact.message_id))
+            self.add_arr_messages(call_back.from_user.id, arr_answers)
+
+    async def record_answer_delivery(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        dict_contact = self.get_dict_contact(self.get_arr_contact(call_back.from_user.id))
+        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
+        if dict_contact['delivery'][call_back.data][0] == 'empty':
+            head_text = f"{call_back.from_user.first_name} {call_back.from_user.last_name} у нас нет контактных " \
+                        f"данных по Вашей учетной записи. Мы можем выставить счет на Частное лицо или отправьте нам " \
+                        f"сообщение с Вашими реквизитами, например:{whitespace}ООО «Алькар»{whitespace}" \
+                        f"ИНН 9715341213 КПП 771501001{whitespace}Юридический, фактический и почтовый адрес: " \
+                        f"127562, город Москва, улица Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}" \
+                        f"Тел. +7 (495) 215-000-3, 8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}" \
+                        f"Адрес доставки: Мытищи, 1-ая Новая, 57{whitespace}" \
+                        f"Режим работы: 9:00 - 20:00"
+            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
+        else:
+            menu_contact = {'choice_contact': 'Выбрать эти реквизиты ☑', 'delete_record': 'Удалить запись 🗑️'}
+            head_text = f"Мы сохранили информацию, которую Вы нам отправляли при предыдущих заказах.{whitespace}" \
+                        f"Можете выбрать из списка ниже или отправить нам новые реквизиты и комментарии одним или " \
+                        f"несколькими сообщениями. Например:{whitespace}" \
+                        f"Шиномонтаж на Красной площади{whitespace}" \
+                        f"Адрес: Москва, ул Тверская, д 10{whitespace}" \
+                        f"Режим работы: 9:00 - 20:00"
+            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
+            arr_answers = []
+            for contact in dict_contact['delivery'][call_back.data]:
                 answer_contact = await self.answer_message(answer, contact, self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             self.add_arr_messages(call_back.from_user.id, arr_answers)
@@ -1606,6 +1673,29 @@ class DispatcherMessage(Dispatcher):
         row_table = curs.fetchone()
         return row_table
 
+    def get_arr_history(self, user_id: int):
+        try:
+            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
+                return self.execute_get_arr_history(user_id)
+        except sqlite3.Error as error:
+            print("Ошибка чтения данных из таблицы", error)
+        finally:
+            if self.conn:
+                self.conn.close()
+
+    def execute_get_arr_history(self, user_id: int):
+        curs = self.conn.cursor()
+        curs.execute('PRAGMA journal_mode=wal')
+        sql_arr_order = f"SELECT HISTORY FROM TELEGRAMMBOT " \
+                        f"WHERE ID_USER = {self.quote(user_id)} "
+        curs.execute(sql_arr_order)
+        row_table = curs.fetchone()[0]
+        if row_table is None:
+            arr_history = []
+        else:
+            arr_history = row_table.split()
+        return arr_history
+
     def add_element_history(self, id_user: int, history: str):
         current = self.get_info_user(id_user)
         try:
@@ -1840,13 +1930,13 @@ class DispatcherMessage(Dispatcher):
     @staticmethod
     def get_dict_contact(arr_contact: str):
         dict_contact = {'pickup': {}, 'delivery': {}}
-        dict_contact['pickup']['SHOP'] = arr_contact.split('/////')[0].split('///')[0].split('_____')
-        dict_contact['pickup']['STORAGE'] = arr_contact.split('/////')[0].split('///')[1].split('_____')
-        dict_contact['delivery']['MOSCOW'] = arr_contact.split('/////')[1].split('///')[0].split('_____')
-        dict_contact['delivery']['PEK'] = arr_contact.split('/////')[1].split('///')[1].split('_____')
-        dict_contact['delivery']['DL'] = arr_contact.split('/////')[1].split('///')[2].split('_____')
-        dict_contact['delivery']['MT'] = arr_contact.split('/////')[1].split('///')[3].split('_____')
-        dict_contact['delivery']['CDEK'] = arr_contact.split('/////')[1].split('///')[4].split('_____')
+        dict_contact['pickup']['record_answer_shop'] = arr_contact.split('/////')[0].split('///')[0].split('_____')
+        dict_contact['pickup']['record_answer_storage'] = arr_contact.split('/////')[0].split('///')[1].split('_____')
+        dict_contact['delivery']['record_answer_moscow'] = arr_contact.split('/////')[1].split('///')[0].split('_____')
+        dict_contact['delivery']['record_answer_pek'] = arr_contact.split('/////')[1].split('///')[1].split('_____')
+        dict_contact['delivery']['record_answer_dl'] = arr_contact.split('/////')[1].split('///')[2].split('_____')
+        dict_contact['delivery']['record_answer_mt'] = arr_contact.split('/////')[1].split('///')[3].split('_____')
+        dict_contact['delivery']['record_answer_cdek'] = arr_contact.split('/////')[1].split('///')[4].split('_____')
         return dict_contact
 
     def set_new_contact(self, id_user: int, type_delivery: str, kind_delivery: str, value_delivery: str):
@@ -1871,13 +1961,13 @@ class DispatcherMessage(Dispatcher):
 
     @staticmethod
     def assembling_contact_dict(contact_dict: dict):
-        contact = f"{'_____'.join(contact_dict['pickup']['SHOP'])}///" \
-                  f"{'_____'.join(contact_dict['pickup']['STORAGE'])}/////" \
-                  f"{'_____'.join(contact_dict['delivery']['MOSCOW'])}///" \
-                  f"{'_____'.join(contact_dict['delivery']['PEK'])}///" \
-                  f"{'_____'.join(contact_dict['delivery']['DL'])}///" \
-                  f"{'_____'.join(contact_dict['delivery']['MT'])}///" \
-                  f"{'_____'.join(contact_dict['delivery']['CDEK'])}"
+        contact = f"{'_____'.join(contact_dict['pickup']['record_answer_shop'])}///" \
+                  f"{'_____'.join(contact_dict['pickup']['record_answer_storage'])}/////" \
+                  f"{'_____'.join(contact_dict['delivery']['record_answer_moscow'])}///" \
+                  f"{'_____'.join(contact_dict['delivery']['record_answer_pek'])}///" \
+                  f"{'_____'.join(contact_dict['delivery']['record_answer_dl'])}///" \
+                  f"{'_____'.join(contact_dict['delivery']['record_answer_mt'])}///" \
+                  f"{'_____'.join(contact_dict['delivery']['record_answer_cdek'])}"
         return contact
 
     @staticmethod

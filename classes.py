@@ -75,9 +75,9 @@ class DispatcherMessage(Dispatcher):
         Dispatcher.__init__(self, **kw)
         self.timer = TimerClean(self, 300)
         self.bot = parent
-        self.arr_auth_user = self.auth_user
         self.data = DATA()
         self.execute = Execute()
+        self.arr_auth_user = asyncio.run(self.execute.auth_user)
         self.first_keyboard = self.data.get_first_keyboard
         self.category = self.data.get_category
         self.pages = self.data.get_pages
@@ -96,11 +96,12 @@ class DispatcherMessage(Dispatcher):
         async def cmd_start(message: Message):
             answer = await self.answer_message(message, "Выберете, что Вас интересует",
                                                self.build_keyboard(self.first_keyboard, 2))
-            if self.start_message(message):
+            if await self.execute.start_message(message):
                 self.restart_record(message)
                 self.add_element_message(message.from_user.id, message.message_id)
             else:
-                self.start_record_new_user(message)
+                await self.execute.start_record_new_user(message)
+                self.arr_auth_user[message.from_user.id] = None
             await self.delete_messages(message.from_user.id)
             self.add_element_message(message.from_user.id, answer.message_id)
             await self.timer.start(message.from_user.id)
@@ -1427,51 +1428,6 @@ class DispatcherMessage(Dispatcher):
         row_table = curs.fetchone()
         return row_table[0]
 
-    def start_message(self, message: Message):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_start_message(message)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_start_message(self, message: Message):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_auth = f"SELECT ID_USER FROM TELEGRAMMBOT " \
-                   f"WHERE ID_USER = {self.quote(message.from_user.id)} "
-        curs.execute(sql_auth)
-        row_table = curs.fetchone()
-        if row_table is None:
-            row_table = False
-        else:
-            row_table = True
-        return row_table
-
-    def start_record_new_user(self, message: Message):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_start_record_new_user(message)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_start_record_new_user(self, message: Message):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, CONTACT) " \
-                     f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}, " \
-                     f"'empty///empty/////empty///empty///empty///empty///empty') "
-        curs.execute(sql_record)
-        self.arr_auth_user[message.from_user.id] = '/start'
-        print(f'Новый клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
-              f'зашел с сообщением: {str(message.message_id)}')
-        self.conn.commit()
-
     def restart_record(self, message: Message):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
@@ -1513,27 +1469,6 @@ class DispatcherMessage(Dispatcher):
         print(f'Клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
               f'возобновил работу с сообщением: {str(message.message_id)}')
         self.conn.commit()
-
-    @property
-    def auth_user(self):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_auth_user()
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_auth_user(self):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_auth = f"SELECT ID_USER, STATUS FROM TELEGRAMMBOT "
-        curs.execute(sql_auth)
-        dict_user = {}
-        for item in curs.fetchall():
-            dict_user[int(item[0])] = item[1]
-        return dict_user
 
     @property
     def get_user_admin(self):

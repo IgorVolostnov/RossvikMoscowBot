@@ -1,5 +1,4 @@
 import logging
-import asyncio
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from aiosmtplib import SMTP

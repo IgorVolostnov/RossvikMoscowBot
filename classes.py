@@ -8,6 +8,7 @@ import sqlite3
 import openpyxl
 import datetime
 from data import DATA
+from execute import Execute
 from aiogram import F
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
@@ -76,6 +77,7 @@ class DispatcherMessage(Dispatcher):
         self.bot = parent
         self.arr_auth_user = self.auth_user
         self.data = DATA()
+        self.execute = Execute()
         self.first_keyboard = self.data.get_first_keyboard
         self.category = self.data.get_category
         self.pages = self.data.get_pages
@@ -125,7 +127,7 @@ class DispatcherMessage(Dispatcher):
             "group_chat_created", "supergroup_chat_created", "channel_chat_created", "migrate_to_chat_id",
             "migrate_from_chat_id", "pinned_message"}))
         async def get_message(message: Message):
-            current_history = self.current_history(message.from_user.id)
+            current_history = await self.execute.get_element_history(message.from_user.id, -1)
             if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
                     try:
@@ -253,7 +255,7 @@ class DispatcherMessage(Dispatcher):
                 await self.description(callback, current)
                 await self.timer.start(callback.from_user.id)
             elif current == 'add':
-                previous_history = self.previous_history(callback.from_user.id)
+                previous_history = await self.execute.get_element_history(callback.from_user.id, -2)
                 await self.add_nomenclature_from_basket(callback, previous_history)
                 await self.timer.start(callback.from_user.id)
 
@@ -320,7 +322,7 @@ class DispatcherMessage(Dispatcher):
                 self.add_element_history(callback.from_user.id, current)
                 await self.timer.start(callback.from_user.id)
             elif current == 'add':
-                previous_history = self.previous_history(callback.from_user.id)
+                previous_history = await self.execute.get_element_history(callback.from_user.id, -2)
                 await self.add_nomenclature_from_basket(callback, previous_history)
                 await self.timer.start(callback.from_user.id)
             elif current == 'basket':
@@ -338,7 +340,7 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.levels_in_keyboard)))
         async def send_change_level(callback: CallbackQuery):
-            current_history = self.current_history(callback.from_user.id)
+            current_history = await self.execute.get_element_history(callback.from_user.id, -1)
             if current_history == 'catalog':
                 await self.show_level_price(callback)
                 self.add_element_history(callback.from_user.id, 'level')
@@ -665,7 +667,7 @@ class DispatcherMessage(Dispatcher):
 
     async def change_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = self.previous_history(call_back.from_user.id)
+        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
         arr_description = self.current_description(id_nomenclature)
         if len(call_back.message.text.split(whitespace)) == 2:
             amount = call_back.message.text.split(' шт')[0].split(whitespace)[1] + call_back.data
@@ -692,7 +694,7 @@ class DispatcherMessage(Dispatcher):
 
     async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = self.previous_history(call_back.from_user.id)
+        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
         arr_description = self.current_description(id_nomenclature)
         if len(call_back.message.text.split(whitespace)) == 2:
             amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
@@ -724,7 +726,7 @@ class DispatcherMessage(Dispatcher):
 
     async def plus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = self.previous_history(call_back.from_user.id)
+        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
         arr_description = self.current_description(id_nomenclature)
         if len(call_back.message.text.split(whitespace)) == 2:
             amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
@@ -756,7 +758,7 @@ class DispatcherMessage(Dispatcher):
 
     async def delete_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = self.previous_history(call_back.from_user.id)
+        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
         arr_description = self.current_description(id_nomenclature)
         if len(call_back.message.text.split(whitespace)) == 2:
             amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
@@ -788,7 +790,7 @@ class DispatcherMessage(Dispatcher):
 
     async def add_to_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = self.previous_history(call_back.from_user.id)
+        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
         arr_description = self.current_description(id_nomenclature)
         amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
         price = self.check_price(call_back.from_user.id, arr_description[9], arr_description[8])
@@ -1142,25 +1144,6 @@ class DispatcherMessage(Dispatcher):
                     self.set_level(item[0], end_number)
                     end_number += 1
 
-    def get_category_by_level(self, level: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_get_category_by_level(level)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_get_category_by_level(self, level: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_category_by_level = f"SELECT KOD FROM CATEGORY " \
-                                f"WHERE SORT_CATEGORY = '{level}' "
-        curs.execute(sql_category_by_level)
-        basket = curs.fetchall()
-        return basket
-
     def set_level(self, kod_nomenclature: str, current_level: int):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
@@ -1183,7 +1166,7 @@ class DispatcherMessage(Dispatcher):
     async def send_search_result(self, message: Message):
         id_user = message.from_user.id
         result_search = self.search(message.text)
-        current_history = self.current_history(id_user)
+        current_history = await self.execute.get_element_history(id_user, -1)
         if len(result_search['Поиск_Стр.1']) == 0:
             await self.find_nothing(id_user, message)
             if 'search' in current_history:
@@ -1365,44 +1348,6 @@ class DispatcherMessage(Dispatcher):
                      f"WHERE ID_USER = {self.quote(id_user)} "
         curs.execute(sql_record)
         self.conn.commit()
-
-    def current_history(self, id_user: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_current_history(id_user)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_current_history(self, id_user: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_history = f"SELECT HISTORY FROM TELEGRAMMBOT " \
-                      f"WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_history)
-        row_table = curs.fetchone()[0]
-        return row_table.split()[-1]
-
-    def previous_history(self, id_user: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_previous_history(id_user)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_previous_history(self, id_user: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_history = f"SELECT HISTORY FROM TELEGRAMMBOT " \
-                      f"WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_history)
-        row_table = curs.fetchone()[0]
-        return row_table.split()[-2]
 
     def current_category(self, id_parent: str):
         try:

@@ -96,12 +96,12 @@ class DispatcherMessage(Dispatcher):
                                                self.build_keyboard(self.first_keyboard, 2))
             if await self.execute.start_message(message):
                 await self.execute.restart_catalog(message, '/start')
-                self.add_element_message(message.from_user.id, message.message_id)
+                await self.execute.add_element_message(message.from_user.id, message.message_id)
             else:
                 await self.execute.start_record_new_user(message)
                 self.arr_auth_user[message.from_user.id] = None
             await self.delete_messages(message.from_user.id)
-            self.add_element_message(message.from_user.id, answer.message_id)
+            await self.execute.add_element_message(message.from_user.id, answer.message_id)
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("catalog"))
@@ -109,9 +109,9 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад'}
             answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
                                                self.build_keyboard(self.data.get_prices, 1, menu_button))
-            self.add_element_message(message.from_user.id, message.message_id)
+            await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
-            self.add_element_message(message.from_user.id, answer.message_id)
+            await self.execute.add_element_message(message.from_user.id, answer.message_id)
             await self.execute.restart_catalog(message, '/start catalog')
             await self.timer.start(message.from_user.id)
 
@@ -125,13 +125,14 @@ class DispatcherMessage(Dispatcher):
             if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
                     try:
-                        head_message = self.get_arr_messages(message.from_user.id)[0]
+                        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+                        head_message = arr_messages[0]
                         await self.delete_messages(message.from_user.id, head_message)
                         arr_message = [str(message.message_id)]
                         change_text = f"Сообщение получено"
                         answer = await self.answer_text(message, change_text)
                         arr_message.append(str(answer.message_id))
-                        self.add_arr_messages(message.from_user.id, arr_message)
+                        await self.execute.add_arr_messages(message.from_user.id, arr_message)
                         messages_from_user = self.get_delivery_address_from_user(message.from_user.id)
                         head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
                         if messages_from_user is None:
@@ -158,7 +159,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'catalog'))
         async def send_catalog_message(callback: CallbackQuery):
             await self.catalog(callback)
-            self.add_element_history(callback.from_user.id, callback.data)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'answer_order'))
@@ -168,33 +169,33 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.category)))
         async def send_next_category(callback: CallbackQuery):
             if await self.next_category(callback):
-                self.add_element_history(callback.from_user.id, callback.data)
+                await self.execute.add_element_history(callback.from_user.id, callback.data)
             else:
-                self.add_element_history(callback.from_user.id, f"{callback.data} Стр.1")
+                await self.execute.add_element_history(callback.from_user.id, f"{callback.data} Стр.1")
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages)))
         async def send_next_page(callback: CallbackQuery):
             if await self.next_page(callback):
-                self.add_element_history(callback.from_user.id, callback.data)
+                await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages_search)))
         async def send_next_page_search(callback: CallbackQuery):
             if await self.next_page_search(callback):
-                self.add_element_history(callback.from_user.id, callback.data)
+                await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.nomenclatures)))
         async def send_description(callback: CallbackQuery):
             await self.description(callback)
-            self.add_element_history(callback.from_user.id, callback.data)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add'))
         async def send_basket(callback: CallbackQuery):
             await self.add_nomenclature(callback)
-            self.add_element_history(callback.from_user.id, callback.data)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_calculater)))
@@ -220,7 +221,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'done'))
         async def send_done_basket(callback: CallbackQuery):
             if await self.add_to_basket(callback):
-                self.delete_element_history(callback.from_user.id, 1)
+                await self.execute.delete_element_history(callback.from_user.id, 1)
                 await self.timer.start(callback.from_user.id)
             else:
                 await self.timer.start(callback.from_user.id)
@@ -228,7 +229,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'basket'))
         async def send_show_basket(callback: CallbackQuery):
             await self.show_basket(callback)
-            self.add_element_history(callback.from_user.id, callback.data)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_basket_minus)))
@@ -244,7 +245,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             self.clean_basket(callback.from_user.id)
-            current = self.delete_element_history(callback.from_user.id, 1)
+            current = await self.execute.delete_element_history(callback.from_user.id, 1)
             if current in self.nomenclatures:
                 await self.description(callback, current)
                 await self.timer.start(callback.from_user.id)
@@ -255,16 +256,16 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
         async def post_order(callback: CallbackQuery):
-            list_history = self.get_arr_history(callback.from_user.id)
+            list_history = await self.execute.get_arr_history(callback.from_user.id)
             await self.post_admin(callback, list_history[-2], list_history[-1])
-            self.delete_element_history(callback.from_user.id, 3)
+            await self.execute.delete_element_history(callback.from_user.id, 3)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_delivery'))
         async def send_choice_delivery(callback: CallbackQuery):
             await self.delete_messages(callback.from_user.id, callback.message.message_id)
             await self.choice(callback)
-            self.add_element_history(callback.from_user.id, 'choice_delivery')
+            await self.execute.add_element_history(callback.from_user.id, 'choice_delivery')
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.choice_delivery)))
@@ -273,26 +274,26 @@ class DispatcherMessage(Dispatcher):
                 await self.pickup(callback)
             elif callback.data == 'delivery':
                 await self.delivery(callback)
-            self.add_element_history(callback.from_user.id, callback.data)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_pickup)))
         async def send_kind_pickup(callback: CallbackQuery):
             await self.record_answer_pickup(callback)
-            self.add_element_history(callback.from_user.id, callback.data)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_delivery)))
         async def send_kind_delivery(callback: CallbackQuery):
             await self.record_answer_delivery(callback)
-            self.add_element_history(callback.from_user.id, callback.data)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
-            current = self.delete_element_history(callback.from_user.id, 1)
+            current = await self.execute.delete_element_history(callback.from_user.id, 1)
             if 'search' in current:
-                current = self.delete_element_history(callback.from_user.id, 1)
+                current = await self.execute.delete_element_history(callback.from_user.id, 1)
             if current == '/start':
                 await self.return_start(callback)
                 await self.timer.start(callback.from_user.id)
@@ -304,16 +305,16 @@ class DispatcherMessage(Dispatcher):
                 await self.timer.start(callback.from_user.id)
             elif current in self.pages:
                 await self.return_page(callback, current)
-                self.add_element_history(callback.from_user.id, current)
+                await self.execute.add_element_history(callback.from_user.id, current)
                 await self.timer.start(callback.from_user.id)
             elif current in self.nomenclatures:
                 await self.description(callback, current)
                 await self.timer.start(callback.from_user.id)
             elif current in self.pages_search:
-                previous_history = self.delete_element_history(callback.from_user.id, 1)
+                previous_history = await self.execute.delete_element_history(callback.from_user.id, 1)
                 result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
                 await self.return_page_search(callback, result_search, current)
-                self.add_element_history(callback.from_user.id, current)
+                await self.execute.add_element_history(callback.from_user.id, current)
                 await self.timer.start(callback.from_user.id)
             elif current == 'add':
                 previous_history = await self.execute.get_element_history(callback.from_user.id, -2)
@@ -405,15 +406,15 @@ class DispatcherMessage(Dispatcher):
         return number_order, self.get_order_dict('/////'.join(list_order))
 
     async def find_nothing(self, id_user: int, message: Message):
-        self.add_element_message(id_user, message.message_id)
+        await self.execute.add_element_message(id_user, message.message_id)
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.answer_message(message, "Сожалеем, но ничего не найдено.",
                                            self.build_keyboard(menu_button, 1))
         await self.delete_messages(id_user)
-        self.add_element_message(id_user, answer.message_id)
+        await self.execute.add_element_message(id_user, answer.message_id)
 
     async def show_result_search(self, id_user: int, message: Message, result_search: dict):
-        self.add_element_message(id_user, message.message_id)
+        await self.execute.add_element_message(id_user, message.message_id)
         number_page = '\n' + 'Страница №1'
         pages = {}
         for page in result_search.keys():
@@ -426,13 +427,13 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
-        self.add_arr_messages(id_user, arr_answers)
+        await self.execute.add_arr_messages(id_user, arr_answers)
 
     async def next_page_search(self, call_back: CallbackQuery):
         if self.pages_search[call_back.data] == call_back.message.text.split('№')[1]:
             return False
         else:
-            previous_history = self.delete_element_history(call_back.from_user.id, 1)
+            previous_history = await self.execute.delete_element_history(call_back.from_user.id, 1)
             result_search = self.search(self.get_text_for_search(previous_history.split('___')[1]))
             pages = {}
             for page in result_search.keys():
@@ -447,7 +448,7 @@ class DispatcherMessage(Dispatcher):
                 menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
                 answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
-            self.add_arr_messages(call_back.from_user.id, arr_answers)
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
             return True
 
     async def return_page_search(self, call_back: CallbackQuery, result_search: dict, current_page: str):
@@ -465,23 +466,23 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
-        self.add_arr_messages(call_back.from_user.id, arr_answers)
+        await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def return_start(self, call_back: CallbackQuery):
         answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует",
                                            self.build_keyboard(self.first_keyboard, 2))
         await self.delete_messages(call_back.from_user.id)
-        self.add_element_message(call_back.from_user.id, answer.message_id)
+        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
                                            self.build_keyboard(self.data.get_prices, 1, menu_button))
         await self.delete_messages(call_back.from_user.id)
-        self.add_element_message(call_back.from_user.id, answer.message_id)
+        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_category(self, call_back: CallbackQuery):
-        current_category = self.current_category(call_back.data)
+        current_category = await self.execute.current_category(call_back.data)
         if current_category:
             await self.create_keyboard_edit_caption(call_back, current_category, call_back.data)
             return True
@@ -490,11 +491,11 @@ class DispatcherMessage(Dispatcher):
             return False
 
     async def return_category(self, call_back: CallbackQuery, current_history):
-        current_category = self.current_category(current_history)
+        current_category = await self.execute.current_category(current_history)
         if current_category:
             await self.create_keyboard_edit_caption(call_back, current_category, current_history)
         else:
-            new_current = self.delete_element_history(call_back.from_user.id, 1)
+            new_current = await self.execute.delete_element_history(call_back.from_user.id, 1)
             if new_current == 'catalog':
                 if call_back.message.caption:
                     answer_message = await self.create_price_edit_caption(call_back)
@@ -502,7 +503,7 @@ class DispatcherMessage(Dispatcher):
                 else:
                     await self.catalog(call_back)
             else:
-                current_category = self.current_category(new_current)
+                current_category = await self.execute.current_category(new_current)
                 await self.create_keyboard_push_photo(call_back, current_category, new_current)
 
     async def create_price_edit_caption(self, call_back: CallbackQuery):
@@ -514,25 +515,25 @@ class DispatcherMessage(Dispatcher):
 
     async def create_keyboard_edit_caption(self, call_back: CallbackQuery, list_category: list, id_category: str):
         menu_button = {'back': '◀ 👈 Назад'}
-        await self.edit_caption(call_back.message,
-                                self.text_category(id_category),
-                                self.build_keyboard(self.assembling_category_dict(list_category),
-                                                    1, menu_button))
+        text = await self.execute.text_category(id_category)
+        await self.edit_caption(call_back.message, text,
+                                self.build_keyboard(self.assembling_category_dict(list_category), 1, menu_button))
 
     async def create_keyboard_push_photo(self, call_back: CallbackQuery, list_category: list, id_category: str):
         menu_button = {'back': '◀ 👈 Назад'}
+        text = await self.execute.text_category(id_category)
         answer = await self.bot.push_photo(call_back.message.chat.id,
-                                           self.format_text(self.text_category(id_category)),
+                                           self.format_text(text),
                                            self.build_keyboard(self.assembling_category_dict(list_category),
                                                                1, menu_button))
         await self.delete_messages(call_back.from_user.id)
-        self.add_element_message(call_back.from_user.id, answer.message_id)
+        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_page(self, call_back: CallbackQuery):
         if self.pages[call_back.data] == call_back.message.caption.split('№')[1]:
             return False
         else:
-            id_category = self.delete_element_history(call_back.from_user.id, 1)
+            id_category = await self.execute.delete_element_history(call_back.from_user.id, 1)
             current_nomenclature = self.current_nomenclature(id_category)
             pages = {}
             for page in current_nomenclature.keys():
@@ -547,14 +548,14 @@ class DispatcherMessage(Dispatcher):
                 menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
                 answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
-            self.add_arr_messages(call_back.from_user.id, arr_answers)
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
             return True
 
     async def return_page(self, call_back: CallbackQuery, current_page: str):
         number_page = '\n' + 'Страница №' + self.pages[current_page]
-        id_category = self.delete_element_history(call_back.from_user.id, 1)
+        id_category = await self.execute.delete_element_history(call_back.from_user.id, 1)
         current_nomenclature = self.current_nomenclature(id_category)
-        text = self.text_category(id_category)
+        text = await self.execute.text_category(id_category)
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
@@ -567,7 +568,7 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
-        self.add_arr_messages(call_back.from_user.id, arr_answers)
+        await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def description(self, call_back: CallbackQuery, id_nomenclature: str = None):
         if id_nomenclature:
@@ -585,7 +586,7 @@ class DispatcherMessage(Dispatcher):
         for item_message in arr_answer:
             arr_message.append(str(item_message.message_id))
         await self.delete_messages(call_back.from_user.id)
-        self.add_arr_messages(call_back.from_user.id, arr_message)
+        await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
 
     async def add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -606,7 +607,7 @@ class DispatcherMessage(Dispatcher):
         for item_message in arr_answer:
             arr_message.append(str(item_message.message_id))
         await self.delete_messages(call_back.from_user.id)
-        self.add_arr_messages(call_back.from_user.id, arr_message)
+        await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
 
     async def change_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -802,7 +803,7 @@ class DispatcherMessage(Dispatcher):
                 menu_button = {f'basket_minus{key}': '➖', f'basket_plus{key}': '➕'}
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
-            self.add_arr_messages(call_back.from_user.id, arr_answers)
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def minus_amount_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -823,8 +824,8 @@ class DispatcherMessage(Dispatcher):
             head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                 'choice_delivery': 'Оформить заказ 📧📦📲'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
-            await self.bot.edit_head_message(head_text, call_back.message.chat.id,
-                                             self.get_arr_messages(call_back.from_user.id)[0],
+            arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+            await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
                                              self.build_keyboard(head_menu_button, 2))
         else:
             current_basket_dict.pop(self.button_basket_minus[call_back.data])
@@ -833,8 +834,8 @@ class DispatcherMessage(Dispatcher):
                 await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
                 head_text = 'Ваша корзина пуста 😭😔💔'
                 head_menu_button = {'back': '◀ 👈 Назад'}
-                await self.bot.edit_head_message(head_text, call_back.message.chat.id,
-                                                 self.get_arr_messages(call_back.from_user.id)[0],
+                arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+                await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
                                                  self.build_keyboard(head_menu_button, 1))
             else:
                 self.add_basket_base(call_back.from_user.id, self.assembling_basket_dict(current_basket_dict))
@@ -844,8 +845,9 @@ class DispatcherMessage(Dispatcher):
                             f"{self.format_price(float(sum_basket))}:"
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
+                arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
                 await self.bot.edit_head_message(head_text, call_back.message.chat.id,
-                                                 self.get_arr_messages(call_back.from_user.id)[0],
+                                                 arr_messages[0],
                                                  self.build_keyboard(head_menu_button, 2))
 
     async def plus_amount_basket(self, call_back: CallbackQuery):
@@ -870,8 +872,8 @@ class DispatcherMessage(Dispatcher):
             head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                 'choice_delivery': 'Оформить заказ 📧📦📲'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
-            await self.bot.edit_head_message(head_text, call_back.message.chat.id,
-                                             self.get_arr_messages(call_back.from_user.id)[0],
+            arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+            await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
                                              self.build_keyboard(head_menu_button, 2))
 
     async def post_admin(self, call_back: CallbackQuery, value_delivery: str, kind_delivery: str):
@@ -966,7 +968,7 @@ class DispatcherMessage(Dispatcher):
             for contact in dict_contact['pickup'][call_back.data]:
                 answer_contact = await self.answer_message(answer, contact, self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
-            self.add_arr_messages(call_back.from_user.id, arr_answers)
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def record_answer_delivery(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -997,7 +999,7 @@ class DispatcherMessage(Dispatcher):
             for contact in dict_contact['delivery'][call_back.data]:
                 answer_contact = await self.answer_message(answer, contact, self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
-            self.add_arr_messages(call_back.from_user.id, arr_answers)
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         whitespace = '\n'
@@ -1037,15 +1039,16 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
+        text = await self.execute.text_category(call_back.data)
         heading = await self.edit_caption(call_back.message,
-                                          self.format_text(self.text_category(call_back.data) + number_page),
+                                          self.format_text(text + number_page),
                                           self.build_keyboard(pages, 5))
         arr_answers = []
         for key, value in current_nomenclature['Стр.1'].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
-        self.add_arr_messages(call_back.from_user.id, arr_answers)
+        await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def send_search_result(self, message: Message):
         id_user = message.from_user.id
@@ -1056,23 +1059,23 @@ class DispatcherMessage(Dispatcher):
             if 'search' in current_history:
                 await self.timer.start(id_user)
             elif 'Поиск' in current_history:
-                self.delete_element_history(id_user, 1)
+                await self.execute.delete_element_history(id_user, 1)
                 await self.timer.start(id_user)
             else:
-                self.add_element_history(id_user, f'search___{self.change_record_search(message.text)}')
+                await self.execute.add_element_history(id_user, f'search___{self.change_record_search(message.text)}')
                 await self.timer.start(id_user)
         else:
             await self.show_result_search(id_user, message, result_search)
             if 'search' in current_history:
-                self.delete_element_history(id_user, 1)
-                self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
+                await self.execute.delete_element_history(id_user, 1)
+                await self.execute.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
                 await self.timer.start(id_user)
             elif 'Поиск' in current_history:
-                self.delete_element_history(id_user, 2)
-                self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
+                await self.execute.delete_element_history(id_user, 2)
+                await self.execute.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
                 await self.timer.start(id_user)
             else:
-                self.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
+                await self.execute.add_element_history(id_user, f"search___{self.change_record_search(message.text)} Поиск_Стр.1")
                 await self.timer.start(id_user)
 
     def search_in_base_article(self, search_text: str):
@@ -1233,25 +1236,6 @@ class DispatcherMessage(Dispatcher):
         curs.execute(sql_record)
         self.conn.commit()
 
-    def current_category(self, id_parent: str):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_current_category(id_parent)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_current_category(self, id_parent: str):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_category = f"SELECT KOD, NAME_CATEGORY, SORT_CATEGORY FROM CATEGORY " \
-                       f"WHERE PARENT_ID = '{id_parent}' "
-        curs.execute(sql_category)
-        row_table = curs.fetchall()
-        return row_table
-
     def current_nomenclature(self, id_parent: str):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
@@ -1292,64 +1276,23 @@ class DispatcherMessage(Dispatcher):
         row_table = curs.fetchone()
         return row_table
 
-    def text_category(self, id_category: str):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_text_category(id_category)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_text_category(self, id_category: str):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_category = f"SELECT NAME_CATEGORY FROM CATEGORY " \
-                       f"WHERE KOD = '{id_category}' "
-        curs.execute(sql_category)
-        row_table = curs.fetchone()
-        return row_table[0]
-
     async def delete_messages(self, user_id: int, except_id_message: int = None, individual: bool = False):
         if individual:
-            arr_messages = self.get_arr_messages(user_id, except_id_message)
+            arr_messages = await self.execute.get_arr_messages(user_id, except_id_message)
             await self.bot.delete_messages_chat(user_id, [except_id_message])
             self.record_messages_in_base(user_id, ' '.join(arr_messages))
         else:
             if except_id_message:
-                arr_messages = self.get_arr_messages(user_id, except_id_message)
+                arr_messages = await self.execute.get_arr_messages(user_id, except_id_message)
                 if len(arr_messages) > 0:
                     await self.bot.delete_messages_chat(user_id, arr_messages)
                     self.record_messages_in_base(user_id, str(except_id_message))
                 else:
                     pass
             else:
-                arr_messages = self.get_arr_messages(user_id, except_id_message)
+                arr_messages = await self.execute.get_arr_messages(user_id, except_id_message)
                 await self.bot.delete_messages_chat(user_id, arr_messages)
                 self.record_messages_in_base(user_id, '')
-
-    def get_arr_messages(self, user_id: int, except_id_message: int = None):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_get_arr_messages(user_id, except_id_message)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_get_arr_messages(self, user_id: int, except_id_message: int = None):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_number_chat = f"SELECT MESSAGES FROM TELEGRAMMBOT " \
-                          f"WHERE ID_USER = {self.quote(user_id)} "
-        curs.execute(sql_number_chat)
-        row_table = curs.fetchone()[0]
-        arr_messages = row_table.split()
-        if except_id_message:
-            arr_messages.remove(str(except_id_message))
-        return arr_messages
 
     def record_messages_in_base(self, user_id: int, record_message: str):
         try:
@@ -1367,130 +1310,6 @@ class DispatcherMessage(Dispatcher):
         sql_record = f"UPDATE TELEGRAMMBOT SET " \
                      f"MESSAGES = '{record_message}' " \
                      f"WHERE ID_USER = {self.quote(user_id)} "
-        curs.execute(sql_record)
-        self.conn.commit()
-
-    def get_info_user(self, id_user: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_get_info_user(id_user)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_get_info_user(self, id_user: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_auth = f"SELECT HISTORY, MESSAGES, ORDER_USER FROM TELEGRAMMBOT " \
-                   f"WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_auth)
-        row_table = curs.fetchone()
-        return row_table
-
-    def get_arr_history(self, user_id: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_get_arr_history(user_id)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_get_arr_history(self, user_id: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_arr_order = f"SELECT HISTORY FROM TELEGRAMMBOT " \
-                        f"WHERE ID_USER = {self.quote(user_id)} "
-        curs.execute(sql_arr_order)
-        row_table = curs.fetchone()[0]
-        if row_table is None:
-            arr_history = []
-        else:
-            arr_history = row_table.split()
-        return arr_history
-
-    def add_element_history(self, id_user: int, history: str):
-        current = self.get_info_user(id_user)
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_add_history(id_user, self.add_element(current[0], history))
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_add_history(self, id_user: int, history: str):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                     f"HISTORY = '{history}' " \
-                     f"WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_record)
-        self.conn.commit()
-
-    def delete_element_history(self, id_user: int, amount_element: int):
-        current = self.get_info_user(id_user)
-        current_history = self.delete_element(current[0], amount_element)
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                self.execute_delete_element_history(id_user, ' '.join(current_history))
-                return current_history[-1]
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_delete_element_history(self, id_user: int, history: str):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                     f"HISTORY = '{history}' " \
-                     f"WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_record)
-        self.conn.commit()
-
-    def add_element_message(self, id_user: int, message_id: int):
-        current = self.get_info_user(id_user)
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_add_message(id_user, self.add_element(current[1], str(message_id)))
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_add_message(self, id_user: int, arr_messages: str):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                     f"MESSAGES = '{arr_messages}' " \
-                     f"WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_record)
-        self.conn.commit()
-
-    def add_arr_messages(self, id_user: int, arr_message_id: list):
-        current = self.get_info_user(id_user)
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_add_arr_messages(id_user, self.add_arr_element(current[1], arr_message_id))
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_add_arr_messages(self, id_user: int, arr_messages: str):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                     f"MESSAGES = '{arr_messages}' " \
-                     f"WHERE ID_USER = {self.quote(id_user)} "
         curs.execute(sql_record)
         self.conn.commit()
 
@@ -1746,12 +1565,6 @@ class DispatcherMessage(Dispatcher):
         return '_____'.join(list_basket)
 
     @staticmethod
-    def add_element(arr: str, element: str):
-        arr_history = arr.split()
-        arr_history.append(element)
-        return ' '.join(arr_history)
-
-    @staticmethod
     def get_arr_message_user(messages_user: str):
         arr_arr_message_user = messages_user.split('/////')
         return arr_arr_message_user
@@ -1767,24 +1580,10 @@ class DispatcherMessage(Dispatcher):
         return string_record
 
     @staticmethod
-    def add_arr_element(arr: str, arr_element: list):
-        arr_history = arr.split()
-        for item in arr_element:
-            arr_history.append(item)
-        return ' '.join(arr_history)
-
-    @staticmethod
     def add_order(arr_order: str, new_order: str):
         list_order = arr_order.split()
         list_order.append(new_order)
         return ' '.join(list_order)
-
-    @staticmethod
-    def delete_element(arr: str, amount: int):
-        arr_history = arr.split()
-        for item in range(amount):
-            arr_history.pop()
-        return arr_history
 
     @staticmethod
     def assembling_nomenclatures(arr: list):

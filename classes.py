@@ -86,8 +86,6 @@ class DispatcherMessage(Dispatcher):
         self.button_calculater = self.data.get_button_calculater
         self.button_basket_minus = self.data.get_basket_minus
         self.button_basket_plus = self.data.get_basket_plus
-        self.levels_in_keyboard = self.data.get_levels_category
-        self.level_numbers = self.data.get_level_numbers
         self.choice_delivery = self.data.delivery
         self.kind_pickup = self.data.kind_pickup
         self.kind_delivery = self.data.kind_delivery
@@ -97,7 +95,7 @@ class DispatcherMessage(Dispatcher):
             answer = await self.answer_message(message, "Выберете, что Вас интересует",
                                                self.build_keyboard(self.first_keyboard, 2))
             if await self.execute.start_message(message):
-                self.restart_record(message)
+                await self.execute.restart_catalog(message, '/start')
                 self.add_element_message(message.from_user.id, message.message_id)
             else:
                 await self.execute.start_record_new_user(message)
@@ -108,18 +106,13 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("catalog"))
         async def cmd_catalog(message: Message):
-            if self.arr_auth_user[message.from_user.id] == 'creator':
-                menu_button = {'back': '◀ 👈 Назад'}
-                answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                                   self.build_keyboard(self.data.get_price_creator, 2, menu_button))
-            else:
-                menu_button = {'back': '◀ 👈 Назад'}
-                answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                                   self.build_keyboard(self.data.get_prices, 1, menu_button))
+            menu_button = {'back': '◀ 👈 Назад'}
+            answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                               self.build_keyboard(self.data.get_prices, 1, menu_button))
             self.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             self.add_element_message(message.from_user.id, answer.message_id)
-            self.restart_catalog(message)
+            await self.execute.restart_catalog(message, '/start catalog')
             await self.timer.start(message.from_user.id)
 
         @self.message(F.from_user.id.in_(self.arr_auth_user) & F.content_type.in_({
@@ -339,33 +332,6 @@ class DispatcherMessage(Dispatcher):
                     await self.delivery(callback)
                 await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.levels_in_keyboard)))
-        async def send_change_level(callback: CallbackQuery):
-            current_history = await self.execute.get_element_history(callback.from_user.id, -1)
-            if current_history == 'catalog':
-                await self.show_level_price(callback)
-                self.add_element_history(callback.from_user.id, 'level')
-            elif current_history in self.category:
-                await self.show_level_category(callback, current_history)
-                self.add_element_history(callback.from_user.id, 'level')
-            await self.timer.start(callback.from_user.id)
-
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.level_numbers)))
-        async def send_new_level(callback: CallbackQuery):
-            current_history = self.delete_element_history(callback.from_user.id, 1)
-            if current_history == 'catalog':
-                kod_nomenclature = callback.message.caption.split('Код:')[1]
-                kod_install = self.level_numbers[callback.data]
-                self.data.set_price_level(kod_nomenclature, int(kod_install))
-                await self.catalog(callback)
-            elif current_history in self.category:
-                kod_parent = current_history
-                kod_category = callback.message.caption.split('Код:')[1]
-                level_install = self.level_numbers[callback.data]
-                self.set_category_level(kod_parent, kod_category, int(level_install))
-                await self.return_category(callback, current_history)
-            await self.timer.start(callback.from_user.id)
-
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
@@ -508,14 +474,9 @@ class DispatcherMessage(Dispatcher):
         self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def catalog(self, call_back: CallbackQuery):
-        if self.arr_auth_user[call_back.from_user.id] == 'creator':
-            menu_button = {'back': '◀ 👈 Назад'}
-            answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                               self.build_keyboard(self.data.get_price_creator, 2, menu_button))
-        else:
-            menu_button = {'back': '◀ 👈 Назад'}
-            answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                               self.build_keyboard(self.data.get_prices, 1, menu_button))
+        menu_button = {'back': '◀ 👈 Назад'}
+        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                           self.build_keyboard(self.data.get_prices, 1, menu_button))
         await self.delete_messages(call_back.from_user.id)
         self.add_element_message(call_back.from_user.id, answer.message_id)
 
@@ -546,45 +507,26 @@ class DispatcherMessage(Dispatcher):
 
     async def create_price_edit_caption(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
-        if self.arr_auth_user[call_back.from_user.id] == 'creator':
-            answer = await self.edit_caption(call_back.message,
-                                             self.format_text("Каталог товаров ROSSVIK 📖"),
-                                             self.build_keyboard(self.data.get_price_creator, 2, menu_button))
-        else:
-            answer = await self.edit_caption(call_back.message,
-                                             self.format_text("Каталог товаров ROSSVIK 📖"),
-                                             self.build_keyboard(self.data.get_prices, 1, menu_button))
+        answer = await self.edit_caption(call_back.message,
+                                         self.format_text("Каталог товаров ROSSVIK 📖"),
+                                         self.build_keyboard(self.data.get_prices, 1, menu_button))
         return answer
 
     async def create_keyboard_edit_caption(self, call_back: CallbackQuery, list_category: list, id_category: str):
         menu_button = {'back': '◀ 👈 Назад'}
-        if self.arr_auth_user[call_back.from_user.id] == 'creator':
-            await self.edit_caption(call_back.message,
-                                    self.text_category(id_category),
-                                    self.build_keyboard(self.data.get_category_creator(list_category),
-                                                        2, menu_button))
-        else:
-            await self.edit_caption(call_back.message,
-                                    self.text_category(id_category),
-                                    self.build_keyboard(self.assembling_category_dict(list_category),
-                                                        1, menu_button))
+        await self.edit_caption(call_back.message,
+                                self.text_category(id_category),
+                                self.build_keyboard(self.assembling_category_dict(list_category),
+                                                    1, menu_button))
 
     async def create_keyboard_push_photo(self, call_back: CallbackQuery, list_category: list, id_category: str):
         menu_button = {'back': '◀ 👈 Назад'}
-        if self.arr_auth_user[call_back.from_user.id] == 'creator':
-            answer = await self.bot.push_photo(call_back.message.chat.id,
-                                               self.format_text(self.text_category(id_category)),
-                                               self.build_keyboard(self.data.get_category_creator(list_category),
-                                                                   2, menu_button))
-            await self.delete_messages(call_back.from_user.id)
-            self.add_element_message(call_back.from_user.id, answer.message_id)
-        else:
-            answer = await self.bot.push_photo(call_back.message.chat.id,
-                                               self.format_text(self.text_category(id_category)),
-                                               self.build_keyboard(self.assembling_category_dict(list_category),
-                                                                   1, menu_button))
-            await self.delete_messages(call_back.from_user.id)
-            self.add_element_message(call_back.from_user.id, answer.message_id)
+        answer = await self.bot.push_photo(call_back.message.chat.id,
+                                           self.format_text(self.text_category(id_category)),
+                                           self.build_keyboard(self.assembling_category_dict(list_category),
+                                                               1, menu_button))
+        await self.delete_messages(call_back.from_user.id)
+        self.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def next_page(self, call_back: CallbackQuery):
         if self.pages[call_back.data] == call_back.message.caption.split('№')[1]:
@@ -936,7 +878,7 @@ class DispatcherMessage(Dispatcher):
         order = await self.save_order(call_back, self.current_basket_dict(call_back.from_user.id))
         number_order = order[0]
         order_dict = order[1]
-        list_user_admin = self.get_user_admin
+        list_user_admin = await self.execute.get_user_admin
         menu_button = {'take_order': '💬 Взять заказ в обработку'}
         delivery_address_from_user = self.get_delivery_address_from_user(call_back.from_user.id)
         if delivery_address_from_user is None:
@@ -1104,65 +1046,6 @@ class DispatcherMessage(Dispatcher):
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         self.add_arr_messages(call_back.from_user.id, arr_answers)
-
-    async def show_level_price(self, call_back: CallbackQuery):
-        whitespace = '\n'
-        menu_button = {'back': '◀ 👈 Назад'}
-        amount_price = len(self.data.price)
-        level_keyboard = self.data.level_numbers(amount_price)
-        kod = f"Код:{call_back.data.split('level')[1]}"
-        name_category = f"{self.text_category(call_back.data.split('level')[1])}{whitespace}" \
-                        f"{self.data.get_price_creator[call_back.data]}{whitespace}" \
-                        f"{kod}"
-        await self.edit_caption(call_back.message, name_category, self.build_keyboard(level_keyboard, 5,
-                                                                                      menu_button))
-
-    async def show_level_category(self, call_back: CallbackQuery, id_category: str):
-        whitespace = '\n'
-        menu_button = {'back': '◀ 👈 Назад'}
-        list_category = self.current_category(id_category)
-        amount_price = len(list_category)
-        level_keyboard = self.data.level_numbers(amount_price)
-        kod = f"Код:{call_back.data.split('level')[1]}"
-        name_category = f"{self.text_category(call_back.data.split('level')[1])}{whitespace}" \
-                        f"{self.data.get_category_creator(list_category)[call_back.data]}{whitespace}" \
-                        f"{kod}"
-        await self.edit_caption(call_back.message, name_category, self.build_keyboard(level_keyboard, 5,
-                                                                                      menu_button))
-
-    def set_category_level(self, kod_parent: str, kod_category: str, level: int):
-        end_number = 1
-        list_category = sorted(self.current_category(kod_parent), key=itemgetter(2), reverse=False)
-        for item in list_category:
-            if item[0] == kod_category:
-                self.set_level(kod_category, level)
-            else:
-                if end_number == level:
-                    end_number += 1
-                    self.set_level(item[0], end_number)
-                    end_number += 1
-                else:
-                    self.set_level(item[0], end_number)
-                    end_number += 1
-
-    def set_level(self, kod_nomenclature: str, current_level: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_set_level(kod_nomenclature, current_level)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_set_level(self, kod_nomenclature: str, current_level: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"UPDATE CATEGORY SET " \
-                     f"SORT_CATEGORY = '{current_level}' " \
-                     f"WHERE KOD = '{kod_nomenclature}' "
-        curs.execute(sql_record)
-        self.conn.commit()
 
     async def send_search_result(self, message: Message):
         id_user = message.from_user.id
@@ -1427,68 +1310,6 @@ class DispatcherMessage(Dispatcher):
         curs.execute(sql_category)
         row_table = curs.fetchone()
         return row_table[0]
-
-    def restart_record(self, message: Message):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_restart_record(message)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_restart_record(self, message: Message):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                     f"HISTORY = '/start' " \
-                     f"WHERE ID_USER = {self.quote(message.from_user.id)} "
-        curs.execute(sql_record)
-        print(f'Клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
-              f'возобновил работу с сообщением: {str(message.message_id)}')
-        self.conn.commit()
-
-    def restart_catalog(self, message: Message):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_restart_catalog(message)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_restart_catalog(self, message: Message):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                     f"HISTORY = '/start catalog' " \
-                     f"WHERE ID_USER = {self.quote(message.from_user.id)} "
-        curs.execute(sql_record)
-        print(f'Клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
-              f'возобновил работу с сообщением: {str(message.message_id)}')
-        self.conn.commit()
-
-    @property
-    def get_user_admin(self):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_get_user_admin()
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_get_user_admin(self):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_user_admin = f"SELECT ID_USER FROM TELEGRAMMBOT " \
-                         f"WHERE STATUS = 'creator' "
-        curs.execute(sql_user_admin)
-        user_admin = curs.fetchall()
-        return user_admin
 
     async def delete_messages(self, user_id: int, except_id_message: int = None, individual: bool = False):
         if individual:

@@ -96,68 +96,6 @@ class DATA:
             dict_button_calculater[str(item)] = str(item)
         return dict_button_calculater
 
-    @property
-    def get_price_creator(self):
-        dict_price_creator = {}
-        number = 1
-        for item in sorted(self.price, key=itemgetter(2), reverse=False):
-            dict_price_creator[item[0]] = item[1]
-            dict_price_creator[f"level{item[0]}"] = f"Уровень{str(number)}"
-            number += 1
-        return dict_price_creator
-
-    @staticmethod
-    def get_category_creator(list_category: list):
-        dict_category_creator = {}
-        number = 1
-        for item in sorted(list_category, key=itemgetter(2), reverse=False):
-            dict_category_creator[item[0]] = item[1]
-            dict_category_creator[f"level{item[0]}"] = f"Уровень{str(number)}"
-            number += 1
-        return dict_category_creator
-
-    @property
-    def get_levels_category(self):
-        dict_levels = {}
-        for item in range(400, 2000):
-            dict_levels[f"level{str(item)}"] = str(item)
-        return dict_levels
-
-    @staticmethod
-    def level_numbers(amount_nomenclatures: int):
-        dict_numbers = {}
-        for item in range(1, amount_nomenclatures + 1):
-            dict_numbers[f"number_level{str(item)}"] = str(item)
-        return dict_numbers
-
-    @property
-    def get_level_numbers(self):
-        dict_level_numbers = {}
-        for item in range(1, 200):
-            dict_level_numbers[f"number_level{str(item)}"] = str(item)
-        return dict_level_numbers
-
-    def get_price_by_level(self, level: int):
-        list_nomenclature = []
-        for item in self.price:
-            if item[2] == level:
-                list_nomenclature.append(item[0])
-        return list_nomenclature
-
-    def set_price_level(self, kod_price: str, level: int):
-        end_number = 1
-        for item in sorted(self.price, key=itemgetter(2), reverse=False):
-            if item[0] == kod_price:
-                item[2] = level
-            else:
-                if end_number == level:
-                    end_number += 1
-                    item[2] = end_number
-                    end_number += 1
-                else:
-                    item[2] = end_number
-                    end_number += 1
-
     def current_basket(self, id_user: int):
         try:
             with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:

@@ -1,5 +1,4 @@
-import sqlite3
-import os
+from execute import Execute
 from operator import itemgetter
 
 
@@ -49,6 +48,7 @@ class DATA:
                               'record_answer_dl': 'ТК Деловые Линии',
                               'record_answer_mt': 'ТК Мейджик Транс',
                               'record_answer_cdek': 'ТК СДЭК'}
+        self.execute = Execute()
 
     @property
     def get_first_keyboard(self):
@@ -96,29 +96,8 @@ class DATA:
             dict_button_calculater[str(item)] = str(item)
         return dict_button_calculater
 
-    def current_basket(self, id_user: int):
-        try:
-            with sqlite3.connect(os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))) as self.conn:
-                return self.execute_current_basket(id_user)
-        except sqlite3.Error as error:
-            print("Ошибка чтения данных из таблицы", error)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-    def execute_current_basket(self, id_user: int):
-        curs = self.conn.cursor()
-        curs.execute('PRAGMA journal_mode=wal')
-        sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
-        curs.execute(sql_basket)
-        basket = curs.fetchone()[0]
-        if basket is None:
-            return None
-        else:
-            return basket.split()
-
-    def get_calculater_keyboard(self, id_user: int):
-        arr_basket = self.current_basket(id_user)
+    async def get_calculater_keyboard(self, id_user: int):
+        arr_basket = await self.execute.current_basket(id_user)
         if arr_basket is None:
             self.calculater['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
         else:
@@ -129,8 +108,8 @@ class DATA:
             self.calculater['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {self.format_price(float(sum_item))})"
         return self.calculater
 
-    def get_description_button(self, id_user: int):
-        arr_basket = self.current_basket(id_user)
+    async def get_description_button(self, id_user: int):
+        arr_basket = await self.execute.current_basket(id_user)
         if arr_basket is None:
             self.description_button['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
         else:

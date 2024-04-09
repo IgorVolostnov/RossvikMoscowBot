@@ -3,6 +3,7 @@ import aiosqlite
 import os
 from exception import send_message
 from aiogram.types import Message
+from operator import itemgetter
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
@@ -225,13 +226,28 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_add_arr_messages(id_user, self.add_arr_element(current[1], arr_message_id))
         except Exception as e:
-            await send_message('Ошибка запроса в методе add_element_message', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе add_arr_messages', os.getenv('EMAIL'), str(e))
 
     async def execute_add_arr_messages(self, id_user: int, arr_messages: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
                          f"MESSAGES = '{arr_messages}' " \
                          f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def record_message(self, user_id: int, record_message: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_record_message(user_id, record_message)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_message', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_message(self, user_id: int, record_message: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"MESSAGES = '{record_message}' " \
+                         f"WHERE ID_USER = {self.quote(user_id)} "
             await cursor.execute(sql_record)
             await self.conn.commit()
 
@@ -265,6 +281,234 @@ class Execute:
             row_table = await cursor.fetchone()
             return row_table[0]
 
+    async def current_nomenclature(self, id_parent: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_current_nomenclature(id_parent)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе current_nomenclature', os.getenv('EMAIL'), str(e))
+
+    async def execute_current_nomenclature(self, id_parent: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+                               f"WHERE CATEGORY_ID = '{id_parent}' "
+            await cursor.execute(sql_nomenclature)
+            row_table = await cursor.fetchall()
+            return self.assembling_nomenclatures(row_table)
+
+    async def current_description(self, kod_nomenclature: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_current_description(kod_nomenclature)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе current_description', os.getenv('EMAIL'), str(e))
+
+    async def execute_current_description(self, kod_nomenclature: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_nomenclature = f"SELECT ARTICLE, BRAND, NAME, DISCOUNT, DESCRIPTION, SPECIFICATION, PHOTO, " \
+                               f"AVAILABILITY, PRICE, DEALER, DISTRIBUTOR " \
+                               f"FROM NOMENCLATURE " \
+                               f"WHERE KOD = '{kod_nomenclature}' "
+            await cursor.execute(sql_nomenclature)
+            row_table = await cursor.fetchone()
+            return row_table
+
+    async def search_in_base_article(self, search_text: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_search_in_base_article(search_text)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе search_in_base_article', os.getenv('EMAIL'), str(e))
+
+    async def execute_search_in_base_article(self, search_text: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+                               f"WHERE ARTICLE_CHANGE LIKE '%{search_text}%' "
+            await cursor.execute(sql_nomenclature)
+            row_table = await cursor.fetchall()
+            return set(row_table)
+
+    async def search_in_base_name(self, search_text: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_search_in_base_name(search_text)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе search_in_base_name', os.getenv('EMAIL'), str(e))
+
+    async def execute_search_in_base_name(self, search_text: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+                               f"WHERE NAME LIKE '%{search_text}%' "
+            await cursor.execute(sql_nomenclature)
+            row_table = await cursor.fetchall()
+            return set(row_table)
+
+    async def current_basket(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_current_basket(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе current_basket', os.getenv('EMAIL'), str(e))
+
+    async def execute_current_basket(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_basket)
+            basket = await cursor.fetchone()
+            if basket[0] is None:
+                return None
+            else:
+                return basket[0].split()
+
+    async def current_basket_dict(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_current_basket_dict(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе current_basket_dict', os.getenv('EMAIL'), str(e))
+
+    async def execute_current_basket_dict(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_basket)
+            basket = await cursor.fetchone()
+            return self.get_basket_dict(basket[0])
+
+    async def add_basket_product(self, id_user: int, record_item: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_add_basket_product(id_user, record_item)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе add_basket_product', os.getenv('EMAIL'), str(e))
+
+    async def execute_add_basket_product(self, id_user: int, record_item: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"BASKET = '{record_item}' " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def clean_basket(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_clean_basket(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе clean_basket', os.getenv('EMAIL'), str(e))
+
+    async def execute_clean_basket(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"BASKET = NULL " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def get_arr_order(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_arr_order(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_arr_order', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_arr_order(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_arr_order = f"SELECT ORDER_USER FROM TELEGRAMMBOT " \
+                            f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_arr_order)
+            row_table = await cursor.fetchone()
+            return self.get_arr_orders(row_table[0])
+
+    async def record_order(self, id_user: int, list_order: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order(id_user, list_order)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_order(self, id_user: int, list_order: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"ORDER_USER = '{list_order}' " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def get_arr_contact(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_arr_contact(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_arr_contact', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_arr_contact(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_arr_contact = f"SELECT CONTACT FROM TELEGRAMMBOT " \
+                              f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_arr_contact)
+            row_table = await cursor.fetchone()
+            return row_table[0]
+
+    async def record_contact(self, id_user: int, delivery: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_contact(id_user, delivery)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_contact', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_contact(self, id_user: int, delivery: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"CONTACT = '{delivery}' " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def get_delivery_address(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_delivery_address(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_delivery_address', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_delivery_address(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_arr_order = f"SELECT DELIVERY_ADDRESS FROM TELEGRAMMBOT " \
+                            f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_arr_order)
+            row_table = await cursor.fetchone()
+            return row_table[0]
+
+    async def record_delivery(self, id_user: int, current_delivery: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_delivery(id_user, current_delivery)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_delivery', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_delivery(self, id_user: int, current_delivery: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"DELIVERY_ADDRESS = '{current_delivery}' " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def clean_delivery(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_clean_delivery(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе clean_delivery', os.getenv('EMAIL'), str(e))
+
+    async def execute_clean_delivery(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"DELIVERY_ADDRESS = NULL " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
     @staticmethod
     def quote(request):
         return f"'{str(request)}'"
@@ -288,3 +532,43 @@ class Execute:
         for item in range(amount):
             arr_element.pop()
         return arr_element
+
+    @staticmethod
+    def assembling_nomenclatures(arr: list):
+        assembling_dict_nomenclatures = {}
+        dict_m = {}
+        i = 1
+        y = 1
+        for item_nomenclature in sorted(arr, key=itemgetter(2), reverse=False):
+            if i < 7:
+                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                i += 1
+
+            else:
+                assembling_dict_nomenclatures['Стр.' + str(y)] = dict_m
+                i = 1
+                dict_m = {}
+                y += 1
+                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                i += 1
+        assembling_dict_nomenclatures['Стр.' + str(y)] = dict_m
+        return assembling_dict_nomenclatures
+
+    @staticmethod
+    def get_basket_dict(basket: str):
+        basket_dict = {}
+        if basket is None:
+            basket_dict = {}
+        else:
+            for item in basket.split():
+                row = item.split('///')
+                basket_dict[row[0]] = [row[1], row[2]]
+        return basket_dict
+
+    @staticmethod
+    def get_arr_orders(orders: str):
+        if orders is None:
+            arr_orders = []
+        else:
+            arr_orders = orders
+        return arr_orders

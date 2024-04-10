@@ -205,11 +205,8 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_done)))
         async def send_done_basket(callback: CallbackQuery):
-            if await self.add_to_basket(callback):
-                await self.execute.delete_element_history(callback.from_user.id, 1)
-                await self.timer.start(callback.from_user.id)
-            else:
-                await self.timer.start(callback.from_user.id)
+            await self.add_to_basket(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'basket'))
         async def send_show_basket(callback: CallbackQuery):
@@ -230,7 +227,9 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             await self.execute.clean_basket(callback.from_user.id)
+            await self.delete_messages(callback.from_user.id, callback.message.message_id)
             await self.execute.delete_element_history(callback.from_user.id, 1)
+            await self.show_basket(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
@@ -601,23 +600,24 @@ class DispatcherMessage(Dispatcher):
             if current_history in self.dict_add:
                 menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                                'basket': basket['basket']}
+                await self.execute.delete_element_history(call_back.from_user.id, 1)
             else:
                 menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                                f'{id_nomenclature}add': 'Добавить ✅🗑️'}
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
-                return True
             except TelegramBadRequest as error:
                 print(error)
         else:
-            return False
+            pass
 
     async def check_amount(self, text_message: str, id_call_back: str, amount_in_base: str):
         whitespace = '\n'
         if amount_in_base == 'Нет на складе':
             amount_in_base = '0'
-        if len(text_message.split(whitespace)) == 2:
-            amount = text_message.split(' шт')[0].split(whitespace)[1]
+        arr_string = text_message.split(whitespace)
+        if len(arr_string) == 2:
+            amount = arr_string[1].split(' шт')[0]
             if int(amount) == 0:
                 await self.bot.alert_message(id_call_back, 'Вы хотите добавить 0 товара в корзину!')
                 amount = None
@@ -648,8 +648,9 @@ class DispatcherMessage(Dispatcher):
     @staticmethod
     def get_amount(text_message: str, button: str):
         whitespace = '\n'
-        if len(text_message.split(whitespace)) == 2:
-            amount = f"{text_message.split(' шт')[0].split(whitespace)[1]}{button}"
+        arr_string = text_message.split(whitespace)
+        if len(arr_string) == 2:
+            amount = f"{arr_string[1].split(' шт')[0]}{button}"
         else:
             amount = button
         if amount[0] == '0':
@@ -659,8 +660,9 @@ class DispatcherMessage(Dispatcher):
     @staticmethod
     def get_amount_minus(text_message: str):
         whitespace = '\n'
-        if len(text_message.split(whitespace)) == 2:
-            amount = text_message.split(' шт')[0].split(whitespace)[1]
+        arr_string = text_message.split(whitespace)
+        if len(arr_string) == 2:
+            amount = arr_string[1].split(' шт')[0]
             if int(amount) == 0:
                 amount = 0
             else:
@@ -672,8 +674,9 @@ class DispatcherMessage(Dispatcher):
     @staticmethod
     def get_amount_plus(text_message: str):
         whitespace = '\n'
-        if len(text_message.split(whitespace)) == 2:
-            amount = text_message.split(' шт')[0].split(whitespace)[1]
+        arr_string = text_message.split(whitespace)
+        if len(arr_string) == 2:
+            amount = arr_string[1].split(' шт')[0]
             if int(amount) == 0:
                 amount = 1
             else:
@@ -685,8 +688,9 @@ class DispatcherMessage(Dispatcher):
     @staticmethod
     def get_amount_delete(text_message: str):
         whitespace = '\n'
-        if len(text_message.split(whitespace)) == 2:
-            amount = text_message.split(' шт')[0].split(whitespace)[1]
+        arr_string = text_message.split(whitespace)
+        if len(arr_string) == 2:
+            amount = arr_string[1].split(' шт')[0]
             if len(amount) > 1:
                 amount = amount[:-1]
             else:

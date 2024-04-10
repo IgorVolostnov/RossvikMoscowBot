@@ -78,12 +78,18 @@ class DispatcherMessage(Dispatcher):
         self.arr_auth_user = asyncio.run(self.execute.auth_user)
         self.first_keyboard = self.data.get_first_keyboard
         self.category = self.data.get_category
+        self.nomenclatures = self.data.get_nomenclature
         self.pages = self.data.get_pages
         self.pages_search = self.data.get_pages_search
-        self.nomenclatures = self.data.get_nomenclature
-        self.button_calculater = self.data.get_button_calculater
-        self.button_basket_minus = self.data.get_basket_minus
-        self.button_basket_plus = self.data.get_basket_plus
+        self.dict_add = self.data.get_dict_value('add', 4000, 30000)
+        self.dict_back_add = self.data.get_dict_value('back_add', 4000, 30000)
+        self.dict_button_calculater = self.data.get_button_calculater
+        self.dict_minus = self.data.get_dict_value('minus', 4000, 30000)
+        self.dict_plus = self.data.get_dict_value('plus', 4000, 30000)
+        self.dict_delete = self.data.get_dict_value('delete', 4000, 30000)
+        self.dict_done = self.data.get_dict_value('done', 4000, 30000)
+        self.button_basket_minus = self.data.get_dict_value('basket_minus', 4000, 30000)
+        self.button_basket_plus = self.data.get_dict_value('basket_plus', 4000, 30000)
         self.choice_delivery = self.data.delivery
         self.kind_pickup = self.data.kind_pickup
         self.kind_delivery = self.data.kind_delivery
@@ -163,37 +169,41 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.nomenclatures)))
         async def send_description(callback: CallbackQuery):
-            await self.description(callback)
+            await self.description(callback, callback.data)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add'))
-        async def send_basket(callback: CallbackQuery):
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_add)))
+        async def send_add(callback: CallbackQuery):
             await self.add_nomenclature(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_calculater)))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_back_add)))
+        async def send_back_add(callback: CallbackQuery):
+            await self.back_add_nomenclature(callback)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_button_calculater)))
         async def send_change_amount(callback: CallbackQuery):
             await self.change_amount(callback)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'minus'))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_minus)))
         async def send_change_minus(callback: CallbackQuery):
             await self.minus_amount(callback)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'plus'))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_plus)))
         async def send_change_plus(callback: CallbackQuery):
             await self.plus_amount(callback)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'delete'))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_delete)))
         async def send_change_delete(callback: CallbackQuery):
             await self.delete_amount(callback)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'done'))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_done)))
         async def send_done_basket(callback: CallbackQuery):
             if await self.add_to_basket(callback):
                 await self.execute.delete_element_history(callback.from_user.id, 1)
@@ -220,14 +230,8 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             await self.execute.clean_basket(callback.from_user.id)
-            current = await self.execute.delete_element_history(callback.from_user.id, 1)
-            if current in self.nomenclatures:
-                await self.description(callback, current)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'add':
-                previous_history = await self.execute.get_element_history(callback.from_user.id, -2)
-                await self.add_nomenclature_from_basket(callback, previous_history)
-                await self.timer.start(callback.from_user.id)
+            await self.execute.delete_element_history(callback.from_user.id, 1)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
         async def post_order(callback: CallbackQuery):
@@ -290,10 +294,6 @@ class DispatcherMessage(Dispatcher):
                 result_search = await self.search(self.get_text_for_search(previous_history.split('___')[1]))
                 await self.return_page_search(callback, result_search, current)
                 await self.execute.add_element_history(callback.from_user.id, current)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'add':
-                previous_history = await self.execute.get_element_history(callback.from_user.id, -2)
-                await self.add_nomenclature_from_basket(callback, previous_history)
                 await self.timer.start(callback.from_user.id)
             elif current == 'basket':
                 await self.show_basket(callback)
@@ -358,20 +358,17 @@ class DispatcherMessage(Dispatcher):
                                           self.build_keyboard(pages, 5))
         arr_answers = []
         for key, value in current_nomenclature['Стр.1'].items():
-            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
-    async def description(self, call_back: CallbackQuery, id_nomenclature: str = None):
-        if id_nomenclature:
-            current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
-                                                                      call_back.id)
-        else:
-            current_description = await self.description_nomenclature(call_back.data, call_back.from_user.id,
-                                                                      call_back.id)
+    async def description(self, call_back: CallbackQuery, id_nomenclature: str):
+        current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
+                                                                  call_back.id)
         arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1])
-        menu_button = await self.data.get_description_button(call_back.from_user.id)
+        basket = await self.data.get_basket(call_back.from_user.id)
+        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
         answer_description = await self.answer_message(arr_answer[0], current_description[2],
                                                        self.build_keyboard(menu_button, 2))
         arr_answer.append(answer_description)
@@ -429,7 +426,7 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
             for key, value in current_nomenclature[call_back.data].items():
-                menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+                menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
                 answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
@@ -449,184 +446,149 @@ class DispatcherMessage(Dispatcher):
         await asyncio.sleep(0.5)
         arr_answers = [str(heading.message_id)]
         for key, value in current_nomenclature[current_page].items():
-            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
-    async def show_basket(self, call_back: CallbackQuery):
-        whitespace = '\n'
-        current_basket_dict = await self.execute.current_basket_dict(call_back.from_user.id)
-        if len(current_basket_dict) == 0:
-            text = 'Ваша корзина пуста 😭😔💔'
-            menu_button = {'back': '◀ 👈 Назад'}
-            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
-        else:
-            sum_basket = self.sum_basket(current_basket_dict)
-            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
-            menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
-                           'choice_delivery': 'Оформить заказ 📧📦📲'}
-            heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
-            await self.delete_messages(call_back.from_user.id, heading.message_id)
-            arr_answers = []
-            for key, item in current_basket_dict.items():
-                name = await self.execute.current_description(key)
-                text = f"{name[2]}:{whitespace}{item[0]} шт. на сумму {self.format_price(float(item[1]))}"
-                menu_button = {f'basket_minus{key}': '➖', f'basket_plus{key}': '➕'}
-                answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
-                arr_answers.append(str(answer.message_id))
-            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-
     async def add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
-        text = f"Введите количество, которое нужно добавить в корзину:{whitespace}"
-        menu_button = await self.data.get_calculater_keyboard(call_back.from_user.id)
-        await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+        id_nomenclature = self.dict_add[call_back.data]
+        arr_description = await self.execute.current_description(id_nomenclature)
+        current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
+        if current_history in self.nomenclatures:
+            info_nomenclature = f'Введите количество, которое нужно добавить в корзину:{whitespace}'
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        else:
+            availability = self.get_availability(arr_description[7])
+            if self.arr_auth_user[call_back.from_user.id] == 'diler':
+                dealer = self.get_dealer(arr_description[8], arr_description[9])
+                info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
+                                    f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}' \
+                                    f'{whitespace}' \
+                                    f'Дилерская цена: {self.format_text(self.format_price(float(dealer)))}' \
+                                    f'{whitespace}' \
+                                    f'Наличие: {self.format_text(availability)}{whitespace}' \
+                                    f'Введите количество, которое нужно добавить в корзину:{whitespace}'
+            else:
+                info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
+                                    f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}' \
+                                    f'{whitespace}' \
+                                    f'Наличие: {self.format_text(availability)}{whitespace}' \
+                                    f'Введите количество, которое нужно добавить в корзину:{whitespace}'
+        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
+        await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
 
-    async def add_nomenclature_from_basket(self, call_back: CallbackQuery, id_nomenclature: str):
+    async def back_add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
-        current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id, call_back.id)
-        description_text = f"Введите количество, которое нужно добавить в корзину:{whitespace}"
-        arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1])
-        menu_button = await self.data.get_calculater_keyboard(call_back.from_user.id)
-        answer_description = await self.answer_message(arr_answer[0], description_text,
-                                                       self.build_keyboard(menu_button, 3))
-        arr_answer.append(answer_description)
-        arr_message = []
-        for item_message in arr_answer:
-            arr_message.append(str(item_message.message_id))
-        await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
+        id_nomenclature = self.dict_back_add[call_back.data]
+        arr_description = await self.execute.current_description(id_nomenclature)
+        current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
+        if current_history in self.dict_add:
+            info_nomenclature = f'{arr_description[4]}{whitespace}' \
+                                f'{arr_description[5]}'
+            if re.sub('\W+', '', info_nomenclature) == "":
+                info_nomenclature = "Нет подробной информации"
+            basket = await self.data.get_basket(call_back.from_user.id)
+            menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
+            await self.execute.delete_element_history(call_back.from_user.id, 1)
+        else:
+            info_nomenclature = f'{self.format_text(arr_description[2])}'
+            menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
+                           f'{id_nomenclature}add': 'Добавить ✅🗑️'}
+        await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 2))
 
     async def change_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
+        button = self.dict_button_calculater[call_back.data]
+        id_nomenclature = call_back.data.split('///')[0]
+        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        if len(call_back.message.text.split(whitespace)) == 2:
-            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1] + call_back.data
-            if amount[0] == '0':
-                amount = call_back.data
-        else:
-            amount = call_back.data
+        amount = self.get_amount(call_back.message.text, button)
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
-                price = arr_description[8]
-            else:
-                price = arr_description[9]
+            price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         sum_nomenclature = float(amount) * float(price)
         text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-        menu_button = await self.data.get_calculater_keyboard(call_back.from_user.id)
         try:
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         except TelegramBadRequest as error:
             print(error)
-            pass
 
     async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
+        id_nomenclature = self.dict_minus[call_back.data]
+        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        if len(call_back.message.text.split(whitespace)) == 2:
-            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
-            if int(amount) == 0:
-                amount = 0
-            else:
-                amount = int(amount) - 1
-        else:
-            amount = None
+        amount = self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
-                price = arr_description[8]
-            else:
-                price = arr_description[9]
+            price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            menu_button = await self.data.get_calculater_keyboard(call_back.from_user.id)
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
             except TelegramBadRequest as error:
                 print(error)
-                pass
         else:
             pass
 
     async def plus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
+        id_nomenclature = self.dict_plus[call_back.data]
+        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        if len(call_back.message.text.split(whitespace)) == 2:
-            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
-            if int(amount) == 0:
-                amount = 1
-            else:
-                amount = int(amount) + 1
-        else:
-            amount = None
+        amount = self.get_amount_plus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
-            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
-                price = arr_description[8]
-            else:
-                price = arr_description[9]
+            price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            menu_button = await self.data.get_calculater_keyboard(call_back.from_user.id)
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
             except TelegramBadRequest as error:
                 print(error)
-                pass
         else:
             pass
 
     async def delete_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
+        id_nomenclature = self.dict_delete[call_back.data]
+        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        if len(call_back.message.text.split(whitespace)) == 2:
-            amount = call_back.message.text.split(' шт')[0].split(whitespace)[1]
-            if len(amount) > 1:
-                amount = amount[:-1]
-            else:
-                amount = 0
-        else:
-            amount = None
-        if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
-            if arr_description[9] is None or arr_description[9] == '':
-                price = arr_description[8]
-            else:
-                price = arr_description[9]
+        amount = self.get_amount_delete(call_back.message.text)
+        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            menu_button = await self.data.get_calculater_keyboard(call_back.from_user.id)
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
             except TelegramBadRequest as error:
                 print(error)
-                pass
         else:
             pass
 
     async def add_to_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
-        id_nomenclature = await self.execute.get_element_history(call_back.from_user.id, -2)
+        id_nomenclature = self.dict_done[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
-        price = self.check_price(call_back.from_user.id, arr_description[9], arr_description[8])
+        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            price = self.get_dealer(arr_description[8], arr_description[9])
+        else:
+            price = arr_description[8]
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             basket = await self.execute.current_basket_dict(call_back.from_user.id)
@@ -634,13 +596,19 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_basket_product(call_back.from_user.id, self.assembling_basket_dict(basket))
             text = f"Вы добавили {arr_description[2]} в количестве:{whitespace}" \
                    f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
-            menu_button = await self.data.get_description_button(call_back.from_user.id)
+            basket = await self.data.get_basket(call_back.from_user.id)
+            current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
+            if current_history in self.dict_add:
+                menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
+                               'basket': basket['basket']}
+            else:
+                menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
+                               f'{id_nomenclature}add': 'Добавить ✅🗑️'}
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
                 return True
             except TelegramBadRequest as error:
                 print(error)
-                pass
         else:
             return False
 
@@ -661,15 +629,94 @@ class DispatcherMessage(Dispatcher):
             amount = None
         return amount
 
-    def check_price(self, id_user: int, dealer_price: str, retail_price: str):
-        if self.arr_auth_user[id_user] == 'diler':
-            if dealer_price is None or dealer_price == '' or dealer_price == '0':
-                price = retail_price
-            else:
-                price = dealer_price
+    @staticmethod
+    def get_availability(amount: str):
+        if amount == "0":
+            availability = "Нет на складе"
         else:
-            price = retail_price
-        return price
+            availability = amount
+        return availability
+
+    @staticmethod
+    def get_dealer(price: str, dealer: str):
+        if any([dealer is None, dealer == '', dealer == '0']):
+            value = price
+        else:
+            value = dealer
+        return value
+
+    @staticmethod
+    def get_amount(text_message: str, button: str):
+        whitespace = '\n'
+        if len(text_message.split(whitespace)) == 2:
+            amount = f"{text_message.split(' шт')[0].split(whitespace)[1]}{button}"
+        else:
+            amount = button
+        if amount[0] == '0':
+            amount = button
+        return amount
+
+    @staticmethod
+    def get_amount_minus(text_message: str):
+        whitespace = '\n'
+        if len(text_message.split(whitespace)) == 2:
+            amount = text_message.split(' шт')[0].split(whitespace)[1]
+            if int(amount) == 0:
+                amount = 0
+            else:
+                amount = int(amount) - 1
+        else:
+            amount = None
+        return amount
+
+    @staticmethod
+    def get_amount_plus(text_message: str):
+        whitespace = '\n'
+        if len(text_message.split(whitespace)) == 2:
+            amount = text_message.split(' шт')[0].split(whitespace)[1]
+            if int(amount) == 0:
+                amount = 1
+            else:
+                amount = int(amount) + 1
+        else:
+            amount = None
+        return amount
+
+    @staticmethod
+    def get_amount_delete(text_message: str):
+        whitespace = '\n'
+        if len(text_message.split(whitespace)) == 2:
+            amount = text_message.split(' шт')[0].split(whitespace)[1]
+            if len(amount) > 1:
+                amount = amount[:-1]
+            else:
+                amount = 0
+        else:
+            amount = None
+        return amount
+
+    async def show_basket(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        current_basket_dict = await self.execute.current_basket_dict(call_back.from_user.id)
+        if len(current_basket_dict) == 0:
+            text = 'Ваша корзина пуста 😭😔💔'
+            menu_button = {'back': '◀ 👈 Назад'}
+            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
+        else:
+            sum_basket = self.sum_basket(current_basket_dict)
+            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
+            menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
+                           'choice_delivery': 'Оформить заказ 📧📦📲'}
+            heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+            await self.delete_messages(call_back.from_user.id, heading.message_id)
+            arr_answers = []
+            for key, item in current_basket_dict.items():
+                name = await self.execute.current_description(key)
+                text = f"{name[2]}:{whitespace}{item[0]} шт. на сумму {self.format_price(float(item[1]))}"
+                menu_button = {f'{key}basket_minus': '➖', f'{key}basket_plus': '➕'}
+                answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
+                arr_answers.append(str(answer.message_id))
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def minus_amount_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -685,8 +732,8 @@ class DispatcherMessage(Dispatcher):
             name = await self.execute.current_description(self.button_basket_minus[call_back.data])
             text = f"{name[2]}:{whitespace}{int(current_amount)} шт. на сумму " \
                    f"{self.format_price(price * current_amount)}"
-            menu_button = {f'basket_minus{self.button_basket_minus[call_back.data]}': '➖',
-                           f'basket_plus{self.button_basket_minus[call_back.data]}': '➕'}
+            menu_button = {f'{self.button_basket_minus[call_back.data]}basket_minus': '➖',
+                           f'{self.button_basket_minus[call_back.data]}basket_plus': '➕'}
             sum_basket = self.sum_basket(current_basket_dict)
             head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
@@ -736,8 +783,8 @@ class DispatcherMessage(Dispatcher):
             name = await self.execute.current_description(self.button_basket_plus[call_back.data])
             text = f"{name[2]}:{whitespace}{int(current_amount)} шт. на сумму " \
                    f"{self.format_price(price * current_amount)}"
-            menu_button = {f'basket_minus{self.button_basket_plus[call_back.data]}': '➖',
-                           f'basket_plus{self.button_basket_plus[call_back.data]}': '➕'}
+            menu_button = {f'{self.button_basket_plus[call_back.data]}basket_minus': '➖',
+                           f'{self.button_basket_plus[call_back.data]}basket_plus': '➕'}
             sum_basket = self.sum_basket(current_basket_dict)
             head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
@@ -1024,7 +1071,7 @@ class DispatcherMessage(Dispatcher):
             answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
         else:
-            menu_contact = {'choice_contact': 'Выбрать эти реквизиты ☑', 'delete_record': 'Удалить запись 🗑️'}
+            menu_contact = {'choice_contact': 'Выбрать эти реквизиты ✅', 'delete_record': 'Удалить запись 🗑️'}
             head_text = f"Мы сохранили информацию, которую Вы нам отправляли при предыдущих заказах.{whitespace}" \
                         f"Можете выбрать из списка ниже или отправить нам новые реквизиты и комментарии одним или " \
                         f"несколькими сообщениями."

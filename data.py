@@ -33,12 +33,6 @@ class DATA:
                       ['702', 'Запчасти 🧩⚙️', 100],
                       ['1100', 'Автотовары 🍱', 100],
                       ['1101', 'Садовый инвентарь 👩‍🌾', 100]]
-        self.calculater = {'1': '1⃣', '2': '2⃣', '3': '3⃣', '4': '4⃣', '5': '5⃣', '6': '6⃣', '7': '7⃣', '8': '8️⃣',
-                           '9': '9⃣', 'minus': '➖', '0': '0️⃣', 'plus': '➕',
-                           'back': '◀👈 Назад', 'delete': '⌫', 'done': 'Готово ✅🗑️',
-                           'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
-        self.description_button = {'back': '◀ 👈 Назад', 'add': 'Добавить ✅🗑️',
-                                   'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
         self.delivery = {'pickup': 'Самовывоз',
                          'delivery': 'Доставка'}
         self.kind_pickup = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
@@ -69,6 +63,13 @@ class DATA:
         return dict_category
 
     @property
+    def get_nomenclature(self):
+        dict_nomenclature = {}
+        for item in range(4000, 30000):
+            dict_nomenclature[str(item)] = str(item)
+        return dict_nomenclature
+
+    @property
     def get_pages(self):
         dict_pages = {}
         for item in range(100):
@@ -82,63 +83,57 @@ class DATA:
             dict_pages_search['Поиск_Стр.' + str(item)] = str(item)
         return dict_pages_search
 
-    @property
-    def get_nomenclature(self):
-        dict_nomenclature = {}
-        for item in range(4000, 30000):
-            dict_nomenclature[str(item)] = str(item)
-        return dict_nomenclature
+    async def get_calculater(self, id_user: int, id_nomenclature: str):
+        calculater = {f'{id_nomenclature}///1': '1⃣', f'{id_nomenclature}///2': '2⃣', f'{id_nomenclature}///3': '3⃣',
+                      f'{id_nomenclature}///4': '4⃣', f'{id_nomenclature}///5': '5⃣', f'{id_nomenclature}///6': '6⃣',
+                      f'{id_nomenclature}///7': '7⃣', f'{id_nomenclature}///8': '8️⃣', f'{id_nomenclature}///9': '9⃣',
+                      f'{id_nomenclature}minus': '➖', f'{id_nomenclature}///0': '0️⃣',
+                      f'{id_nomenclature}plus': '➕',  f'{id_nomenclature}back_add': '◀👈 Назад',
+                      f'{id_nomenclature}delete': '⌫', f'{id_nomenclature}done': 'Готово ✅🗑️',
+                      'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
+        arr_basket = await self.execute.current_basket(id_user)
+        if arr_basket is None:
+            calculater['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
+        else:
+            sum_item = 0
+            for item in arr_basket:
+                arr_item = item.split('///')
+                sum_item += float(arr_item[2])
+            calculater['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {self.format_price(float(sum_item))})"
+        return calculater
 
     @property
     def get_button_calculater(self):
         dict_button_calculater = {}
         for item in range(10):
-            dict_button_calculater[str(item)] = str(item)
+            for id_nomenclature in range(4000, 30000):
+                dict_button_calculater[f'{str(id_nomenclature)}///{str(item)}'] = str(item)
         return dict_button_calculater
 
-    async def get_calculater_keyboard(self, id_user: int):
-        arr_basket = await self.execute.current_basket(id_user)
-        if arr_basket is None:
-            self.calculater['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
-        else:
-            sum_item = 0
-            for item in arr_basket:
-                arr_item = item.split('///')
-                sum_item += float(arr_item[2])
-            self.calculater['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {self.format_price(float(sum_item))})"
-        return self.calculater
-
-    async def get_description_button(self, id_user: int):
-        arr_basket = await self.execute.current_basket(id_user)
-        if arr_basket is None:
-            self.description_button['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
-        else:
-            sum_item = 0
-            for item in arr_basket:
-                arr_item = item.split('///')
-                sum_item += float(arr_item[2])
-            self.description_button['basket'] = f"Корзина 🛒({len(arr_basket)} шт. " \
-                                                f"на {self.format_price(float(sum_item))})"
-        return self.description_button
-
-    @property
-    def get_basket_minus(self):
-        dict_basket_minus = {}
-        for item in range(4000, 30000):
-            dict_basket_minus['basket_minus' + str(item)] = str(item)
-        return dict_basket_minus
-
-    @property
-    def get_basket_plus(self):
-        dict_basket_plus = {}
-        for item in range(4000, 30000):
-            dict_basket_plus['basket_plus' + str(item)] = str(item)
-        return dict_basket_plus
-
     @staticmethod
-    def quote(request):
-        return f"'{str(request)}'"
+    def get_dict_value(value: str, start: int, finish: int):
+        dict_value = {}
+        for item in range(start, finish):
+            dict_value[f'{str(item)}{value}'] = str(item)
+        return dict_value
+
+    async def get_basket(self, id_user: int):
+        basket = {}
+        arr_basket = await self.execute.current_basket(id_user)
+        if arr_basket is None:
+            basket['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
+        else:
+            sum_item = 0
+            for item in arr_basket:
+                arr_item = item.split('///')
+                sum_item += float(arr_item[2])
+            basket['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {self.format_price(float(sum_item))})"
+        return basket
 
     @staticmethod
     def format_price(item: float):
         return '{0:,} ₽'.format(item).replace(',', ' ')
+
+    @staticmethod
+    def quote(request):
+        return f"'{str(request)}'"

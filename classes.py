@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import requests
-import json
 import re
 import os
 import openpyxl
@@ -25,8 +23,6 @@ class BotTelegram:
     def __init__(self, token_from_telegram):
         self.bot = BotMessage(token_from_telegram)
         self.dispatcher = DispatcherMessage(self.bot)
-        self.data = Currency()
-        self.list_currency = {}
         self.conn = None
 
     async def start_dispatcher(self):
@@ -96,8 +92,9 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
+            first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
             answer = await self.answer_message(message, "Выберете, что Вас интересует",
-                                               self.build_keyboard(self.first_keyboard, 2))
+                                               self.build_keyboard(first_keyboard, 1))
             if await self.execute.start_message(message):
                 await self.execute.restart_catalog(message, '/start')
                 await self.execute.add_element_message(message.from_user.id, message.message_id)
@@ -117,6 +114,12 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
             await self.execute.restart_catalog(message, '/start catalog')
+            await self.timer.start(message.from_user.id)
+
+        @self.message(Command("help"))
+        async def cmd_help(message: Message):
+            await self.help_message(message)
+            await self.execute.add_element_history(message.from_user.id, 'help')
             await self.timer.start(message.from_user.id)
 
         @self.message(F.from_user.id.in_(self.arr_auth_user) & F.content_type.in_({
@@ -307,9 +310,39 @@ class DispatcherMessage(Dispatcher):
                     await self.delivery(callback)
                 await self.timer.start(callback.from_user.id)
 
+    async def help_message(self, message: Message):
+        whitespace = '\n'
+        first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
+        answer = await self.answer_message(message, f"Вы можете воспользоваться быстрой навигацией,"
+                                                    f"отправляя следующие команды:{whitespace}{whitespace}"
+                                                    f"/start - главное меню{whitespace}"
+                                                    f"/catalog - каталог товара{whitespace}"
+                                                    f"/news - новости{whitespace}"
+                                                    f"/basket - корзина{whitespace}"
+                                                    f"/order - история заказов{whitespace}{whitespace}"
+                                                    f"Поиск товара:{whitespace}{whitespace}"
+                                                    f"При отправке боту сообщения происходит поиск товара в каталоге "
+                                                    f"по содержимому сообщения, разделенному пробелами. Можно "
+                                                    f"указывать не только слова, но и символы, которые содержатся, "
+                                                    f"например, в наименовании товара.{whitespace}Чтобы понять, "
+                                                    f"как это работает, попробуйте отправить боту "
+                                                    f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
+                                                    f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: Все данные, полученные в "
+                                                    f"процессе взаимодействия между Ботом и Пользователем: фото, "
+                                                    f"видео, текстовая информация, а также любые отправленные "
+                                                    f"документы, которые содержат конфиденциальную информацию не "
+                                                    f"подлежат использованию, копированию, распространению, "
+                                                    f"а также осуществлению любых других действий "
+                                                    f"на основе этой информации.",
+                                           self.build_keyboard(first_keyboard, 1))
+        await self.execute.add_element_message(message.from_user.id, message.message_id)
+        await self.delete_messages(message.from_user.id)
+        await self.execute.add_element_message(message.from_user.id, answer.message_id)
+
     async def return_start(self, call_back: CallbackQuery):
+        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
         answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует",
-                                           self.build_keyboard(self.first_keyboard, 2))
+                                           self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
@@ -907,7 +940,7 @@ class DispatcherMessage(Dispatcher):
         await self.delete_messages(id_user)
         arr_answers = [str(heading.message_id)]
         for key, value in result_search['Поиск_Стр.1'].items():
-            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(id_user, arr_answers)
@@ -928,7 +961,7 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
             for key, value in result_search[call_back.data].items():
-                menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+                menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
                 answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
@@ -946,7 +979,7 @@ class DispatcherMessage(Dispatcher):
         await asyncio.sleep(0.5)
         arr_answers = []
         for key, value in result_search[current_page].items():
-            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸'}
+            menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
             answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
@@ -1424,88 +1457,6 @@ class DispatcherMessage(Dispatcher):
         return f"'{str(request)}'"
 
 
-class Currency:
-    def __init__(self):
-        self.API_address = 'https://min-api.cryptocompare.com/data/price?'
-        self.base = None
-        self.quote = None
-        self.amount = ""
-        self.arr_currency = {'RUB': 'РУБЛЬ', 'USD': 'ДОЛЛАР', 'EUR': 'ЕВРО', 'BTC': 'БИТКОИН'}
-        self.error = []
-
-    @property
-    def answer(self):
-        whitespace = '\n'
-        if len(self.error) == 0:
-            answer = self.get_price(self.base, self.quote, self.amount)
-            return answer
-        else:
-            answer = whitespace.join(self.error)
-            self.clear()
-            return answer
-
-    @property
-    def set_base(self):
-        return self.base
-
-    @set_base.setter
-    def set_base(self, base):
-        try:
-            self.base = self.search_key(base)
-            if ''.join(self.base) == '':
-                raise APIException(f'Я не знаю что такое {base}...Расскажете мне об этом?')
-        except APIException as e:
-            self.error.append(str(e))
-
-    @property
-    def set_quote(self):
-        return self.quote
-
-    @set_quote.setter
-    def set_quote(self, quote):
-        try:
-            self.quote = self.search_key(quote)
-            if ''.join(self.quote) == '':
-                raise APIException(f'{quote} cтранная какая-то Валюта...Пойду погуглю о ней')
-        except APIException as e:
-            self.error.append(str(e))
-
-    @property
-    def set_amount(self):
-        return self.amount
-
-    @set_amount.setter
-    def set_amount(self, amount):
-        try:
-            self.amount = int(amount)
-        except ValueError as e:
-            print(e)
-
-    def search_key(self, search_string):
-        search = re.sub('\W+', '', search_string).upper()
-        return ''.join([key for key, val in self.arr_currency.items() if search in val])
-
-    def clear(self):
-        self.base = None
-        self.quote = None
-        self.amount = 1
-        self.error = []
-
-    @staticmethod
-    def get_price(base, quote, amount):
-        try:
-            exchange = requests.get(
-                f'https://min-api.cryptocompare.com/data/price?fsym={base}&tsyms={quote}')
-            if exchange.status_code == 200:
-                answer = f"{str('{:.2f}'.format(float(json.loads(exchange.content)[quote]) * amount))} " \
-                         f"{quote}"
-                return answer
-            else:
-                raise APIException('Что-то наши аналитики не отвечают, может устали, попробуйте позже)))')
-        except APIException as e:
-            print(e)
-
-
 class TimerClean:
     def __init__(self, parent, second: int):
         self.parent = parent
@@ -1530,20 +1481,6 @@ class TimerClean:
 
     def clean_timer(self, user: int):
         self.t.pop(user)
-
-
-class APIException(Exception):
-    def __init__(self, *args):
-        if args:
-            self.message = args[0]
-        else:
-            self.message = None
-
-    def __str__(self):
-        if self.message:
-            return 'Ниче не понял..., {0} '.format(self.message)
-        else:
-            return 'Что-то я летаю в облаках, повторите, пожалуйста!'
 
 
 class TimerError(Exception):

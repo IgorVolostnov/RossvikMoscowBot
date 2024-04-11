@@ -44,8 +44,8 @@ class DATA:
 
     async def get_first_keyboard(self, id_user: int):
         basket = await self.get_basket(id_user)
-        first_keyboard = {'news': 'Новости 📣🌐💬', 'orders': 'Мои Заказы 🗃️🛒', 'basket': basket['basket'],
-                          'catalog': 'Каталог🛒🧾👀'}
+        first_keyboard = {'news': 'Новости 📣🌐💬', 'orders': 'Мои Заказы 🗃️', 'basket': basket['basket'],
+                          'catalog': 'Каталог🧾👀'}
         return first_keyboard
 
     @property

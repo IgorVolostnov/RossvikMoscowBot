@@ -122,6 +122,18 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_history(message.from_user.id, 'help')
             await self.timer.start(message.from_user.id)
 
+        @self.message(Command("news"))
+        async def cmd_news(message: Message):
+            pass
+
+        @self.message(Command("basket"))
+        async def cmd_basket(message: Message):
+            pass
+
+        @self.message(Command("order"))
+        async def cmd_order(message: Message):
+            pass
+
         @self.message(F.from_user.id.in_(self.arr_auth_user) & F.content_type.in_({
             "text", "audio", "document", "photo", "sticker", "video", "video_note", "voice", "location", "contact",
             "new_chat_members", "left_chat_member", "new_chat_title", "new_chat_photo", "delete_chat_photo",
@@ -272,42 +284,49 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
-            current = await self.execute.delete_element_history(callback.from_user.id, 1)
-            if 'search' in current:
+            try:
                 current = await self.execute.delete_element_history(callback.from_user.id, 1)
-            if current == '/start':
+                if 'search' in current:
+                    current = await self.execute.delete_element_history(callback.from_user.id, 1)
+                if current == '/start':
+                    await self.return_start(callback)
+                    await self.timer.start(callback.from_user.id)
+                elif current == 'catalog':
+                    await self.catalog(callback)
+                    await self.timer.start(callback.from_user.id)
+                elif current in self.category:
+                    await self.return_category(callback, current)
+                    await self.timer.start(callback.from_user.id)
+                elif current in self.pages:
+                    await self.return_page(callback, current)
+                    await self.execute.add_element_history(callback.from_user.id, current)
+                    await self.timer.start(callback.from_user.id)
+                elif current in self.nomenclatures:
+                    await self.description(callback, current)
+                    await self.timer.start(callback.from_user.id)
+                elif current in self.pages_search:
+                    previous_history = await self.execute.delete_element_history(callback.from_user.id, 1)
+                    result_search = await self.search(self.get_text_for_search(previous_history.split('___')[1]))
+                    await self.return_page_search(callback, result_search, current)
+                    await self.execute.add_element_history(callback.from_user.id, current)
+                    await self.timer.start(callback.from_user.id)
+                elif current == 'basket':
+                    await self.show_basket(callback)
+                    await self.timer.start(callback.from_user.id)
+                elif current == 'choice_delivery':
+                    await self.choice_delivery_user(callback)
+                    await self.timer.start(callback.from_user.id)
+                elif current in self.choice_delivery:
+                    if current == 'pickup':
+                        await self.pickup(callback)
+                    elif current == 'delivery':
+                        await self.delivery(callback)
+                    await self.timer.start(callback.from_user.id)
+            except TypeError:
                 await self.return_start(callback)
                 await self.timer.start(callback.from_user.id)
-            elif current == 'catalog':
-                await self.catalog(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.category:
-                await self.return_category(callback, current)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.pages:
-                await self.return_page(callback, current)
-                await self.execute.add_element_history(callback.from_user.id, current)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.nomenclatures:
-                await self.description(callback, current)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.pages_search:
-                previous_history = await self.execute.delete_element_history(callback.from_user.id, 1)
-                result_search = await self.search(self.get_text_for_search(previous_history.split('___')[1]))
-                await self.return_page_search(callback, result_search, current)
-                await self.execute.add_element_history(callback.from_user.id, current)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'basket':
-                await self.show_basket(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'choice_delivery':
-                await self.choice_delivery_user(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.choice_delivery:
-                if current == 'pickup':
-                    await self.pickup(callback)
-                elif current == 'delivery':
-                    await self.delivery(callback)
+            except IndexError:
+                await self.return_start(callback)
                 await self.timer.start(callback.from_user.id)
 
     async def help_message(self, message: Message):

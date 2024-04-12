@@ -1528,7 +1528,7 @@ class DispatcherMessage(Dispatcher):
         button_list = []
         if dict_button:
             for key, value in dict_button.items():
-                if '//' in key:
+                if 'https://' in key:
                     button_list.append(InlineKeyboardButton(text=value, url=key))
                 else:
                     button_list.append(InlineKeyboardButton(text=value, callback_data=key))

@@ -90,6 +90,12 @@ class DispatcherMessage(Dispatcher):
         self.kind_pickup = self.data.kind_pickup
         self.kind_delivery = self.data.kind_delivery
 
+        @self.message(Command("help"))
+        async def cmd_help(message: Message):
+            await self.help_message(message)
+            await self.execute.add_element_history(message.from_user.id, 'help')
+            await self.timer.start(message.from_user.id)
+
         @self.message(Command("start"))
         async def cmd_start(message: Message):
             first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
@@ -116,19 +122,17 @@ class DispatcherMessage(Dispatcher):
             await self.execute.restart_catalog(message, '/start catalog')
             await self.timer.start(message.from_user.id)
 
-        @self.message(Command("help"))
-        async def cmd_help(message: Message):
-            await self.help_message(message)
-            await self.execute.add_element_history(message.from_user.id, 'help')
-            await self.timer.start(message.from_user.id)
-
         @self.message(Command("news"))
         async def cmd_news(message: Message):
-            pass
+            await self.show_link(message)
+            await self.execute.add_element_history(message.from_user.id, 'news')
+            await self.timer.start(message.from_user.id)
 
         @self.message(Command("basket"))
         async def cmd_basket(message: Message):
-            pass
+            await self.show_basket_by_command(message, message.from_user.id)
+            await self.execute.add_element_history(message.from_user.id, 'basket')
+            await self.timer.start(message.from_user.id)
 
         @self.message(Command("order"))
         async def cmd_order(message: Message):
@@ -242,8 +246,6 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             await self.execute.clean_basket(callback.from_user.id)
-            await self.delete_messages(callback.from_user.id, callback.message.message_id)
-            await self.execute.delete_element_history(callback.from_user.id, 1)
             await self.show_basket(callback)
             await self.timer.start(callback.from_user.id)
 
@@ -295,6 +297,9 @@ class DispatcherMessage(Dispatcher):
                 await self.timer.start(callback.from_user.id)
             elif current == 'help':
                 await self.return_help_message(callback)
+                await self.timer.start(callback.from_user.id)
+            elif current == 'news':
+                await self.return_show_link(callback)
                 await self.timer.start(callback.from_user.id)
             elif current in self.category:
                 await self.return_category(callback, current)
@@ -397,6 +402,24 @@ class DispatcherMessage(Dispatcher):
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
+    async def show_link(self, message: Message):
+        link_keyboard = {'https://t.me/rossvik_moscow': 'Канал @ROSSVIK_MOSCOW 📣💬',
+                         'https://www.rossvik.moscow/': 'Сайт WWW.ROSSVIK.MOSCOW 🌐', 'back': '◀ 👈 Назад'}
+        answer = await self.answer_message(message, f"Перейдите по ссылкам ниже, чтобы узнать ещё больше информации:",
+                                           self.build_keyboard(link_keyboard, 1))
+        await self.execute.add_element_message(message.from_user.id, message.message_id)
+        await self.delete_messages(message.from_user.id)
+        await self.execute.add_element_message(message.from_user.id, answer.message_id)
+
+    async def return_show_link(self, call_back: CallbackQuery):
+        link_keyboard = {'https://t.me/rossvik_moscow': 'Канал @ROSSVIK_MOSCOW 📣💬',
+                         'https://www.rossvik.moscow/': 'Сайт WWW.ROSSVIK.MOSCOW 🌐', 'back': '◀ 👈 Назад'}
+        answer = await self.answer_message(call_back.message, f"Перейдите по ссылкам ниже, "
+                                                              f"чтобы узнать ещё больше информации:",
+                                           self.build_keyboard(link_keyboard, 1))
+        await self.delete_messages(call_back.from_user.id)
+        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+
     async def next_category(self, call_back: CallbackQuery):
         current_category = await self.execute.current_category(call_back.data)
         if current_category:
@@ -409,7 +432,10 @@ class DispatcherMessage(Dispatcher):
     async def return_category(self, call_back: CallbackQuery, current_history):
         current_category = await self.execute.current_category(current_history)
         if current_category:
-            await self.create_keyboard_edit_caption(call_back, current_category, current_history)
+            try:
+                await self.create_keyboard_edit_caption(call_back, current_category, current_history)
+            except TelegramBadRequest:
+                await self.create_keyboard_push_photo(call_back, current_category, current_history)
         else:
             new_current = await self.execute.delete_element_history(call_back.from_user.id, 1)
             if new_current == 'catalog':
@@ -782,7 +808,8 @@ class DispatcherMessage(Dispatcher):
         if len(current_basket_dict) == 0:
             text = 'Ваша корзина пуста 😭😔💔'
             menu_button = {'back': '◀ 👈 Назад'}
-            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
+            answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
         else:
             sum_basket = self.sum_basket(current_basket_dict)
             text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
@@ -798,6 +825,34 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
+
+    async def show_basket_by_command(self, message: Message, id_user: int):
+        whitespace = '\n'
+        current_basket_dict = await self.execute.current_basket_dict(id_user)
+        if len(current_basket_dict) == 0:
+            text = 'Ваша корзина пуста 😭😔💔'
+            menu_button = {'back': '◀ 👈 Назад'}
+            answer = await self.answer_message(message, text, self.build_keyboard(menu_button, 1))
+            await self.execute.add_element_message(message.from_user.id, message.message_id)
+            await self.delete_messages(message.from_user.id)
+            await self.execute.add_element_message(message.from_user.id, answer.message_id)
+        else:
+            sum_basket = self.sum_basket(current_basket_dict)
+            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
+            menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
+                           'choice_delivery': 'Оформить заказ 📧📦📲'}
+            heading = await self.answer_message(message, text, self.build_keyboard(menu_button, 2))
+            await self.execute.add_element_message(message.from_user.id, message.message_id)
+            await self.delete_messages(message.from_user.id)
+            await self.execute.add_element_message(message.from_user.id, heading.message_id)
+            arr_answers = []
+            for key, item in current_basket_dict.items():
+                name = await self.execute.current_description(key)
+                text = f"{name[2]}:{whitespace}{item[0]} шт. на сумму {self.format_price(float(item[1]))}"
+                menu_button = {f'{key}basket_minus': '➖', f'{key}basket_plus': '➕'}
+                answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
+                arr_answers.append(str(answer.message_id))
+            await self.execute.add_arr_messages(message.from_user.id, arr_answers)
 
     async def minus_amount_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -1422,7 +1477,9 @@ class DispatcherMessage(Dispatcher):
         else:
             if except_id_message:
                 arr_messages = await self.execute.get_arr_messages(user_id, except_id_message)
-                if len(arr_messages) > 0:
+                if arr_messages is None:
+                    pass
+                elif len(arr_messages) > 0:
                     await self.bot.delete_messages_chat(user_id, arr_messages)
                     await self.execute.record_message(user_id, str(except_id_message))
                 else:
@@ -1471,7 +1528,10 @@ class DispatcherMessage(Dispatcher):
         button_list = []
         if dict_button:
             for key, value in dict_button.items():
-                button_list.append(InlineKeyboardButton(text=value, callback_data=key))
+                if '//' in key:
+                    button_list.append(InlineKeyboardButton(text=value, url=key))
+                else:
+                    button_list.append(InlineKeyboardButton(text=value, callback_data=key))
         else:
             button_list = None
         return button_list

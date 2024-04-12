@@ -170,13 +170,18 @@ class Execute:
 
     async def delete_element_history(self, id_user: int, amount_element: int):
         current = await self.get_info_user(id_user)
-        current_history = self.delete_element(current[0], amount_element)
+        if current[0] is None:
+            current_history = ['/start']
+        else:
+            current_history = self.delete_element(current[0], amount_element)
+            if len(current_history) == 0:
+                current_history = ['/start']
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 await self.execute_delete_element_history(id_user, ' '.join(current_history))
-                return current_history[-1]
         except Exception as e:
             await send_message('Ошибка запроса в методе delete_element_history', os.getenv('EMAIL'), str(e))
+        return current_history[-1]
 
     async def execute_delete_element_history(self, id_user: int, history: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:

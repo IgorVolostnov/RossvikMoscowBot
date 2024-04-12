@@ -284,49 +284,45 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
-            try:
+            current = await self.execute.delete_element_history(callback.from_user.id, 1)
+            if 'search' in current:
                 current = await self.execute.delete_element_history(callback.from_user.id, 1)
-                if 'search' in current:
-                    current = await self.execute.delete_element_history(callback.from_user.id, 1)
-                if current == '/start':
-                    await self.return_start(callback)
-                    await self.timer.start(callback.from_user.id)
-                elif current == 'catalog':
-                    await self.catalog(callback)
-                    await self.timer.start(callback.from_user.id)
-                elif current in self.category:
-                    await self.return_category(callback, current)
-                    await self.timer.start(callback.from_user.id)
-                elif current in self.pages:
-                    await self.return_page(callback, current)
-                    await self.execute.add_element_history(callback.from_user.id, current)
-                    await self.timer.start(callback.from_user.id)
-                elif current in self.nomenclatures:
-                    await self.description(callback, current)
-                    await self.timer.start(callback.from_user.id)
-                elif current in self.pages_search:
-                    previous_history = await self.execute.delete_element_history(callback.from_user.id, 1)
-                    result_search = await self.search(self.get_text_for_search(previous_history.split('___')[1]))
-                    await self.return_page_search(callback, result_search, current)
-                    await self.execute.add_element_history(callback.from_user.id, current)
-                    await self.timer.start(callback.from_user.id)
-                elif current == 'basket':
-                    await self.show_basket(callback)
-                    await self.timer.start(callback.from_user.id)
-                elif current == 'choice_delivery':
-                    await self.choice_delivery_user(callback)
-                    await self.timer.start(callback.from_user.id)
-                elif current in self.choice_delivery:
-                    if current == 'pickup':
-                        await self.pickup(callback)
-                    elif current == 'delivery':
-                        await self.delivery(callback)
-                    await self.timer.start(callback.from_user.id)
-            except TypeError:
+            if current == '/start':
                 await self.return_start(callback)
                 await self.timer.start(callback.from_user.id)
-            except IndexError:
-                await self.return_start(callback)
+            elif current == 'catalog':
+                await self.catalog(callback)
+                await self.timer.start(callback.from_user.id)
+            elif current == 'help':
+                await self.return_help_message(callback)
+                await self.timer.start(callback.from_user.id)
+            elif current in self.category:
+                await self.return_category(callback, current)
+                await self.timer.start(callback.from_user.id)
+            elif current in self.pages:
+                await self.return_page(callback, current)
+                await self.execute.add_element_history(callback.from_user.id, current)
+                await self.timer.start(callback.from_user.id)
+            elif current in self.nomenclatures:
+                await self.description(callback, current)
+                await self.timer.start(callback.from_user.id)
+            elif current in self.pages_search:
+                previous_history = await self.execute.delete_element_history(callback.from_user.id, 1)
+                result_search = await self.search(self.get_text_for_search(previous_history.split('___')[1]))
+                await self.return_page_search(callback, result_search, current)
+                await self.execute.add_element_history(callback.from_user.id, current)
+                await self.timer.start(callback.from_user.id)
+            elif current == 'basket':
+                await self.show_basket(callback)
+                await self.timer.start(callback.from_user.id)
+            elif current == 'choice_delivery':
+                await self.choice_delivery_user(callback)
+                await self.timer.start(callback.from_user.id)
+            elif current in self.choice_delivery:
+                if current == 'pickup':
+                    await self.pickup(callback)
+                elif current == 'delivery':
+                    await self.delivery(callback)
                 await self.timer.start(callback.from_user.id)
 
     async def help_message(self, message: Message):
@@ -357,6 +353,35 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
+
+    async def return_help_message(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
+        answer = await self.answer_message(call_back.message,
+                                           f"Вы можете воспользоваться быстрой навигацией,"
+                                           f"отправляя следующие команды:{whitespace}{whitespace}"
+                                           f"/start - главное меню{whitespace}"
+                                           f"/catalog - каталог товара{whitespace}"
+                                           f"/news - новости{whitespace}"
+                                           f"/basket - корзина{whitespace}"
+                                           f"/order - история заказов{whitespace}{whitespace}"
+                                           f"Поиск товара:{whitespace}{whitespace}"
+                                           f"При отправке боту сообщения происходит поиск товара в каталоге "
+                                           f"по содержимому сообщения, разделенному пробелами. Можно "
+                                           f"указывать не только слова, но и символы, которые содержатся, "
+                                           f"например, в наименовании товара.{whitespace}Чтобы понять, "
+                                           f"как это работает, попробуйте отправить боту "
+                                           f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
+                                           f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: Все данные, полученные в "
+                                           f"процессе взаимодействия между Ботом и Пользователем: фото, "
+                                           f"видео, текстовая информация, а также любые отправленные "
+                                           f"документы, которые содержат конфиденциальную информацию не "
+                                           f"подлежат использованию, копированию, распространению, "
+                                           f"а также осуществлению любых других действий "
+                                           f"на основе этой информации.",
+                                           self.build_keyboard(first_keyboard, 1))
+        await self.delete_messages(call_back.from_user.id)
+        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def return_start(self, call_back: CallbackQuery):
         first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)

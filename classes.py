@@ -1585,7 +1585,3 @@ class TimerClean:
 
     def clean_timer(self, user: int):
         self.t.pop(user)
-
-
-class TimerError(Exception):
-    """Пользовательское исключение, используемое для сообщения об ошибках при использовании класса Timer"""

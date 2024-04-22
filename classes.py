@@ -9,7 +9,7 @@ from aiogram import F
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters.command import Command
-from aiogram.types import Message, InlineKeyboardButton, CallbackQuery, FSInputFile
+from aiogram.types import Message, InlineKeyboardButton, CallbackQuery, FSInputFile, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardMarkup
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.media_group import MediaGroupBuilder
@@ -47,7 +47,8 @@ class BotMessage(Bot):
         await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
-    async def send_message_order(self, chat_id: int, user: str, order: str, contact: str, keyboard: InlineKeyboardMarkup):
+    async def send_message_order(self, chat_id: int, user: str, order: str, contact: str,
+                                 keyboard: InlineKeyboardMarkup):
         return await self.send_document(chat_id=chat_id, document=FSInputFile(order),
                                         caption=f"От клиента {user} получен новый заказ! {contact}",
                                         parse_mode=ParseMode.HTML, reply_markup=keyboard)
@@ -92,12 +93,14 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("help"))
         async def cmd_help(message: Message):
+            await self.checking_bot(message)
             await self.help_message(message)
             await self.execute.add_element_history(message.from_user.id, 'help')
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
+            await self.checking_bot(message)
             first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
             answer = await self.answer_message(message, "Выберете, что Вас интересует",
                                                self.build_keyboard(first_keyboard, 1))
@@ -113,6 +116,7 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("catalog"))
         async def cmd_catalog(message: Message):
+            await self.checking_bot(message)
             menu_button = {'back': '◀ 👈 Назад'}
             answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
                                                self.build_keyboard(self.data.get_prices, 1, menu_button))
@@ -124,19 +128,21 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("news"))
         async def cmd_news(message: Message):
+            await self.checking_bot(message)
             await self.show_link(message)
             await self.execute.add_element_history(message.from_user.id, 'news')
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("basket"))
         async def cmd_basket(message: Message):
+            await self.checking_bot(message)
             await self.show_basket_by_command(message, message.from_user.id)
             await self.execute.add_element_history(message.from_user.id, 'basket')
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("order"))
         async def cmd_order(message: Message):
-            pass
+            await self.checking_bot(message)
 
         @self.message(F.from_user.id.in_(self.arr_auth_user) & F.content_type.in_({
             "text", "audio", "document", "photo", "sticker", "video", "video_note", "voice", "location", "contact",
@@ -150,10 +156,11 @@ class DispatcherMessage(Dispatcher):
                     try:
                         await self.record_message_comment_user(message)
                         await self.timer.start(message.from_user.id)
-                    except IndexError as e:
-                        print(e)
+                    except IndexError:
+                        await self.checking_bot(message)
                         await self.send_search_result(message)
             else:
+                await self.checking_bot(message)
                 await self.send_search_result(message)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'catalog'))
@@ -284,6 +291,11 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_contact'))
+        async def send_choice_contact(callback: CallbackQuery):
+            await self.choice_comment_user(callback)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             current = await self.execute.delete_element_history(callback.from_user.id, 1)
@@ -329,6 +341,10 @@ class DispatcherMessage(Dispatcher):
                 elif current == 'delivery':
                     await self.delivery(callback)
                 await self.timer.start(callback.from_user.id)
+
+    async def checking_bot(self, message: Message):
+        if message.from_user.is_bot:
+            await self.bot.restrict_chat_member(message.chat.id, message.from_user.id, ChatPermissions())
 
     async def help_message(self, message: Message):
         whitespace = '\n'
@@ -1218,6 +1234,7 @@ class DispatcherMessage(Dispatcher):
                 answer_contact = await self.answer_message(answer, contact, self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
+            await self.execute.clean_delivery(call_back.from_user.id)
 
     async def record_answer_delivery(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -1250,6 +1267,7 @@ class DispatcherMessage(Dispatcher):
                 answer_contact = await self.answer_message(answer, contact, self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
+            await self.execute.clean_delivery(call_back.from_user.id)
 
     async def record_message_comment_user(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1276,6 +1294,16 @@ class DispatcherMessage(Dispatcher):
             change_text_head = f"Сообщение для отправки вместе с заказом:\n{new_string}"
             await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
                                              self.build_keyboard(head_menu_button, 2))
+
+    async def choice_comment_user(self, call_back: CallbackQuery):
+        arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+        head_message = arr_messages[0]
+        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
+        await self.execute.record_delivery(call_back.from_user.id, call_back.message.text)
+        change_text_head = f"Сообщение для отправки вместе с заказом:\n{call_back.message.text}"
+        await self.bot.edit_head_message(change_text_head, call_back.message.chat.id, int(head_message),
+                                         self.build_keyboard(head_menu_button, 2))
+        await self.delete_messages(call_back.from_user.id, head_message)
 
     async def save_order(self, call_back: CallbackQuery, basket: dict):
         new_book = openpyxl.Workbook()

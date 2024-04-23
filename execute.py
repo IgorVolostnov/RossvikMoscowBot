@@ -92,9 +92,10 @@ class Execute:
 
     async def execute_start_record_new_user(self, message: Message):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, CONTACT) " \
+            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, CONTACT, CONTENT_DELIVERY) " \
                          f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}, " \
-                         f"'empty///empty/////empty///empty///empty///empty///empty') "
+                         f"'empty///empty/////empty///empty///empty///empty///empty', " \
+                         f"'empty/////empty/////empty/////empty/////empty/////empty/////empty/////empty/////empty') "
             await cursor.execute(sql_record)
             print(f'Новый клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
                   f'зашел с сообщением: {str(message.message_id)}')
@@ -510,6 +511,51 @@ class Execute:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
                          f"DELIVERY_ADDRESS = NULL " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def get_content_delivery(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_content_delivery(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_delivery_address', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_content_delivery(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_arr_content = f"SELECT CONTENT_DELIVERY FROM TELEGRAMMBOT " \
+                            f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_arr_content)
+            row_table = await cursor.fetchone()
+            return row_table[0]
+
+    async def record_content_delivery(self, id_user: int, content_delivery: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_content_delivery(id_user, content_delivery)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_delivery', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_content_delivery(self, id_user: int, current_delivery: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"CONTENT_DELIVERY = '{current_delivery}' " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def clean_content_delivery(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_clean_content_delivery(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе clean_delivery', os.getenv('EMAIL'), str(e))
+
+    async def execute_clean_content_delivery(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"CONTENT_DELIVERY = NULL " \
                          f"WHERE ID_USER = {self.quote(id_user)} "
             await cursor.execute(sql_record)
             await self.conn.commit()

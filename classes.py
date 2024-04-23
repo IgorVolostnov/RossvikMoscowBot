@@ -2,8 +2,10 @@ import asyncio
 import logging
 import re
 import os
+import string
 import openpyxl
 import datetime
+import requests
 from data import DATA
 from aiogram import F
 from aiogram import Bot, Dispatcher
@@ -15,6 +17,7 @@ from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.media_group import MediaGroupBuilder
 from operator import itemgetter
 from openpyxl.styles import GradientFill
+from number_parser import parse
 
 logging.basicConfig(level=logging.INFO)
 
@@ -57,6 +60,15 @@ class BotMessage(Bot):
         photo_to_read = os.path.join(os.path.dirname(__file__), 'Catalog.png')
         return await self.send_photo(chat_id=message_chat_id, photo=FSInputFile(photo_to_read), caption=text,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    async def save_voice(self, message: Message):
+        id_file = re.sub('\W+', '', str(datetime.datetime.now()))
+        name_file = f"voice_{id_file}"
+        filepath = f"{os.path.dirname(__file__)}\\voice\\{name_file}.ogg"
+        file_id = message.voice.file_id
+        file = await self.get_file(file_id)
+        await self.download_file(file_path=file.file_path, destination=f"{filepath}")
+        return filepath
 
     @staticmethod
     def format_text(text_message: str):
@@ -155,6 +167,7 @@ class DispatcherMessage(Dispatcher):
             "group_chat_created", "supergroup_chat_created", "channel_chat_created", "migrate_to_chat_id",
             "migrate_from_chat_id", "pinned_message"}))
         async def get_message(message: Message):
+            print(message)
             current_history = await self.execute.get_element_history(message.from_user.id, -1)
             if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
@@ -164,9 +177,32 @@ class DispatcherMessage(Dispatcher):
                     except IndexError:
                         await self.checking_bot(message)
                         await self.send_search_result(message)
+                elif message.content_type == "audio":
+                    print("audio")
+                elif message.content_type == "document":
+                    print("document")
+                elif message.content_type == "photo":
+                    print("photo")
+                elif message.content_type == "sticker":
+                    print("sticker")
+                elif message.content_type == "video":
+                    print("video")
+                elif message.content_type == "video_note":
+                    print("video_note")
+                elif message.content_type == "voice":
+                    await self.bot.save_voice(message)
+                elif message.content_type == "location":
+                    print("location")
+                elif message.content_type == "contact":
+                    print("contact")
+                else:
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
             else:
-                await self.checking_bot(message)
-                await self.send_search_result(message)
+                if message.content_type == "text" or message.content_type == "voice":
+                    await self.checking_bot(message)
+                    await self.send_search_result(message)
+                else:
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'catalog'))
         async def send_catalog_message(callback: CallbackQuery):
@@ -991,9 +1027,11 @@ class DispatcherMessage(Dispatcher):
         return sum_item
 
     async def search(self, text: str):
+        text_for_search = parse(text.translate(str.maketrans('', '', string.punctuation)))
+        print(text_for_search)
         total_search = set()
         i = 1
-        for item in self.change_for_search_name(text):
+        for item in self.change_for_search_name(text_for_search):
             if i == 1:
                 search_variant = await self.execute.search_in_base_article(
                     self.translit_rus(re.sub('\W+', '', item[0]).upper()))
@@ -1013,8 +1051,13 @@ class DispatcherMessage(Dispatcher):
         return self.assembling_search(list(total_search))
 
     async def send_search_result(self, message: Message):
+        if message.content_type == "voice":
+            text_for_search = await self.translit_voice(message)
+            print(text_for_search)
+        else:
+            text_for_search = message.text
         id_user = message.from_user.id
-        result_search = await self.search(message.text)
+        result_search = await self.search(text_for_search)
         current_history = await self.execute.get_element_history(id_user, -1)
         if len(result_search['Поиск_Стр.1']) == 0:
             await self.find_nothing(id_user, message)
@@ -1024,25 +1067,25 @@ class DispatcherMessage(Dispatcher):
                 await self.execute.delete_element_history(id_user, 1)
                 await self.timer.start(id_user)
             else:
-                await self.execute.add_element_history(id_user, f'search___{self.change_record_search(message.text)}')
+                await self.execute.add_element_history(id_user, f'search___{self.change_record_search(text_for_search)}')
                 await self.timer.start(id_user)
         else:
             await self.show_result_search(id_user, message, result_search)
             if 'search' in current_history:
                 await self.execute.delete_element_history(id_user, 1)
                 await self.execute.add_element_history(id_user,
-                                                       f"search___{self.change_record_search(message.text)} "
+                                                       f"search___{self.change_record_search(text_for_search)} "
                                                        f"Поиск_Стр.1")
                 await self.timer.start(id_user)
             elif 'Поиск' in current_history:
                 await self.execute.delete_element_history(id_user, 2)
                 await self.execute.add_element_history(id_user,
-                                                       f"search___{self.change_record_search(message.text)} "
+                                                       f"search___{self.change_record_search(text_for_search)} "
                                                        f"Поиск_Стр.1")
                 await self.timer.start(id_user)
             else:
                 await self.execute.add_element_history(id_user,
-                                                       f"search___{self.change_record_search(message.text)} "
+                                                       f"search___{self.change_record_search(text_for_search)} "
                                                        f"Поиск_Стр.1")
                 await self.timer.start(id_user)
 
@@ -1305,6 +1348,49 @@ class DispatcherMessage(Dispatcher):
             await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
                                              self.build_keyboard(head_menu_button, 2))
 
+    async def record_message_voice(self, message: Message):
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        await self.delete_messages(message.from_user.id, head_message)
+        arr_message = [str(message.message_id)]
+        change_text = f"Сообщение получено"
+        answer = await self.answer_text(message, change_text)
+        arr_message.append(str(answer.message_id))
+        await self.execute.add_arr_messages(message.from_user.id, arr_message)
+        arr_content = await self.execute.get_content_delivery(message.from_user.id)
+        dict_content = self.get_dict_content_delivery(arr_content)
+        voice_path = await self.bot.save_voice(message)
+
+    async def translit_voice(self, message: Message):
+        voice_path = await self.bot.save_voice(message)
+        key_id = os.getenv('KeyId')
+        key_secret = os.getenv('KeySecret')
+        headers = {"keyId": key_id, "keySecret": key_secret}
+        create_url = "https://api.speechflow.io/asr/file/v1/create?lang=ru"
+        query_url = "https://api.speechflow.io/asr/file/v1/query?taskId="
+        files = {"file": open(voice_path, "rb")}
+        response = requests.post(create_url, headers=headers, files=files)
+        if response.status_code == 200:
+            create_result = response.json()
+            query_url += create_result["taskId"] + "&resultType=4"
+            while True:
+                response = requests.get(query_url, headers=headers)
+                if response.status_code == 200:
+                    query_result = response.json()
+                    if query_result["code"] == 11000:
+                        if query_result["result"]:
+                            result = query_result["result"].replace("\n\n", " ")
+                            return result
+                            # await message.reply(f"<pre><code>{result}</code></pre>", parse_mode=ParseMode.HTML)
+                        break
+                    elif query_result["code"] == 11001:
+                        # await asyncio.sleep(3, pass)
+                        continue
+                    else:
+                        break
+                else:
+                    break
+
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         head_message = arr_messages[0]
@@ -1447,6 +1533,36 @@ class DispatcherMessage(Dispatcher):
                   f"{'_____'.join(contact_dict['delivery']['record_answer_dl'])}///" \
                   f"{'_____'.join(contact_dict['delivery']['record_answer_mt'])}///" \
                   f"{'_____'.join(contact_dict['delivery']['record_answer_cdek'])}"
+        return contact
+
+    @staticmethod
+    def get_dict_content_delivery(arr_contact: str):
+        dict_content = {'audio': ['empty'], 'document': ['empty'], 'photo': ['empty'], 'sticker': ['empty'],
+                        'video': ['empty'], 'video_note': ['empty'], 'voice': ['empty'], 'location': ['empty'],
+                        'contact': ['empty']}
+        arr_type_content = arr_contact.split('/////')
+        dict_content['audio'] = arr_type_content[0].split('///')
+        dict_content['document'] = arr_type_content[1].split('///')
+        dict_content['photo'] = arr_type_content[2].split('///')
+        dict_content['sticker'] = arr_type_content[3].split('///')
+        dict_content['video'] = arr_type_content[4].split('///')
+        dict_content['video_note'] = arr_type_content[5].split('///')
+        dict_content['voice'] = arr_type_content[6].split('///')
+        dict_content['location'] = arr_type_content[7].split('///')
+        dict_content['contact'] = arr_type_content[8].split('///')
+        return dict_content
+
+    @staticmethod
+    def assembling_content_delivery_dict(content_dict: dict):
+        contact = f"{'///'.join(content_dict['audio'])}///" \
+                  f"{'///'.join(content_dict['document'])}/////" \
+                  f"{'///'.join(content_dict['photo'])}///" \
+                  f"{'///'.join(content_dict['sticker'])}///" \
+                  f"{'///'.join(content_dict['video'])}///" \
+                  f"{'///'.join(content_dict['video_note'])}///" \
+                  f"{'///'.join(content_dict['voice'])}///" \
+                  f"{'///'.join(content_dict['location'])}///" \
+                  f"{'///'.join(content_dict['contact'])}"
         return contact
 
     @staticmethod

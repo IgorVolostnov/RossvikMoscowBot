@@ -94,6 +94,11 @@ class DispatcherMessage(Dispatcher):
         @self.message(Command("help"))
         async def cmd_help(message: Message):
             await self.checking_bot(message)
+            if await self.execute.start_message(message):
+                await self.execute.restart_catalog(message, '/start')
+            else:
+                await self.execute.start_record_new_user(message)
+                self.arr_auth_user[message.from_user.id] = None
             await self.help_message(message)
             await self.execute.add_element_history(message.from_user.id, 'help')
             await self.timer.start(message.from_user.id)
@@ -294,6 +299,11 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_contact'))
         async def send_choice_contact(callback: CallbackQuery):
             await self.choice_comment_user(callback)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'delete_record'))
+        async def send_choice_contact(callback: CallbackQuery):
+            await self.delete_record_user(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
@@ -1305,6 +1315,13 @@ class DispatcherMessage(Dispatcher):
                                          self.build_keyboard(head_menu_button, 2))
         await self.delete_messages(call_back.from_user.id, head_message)
 
+    async def delete_record_user(self, call_back: CallbackQuery):
+        arr_history = await self.execute.get_arr_history(call_back.from_user.id)
+        change_contact = await self.delete_contact(call_back.from_user.id, arr_history[-2], arr_history[-1],
+                                                   call_back.message.text)
+        await self.execute.record_contact(call_back.from_user.id, change_contact)
+        await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
+
     async def save_order(self, call_back: CallbackQuery, basket: dict):
         new_book = openpyxl.Workbook()
         active_list = new_book.active
@@ -1399,6 +1416,14 @@ class DispatcherMessage(Dispatcher):
         else:
             if self.check_contact(dict_contact[type_delivery][kind_delivery], value_delivery):
                 dict_contact[type_delivery][kind_delivery].append(value_delivery)
+        return self.assembling_contact_dict(dict_contact)
+
+    async def delete_contact(self, id_user: int, type_delivery: str, kind_delivery: str, value_delivery: str):
+        arr_contact = await self.execute.get_arr_contact(id_user)
+        dict_contact = self.get_dict_contact(arr_contact)
+        dict_contact[type_delivery][kind_delivery].remove(value_delivery)
+        if len(dict_contact[type_delivery][kind_delivery]) == 0:
+            dict_contact[type_delivery][kind_delivery] = ['empty']
         return self.assembling_contact_dict(dict_contact)
 
     @staticmethod

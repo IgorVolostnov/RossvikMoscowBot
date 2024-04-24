@@ -2,7 +2,6 @@ import asyncio
 import logging
 import re
 import os
-import string
 import openpyxl
 import datetime
 import requests
@@ -18,8 +17,10 @@ from aiogram.utils.media_group import MediaGroupBuilder
 from operator import itemgetter
 from openpyxl.styles import GradientFill
 from number_parser import parse
+from nltk.stem import SnowballStemmer
 
 logging.basicConfig(level=logging.INFO)
+snowball = SnowballStemmer(language="russian")
 
 
 class BotTelegram:
@@ -1038,12 +1039,11 @@ class DispatcherMessage(Dispatcher):
             sum_item += float(item[1])
         return sum_item
 
-    async def search(self, text: str):
-        text_for_search = parse(text.translate(str.maketrans('', '', string.punctuation)))
+    async def search(self, text_for_search: list):
         print(text_for_search)
         total_search = set()
         i = 1
-        for item in self.change_for_search_name(text_for_search):
+        for item in text_for_search:
             if i == 1:
                 search_variant = await self.execute.search_in_base_article(
                     self.translit_rus(re.sub('\W+', '', item[0]).upper()))
@@ -1065,11 +1065,11 @@ class DispatcherMessage(Dispatcher):
     async def send_search_result(self, message: Message):
         if message.content_type == "voice":
             text_for_search = await self.translit_voice(message)
-            print(text_for_search)
         else:
             text_for_search = message.text
         id_user = message.from_user.id
-        result_search = await self.search(text_for_search)
+        change_result = await self.delete_ending(parse(text_for_search))
+        result_search = await self.search(change_result)
         current_history = await self.execute.get_element_history(id_user, -1)
         if len(result_search['Поиск_Стр.1']) == 0:
             await self.find_nothing(id_user, message)
@@ -1079,25 +1079,26 @@ class DispatcherMessage(Dispatcher):
                 await self.execute.delete_element_history(id_user, 1)
                 await self.timer.start(id_user)
             else:
-                await self.execute.add_element_history(id_user, f'search___{self.change_record_search(text_for_search)}')
+                await self.execute.add_element_history(id_user,
+                                                       f'search___{self.change_record_search(change_result)}')
                 await self.timer.start(id_user)
         else:
             await self.show_result_search(id_user, message, result_search)
             if 'search' in current_history:
                 await self.execute.delete_element_history(id_user, 1)
                 await self.execute.add_element_history(id_user,
-                                                       f"search___{self.change_record_search(text_for_search)} "
+                                                       f"search___{self.change_record_search(change_result)} "
                                                        f"Поиск_Стр.1")
                 await self.timer.start(id_user)
             elif 'Поиск' in current_history:
                 await self.execute.delete_element_history(id_user, 2)
                 await self.execute.add_element_history(id_user,
-                                                       f"search___{self.change_record_search(text_for_search)} "
+                                                       f"search___{self.change_record_search(change_result)} "
                                                        f"Поиск_Стр.1")
                 await self.timer.start(id_user)
             else:
                 await self.execute.add_element_history(id_user,
-                                                       f"search___{self.change_record_search(text_for_search)} "
+                                                       f"search___{self.change_record_search(change_result)} "
                                                        f"Поиск_Стр.1")
                 await self.timer.start(id_user)
 
@@ -1165,34 +1166,57 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def translit_voice(self, message: Message):
-        voice_path = await self.bot.save_voice(message)
-        key_id = os.getenv('KeyId')
-        key_secret = os.getenv('KeySecret')
-        headers = {"keyId": key_id, "keySecret": key_secret}
-        create_url = "https://api.speechflow.io/asr/file/v1/create?lang=ru"
-        query_url = "https://api.speechflow.io/asr/file/v1/query?taskId="
-        files = {"file": open(voice_path, "rb")}
-        response = requests.post(create_url, headers=headers, files=files)
-        if response.status_code == 200:
-            create_result = response.json()
-            query_url += create_result["taskId"] + "&resultType=4"
-            while True:
-                response = requests.get(query_url, headers=headers)
-                if response.status_code == 200:
-                    query_result = response.json()
-                    if query_result["code"] == 11000:
-                        if query_result["result"]:
-                            result = query_result["result"].replace("\n\n", " ")
-                            return result
-                            # await message.reply(f"<pre><code>{result}</code></pre>", parse_mode=ParseMode.HTML)
-                        break
-                    elif query_result["code"] == 11001:
-                        # await asyncio.sleep(3, pass)
-                        continue
+        try:
+            result = ""
+            voice_path = await self.bot.save_voice(message)
+            key_id = os.getenv('KeyId')
+            key_secret = os.getenv('KeySecret')
+            headers = {"keyId": key_id, "keySecret": key_secret}
+            create_url = "https://api.speechflow.io/asr/file/v1/create?lang=ru"
+            query_url = "https://api.speechflow.io/asr/file/v1/query?taskId="
+            files = {"file": open(voice_path, "rb")}
+            response = requests.post(create_url, headers=headers, files=files)
+            if response.status_code == 200:
+                create_result = response.json()
+                query_url += create_result["taskId"] + "&resultType=4"
+                while True:
+                    response = requests.get(query_url, headers=headers)
+                    if response.status_code == 200:
+                        query_result = response.json()
+                        if query_result["code"] == 11000:
+                            if query_result["result"]:
+                                result = query_result["result"].replace("\n\n", " ")
+                            break
+                        elif query_result["code"] == 11001:
+                            continue
+                        else:
+                            break
                     else:
                         break
-                else:
-                    break
+            return result
+        except ConnectionError:
+            result = ""
+            return result
+
+    @staticmethod
+    async def delete_ending(text_for_search: str):
+        arr_text = text_for_search.split()
+        text_dict = {}
+        new_text_list = []
+        i = 0
+        for item in arr_text:
+            string_delete_end = snowball.stem(item)
+            new_item = re.sub('\W+', '', string_delete_end)
+            if new_item != '':
+                text_dict[new_item] = new_item
+                text_dict[new_item.lower()] = new_item.lower()
+                text_dict[new_item.title()] = new_item.title()
+                new_text_list.append([])
+                for value in text_dict.values():
+                    new_text_list[i].append(value)
+                text_dict = {}
+                i += 1
+        return new_text_list
 
     @staticmethod
     def assembling_search(arr: list):
@@ -1216,23 +1240,21 @@ class DispatcherMessage(Dispatcher):
         return assembling_dict_search
 
     @staticmethod
-    def change_for_search_name(text_cross: str):
-        text_list = text_cross.split()
-        new_text_list = []
-        for item in text_list:
-            if re.sub('\W+', '', item) != '':
-                new_text_list.append([item, item.lower(), item.title()])
-        return new_text_list
-
-    @staticmethod
-    def change_record_search(text: str):
-        list_record = text.split()
-        return '/////'.join(list_record)
+    def change_record_search(arr_text_search: list):
+        arr_value = []
+        for item in arr_text_search:
+            string_value = '///'.join(item)
+            arr_value.append(string_value)
+        result_string = '/////'.join(arr_value)
+        return result_string
 
     @staticmethod
     def get_text_for_search(text: str):
+        arr_result = []
         list_search = text.split('/////')
-        return ' '.join(list_search)
+        for value in list_search:
+            arr_result.append(value.split('///'))
+        return arr_result
 
     async def post_admin(self, call_back: CallbackQuery, value_delivery: str, kind_delivery: str):
         current_basket_dict = await self.execute.current_basket_dict(call_back.from_user.id)

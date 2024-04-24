@@ -555,7 +555,9 @@ class Execute:
     async def execute_clean_content_delivery(self, id_user: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"CONTENT_DELIVERY = NULL " \
+                         f"CONTENT_DELIVERY = f'empty_____None/////empty_____None/////empty_____None/////" \
+                         f"empty_____None/////empty_____None/////empty_____None/////empty_____None/////" \
+                         f"empty_____None/////empty_____None' " \
                          f"WHERE ID_USER = {self.quote(id_user)} "
             await cursor.execute(sql_record)
             await self.conn.commit()

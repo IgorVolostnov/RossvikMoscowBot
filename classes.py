@@ -61,6 +61,16 @@ class BotMessage(Bot):
         return await self.send_photo(chat_id=message_chat_id, photo=FSInputFile(photo_to_read), caption=text,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def save_audio(self, message: Message):
+        id_file = re.sub('\W+', '', str(datetime.datetime.now()))
+        name_file = f"audio_{id_file}"
+        filepath = f"{os.path.dirname(__file__)}\\audio\\{name_file}.mp3"
+        file_id = message.audio.file_id
+        caption = message.caption
+        file = await self.get_file(file_id)
+        await self.download_file(file_path=file.file_path, destination=f"{filepath}")
+        return filepath, caption
+
     async def save_voice(self, message: Message):
         id_file = re.sub('\W+', '', str(datetime.datetime.now()))
         name_file = f"voice_{id_file}"
@@ -102,6 +112,7 @@ class DispatcherMessage(Dispatcher):
         self.choice_delivery = self.data.delivery
         self.kind_pickup = self.data.kind_pickup
         self.kind_delivery = self.data.kind_delivery
+        self.task = RunningTask()
 
         @self.message(Command("help"))
         async def cmd_help(message: Message):
@@ -167,7 +178,7 @@ class DispatcherMessage(Dispatcher):
             "group_chat_created", "supergroup_chat_created", "channel_chat_created", "migrate_to_chat_id",
             "migrate_from_chat_id", "pinned_message"}))
         async def get_message(message: Message):
-            print(message)
+            # print(message)
             current_history = await self.execute.get_element_history(message.from_user.id, -1)
             if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
@@ -178,7 +189,8 @@ class DispatcherMessage(Dispatcher):
                         await self.checking_bot(message)
                         await self.send_search_result(message)
                 elif message.content_type == "audio":
-                    print("audio")
+                    await self.task.get_task(self.record_message_audio(message))
+                    await self.task.running()
                 elif message.content_type == "document":
                     print("document")
                 elif message.content_type == "photo":
@@ -190,7 +202,7 @@ class DispatcherMessage(Dispatcher):
                 elif message.content_type == "video_note":
                     print("video_note")
                 elif message.content_type == "voice":
-                    await self.bot.save_voice(message)
+                    await self.record_message_voice(message)
                 elif message.content_type == "location":
                     print("location")
                 elif message.content_type == "contact":
@@ -1152,6 +1164,36 @@ class DispatcherMessage(Dispatcher):
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
+    async def translit_voice(self, message: Message):
+        voice_path = await self.bot.save_voice(message)
+        key_id = os.getenv('KeyId')
+        key_secret = os.getenv('KeySecret')
+        headers = {"keyId": key_id, "keySecret": key_secret}
+        create_url = "https://api.speechflow.io/asr/file/v1/create?lang=ru"
+        query_url = "https://api.speechflow.io/asr/file/v1/query?taskId="
+        files = {"file": open(voice_path, "rb")}
+        response = requests.post(create_url, headers=headers, files=files)
+        if response.status_code == 200:
+            create_result = response.json()
+            query_url += create_result["taskId"] + "&resultType=4"
+            while True:
+                response = requests.get(query_url, headers=headers)
+                if response.status_code == 200:
+                    query_result = response.json()
+                    if query_result["code"] == 11000:
+                        if query_result["result"]:
+                            result = query_result["result"].replace("\n\n", " ")
+                            return result
+                            # await message.reply(f"<pre><code>{result}</code></pre>", parse_mode=ParseMode.HTML)
+                        break
+                    elif query_result["code"] == 11001:
+                        # await asyncio.sleep(3, pass)
+                        continue
+                    else:
+                        break
+                else:
+                    break
+
     @staticmethod
     def assembling_search(arr: list):
         assembling_dict_search = {}
@@ -1348,6 +1390,27 @@ class DispatcherMessage(Dispatcher):
             await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
                                              self.build_keyboard(head_menu_button, 2))
 
+    async def record_message_audio(self, message: Message):
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        await self.delete_messages(message.from_user.id, head_message)
+        arr_message = [str(message.message_id)]
+        change_text = f"Сообщение получено"
+        answer = await self.answer_text(message, change_text)
+        arr_message.append(str(answer.message_id))
+        await self.execute.add_arr_messages(message.from_user.id, arr_message)
+        audio_info = await self.bot.save_audio(message)
+        arr_content = await self.execute.get_content_delivery(message.from_user.id)
+        dict_content = self.get_dict_content_delivery(arr_content)
+        if dict_content['audio'].get('empty') == 'None':
+            dict_content['audio'].clear()
+            dict_content['audio'][audio_info[0]] = audio_info[1]
+        else:
+            dict_content['audio'][audio_info[0]] = audio_info[1]
+        string_record = self.assembling_content_delivery_dict(dict_content)
+        await self.execute.record_content_delivery(message.from_user.id, string_record)
+        await self.timer.start(message.from_user.id)
+
     async def record_message_voice(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
         head_message = arr_messages[0]
@@ -1359,37 +1422,15 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_arr_messages(message.from_user.id, arr_message)
         arr_content = await self.execute.get_content_delivery(message.from_user.id)
         dict_content = self.get_dict_content_delivery(arr_content)
-        voice_path = await self.bot.save_voice(message)
-
-    async def translit_voice(self, message: Message):
-        voice_path = await self.bot.save_voice(message)
-        key_id = os.getenv('KeyId')
-        key_secret = os.getenv('KeySecret')
-        headers = {"keyId": key_id, "keySecret": key_secret}
-        create_url = "https://api.speechflow.io/asr/file/v1/create?lang=ru"
-        query_url = "https://api.speechflow.io/asr/file/v1/query?taskId="
-        files = {"file": open(voice_path, "rb")}
-        response = requests.post(create_url, headers=headers, files=files)
-        if response.status_code == 200:
-            create_result = response.json()
-            query_url += create_result["taskId"] + "&resultType=4"
-            while True:
-                response = requests.get(query_url, headers=headers)
-                if response.status_code == 200:
-                    query_result = response.json()
-                    if query_result["code"] == 11000:
-                        if query_result["result"]:
-                            result = query_result["result"].replace("\n\n", " ")
-                            return result
-                            # await message.reply(f"<pre><code>{result}</code></pre>", parse_mode=ParseMode.HTML)
-                        break
-                    elif query_result["code"] == 11001:
-                        # await asyncio.sleep(3, pass)
-                        continue
-                    else:
-                        break
-                else:
-                    break
+        voice_info = await self.bot.save_voice(message)
+        if dict_content['voice'].get('empty') == 'None':
+            dict_content['voice'].clear()
+            dict_content['voice'][voice_info] = None
+        else:
+            dict_content['voice'][voice_info] = None
+        string_record = self.assembling_content_delivery_dict(dict_content)
+        await self.execute.record_content_delivery(message.from_user.id, string_record)
+        await self.timer.start(message.from_user.id)
 
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
@@ -1537,33 +1578,32 @@ class DispatcherMessage(Dispatcher):
 
     @staticmethod
     def get_dict_content_delivery(arr_contact: str):
-        dict_content = {'audio': ['empty'], 'document': ['empty'], 'photo': ['empty'], 'sticker': ['empty'],
-                        'video': ['empty'], 'video_note': ['empty'], 'voice': ['empty'], 'location': ['empty'],
-                        'contact': ['empty']}
+        dict_content = {'audio': {}, 'document': {}, 'photo': {}, 'sticker': {}, 'video': {}, 'video_note': {},
+                        'voice': {}, 'location': {}, 'contact': {}}
+        dict_type_content = {0: 'audio', 1: 'document', 2: 'photo', 3: 'sticker', 4: 'video', 5: 'video_note',
+                             6: 'voice', 7: 'location', 8: 'contact'}
         arr_type_content = arr_contact.split('/////')
-        dict_content['audio'] = arr_type_content[0].split('///')
-        dict_content['document'] = arr_type_content[1].split('///')
-        dict_content['photo'] = arr_type_content[2].split('///')
-        dict_content['sticker'] = arr_type_content[3].split('///')
-        dict_content['video'] = arr_type_content[4].split('///')
-        dict_content['video_note'] = arr_type_content[5].split('///')
-        dict_content['voice'] = arr_type_content[6].split('///')
-        dict_content['location'] = arr_type_content[7].split('///')
-        dict_content['contact'] = arr_type_content[8].split('///')
+        for i in range(9):
+            for item in arr_type_content[i].split('///'):
+                content = item.split('_____')
+                dict_content[dict_type_content[i]][content[0]] = content[1]
         return dict_content
 
     @staticmethod
     def assembling_content_delivery_dict(content_dict: dict):
-        contact = f"{'///'.join(content_dict['audio'])}///" \
-                  f"{'///'.join(content_dict['document'])}/////" \
-                  f"{'///'.join(content_dict['photo'])}///" \
-                  f"{'///'.join(content_dict['sticker'])}///" \
-                  f"{'///'.join(content_dict['video'])}///" \
-                  f"{'///'.join(content_dict['video_note'])}///" \
-                  f"{'///'.join(content_dict['voice'])}///" \
-                  f"{'///'.join(content_dict['location'])}///" \
-                  f"{'///'.join(content_dict['contact'])}"
-        return contact
+        arr_content = []
+        arr_type_content = []
+        for item in content_dict.values():
+            for key_c, item_c in item.items():
+                content = f"{key_c}_____{item_c}"
+                arr_content.append(content)
+            if len(arr_content) == 1:
+                arr_type_content.append(arr_content[0])
+            else:
+                arr_type_content.append("///".join(arr_content))
+            arr_content = []
+        string_record = "/////".join(arr_type_content)
+        return string_record
 
     @staticmethod
     def check_contact(arr_contact: list, contact: str):
@@ -1754,3 +1794,18 @@ class TimerClean:
 
     def clean_timer(self, user: int):
         self.t.pop(user)
+
+
+class RunningTask:
+    def __init__(self):
+        self.task = None
+        self.finish = False
+
+    async def get_task(self, coroutine):
+        self.task = None
+        self.finish = False
+        self.task = asyncio.create_task(coroutine)
+
+    async def running(self):
+        while self.finish:
+            await self.task

@@ -72,6 +72,16 @@ class BotMessage(Bot):
         await self.download_file(file_path=file.file_path, destination=f"{filepath}")
         return filepath, caption
 
+    async def save_document(self, message: Message):
+        id_file = re.sub('\W+', '', str(datetime.datetime.now()))
+        name_file = f"{id_file}_{message.document.file_name}"
+        filepath = f"{os.path.dirname(__file__)}\\document\\{name_file}"
+        file_id = message.document.file_id
+        caption = message.caption
+        file = await self.get_file(file_id)
+        await self.download_file(file_path=file.file_path, destination=f"{filepath}")
+        return filepath, caption
+
     async def save_voice(self, message: Message):
         id_file = re.sub('\W+', '', str(datetime.datetime.now()))
         name_file = f"voice_{id_file}"
@@ -113,7 +123,6 @@ class DispatcherMessage(Dispatcher):
         self.choice_delivery = self.data.delivery
         self.kind_pickup = self.data.kind_pickup
         self.kind_delivery = self.data.kind_delivery
-        self.task = RunningTask()
 
         @self.message(Command("help"))
         async def cmd_help(message: Message):
@@ -190,23 +199,31 @@ class DispatcherMessage(Dispatcher):
                         await self.checking_bot(message)
                         await self.send_search_result(message)
                 elif message.content_type == "audio":
-                    await self.task.get_task(self.record_message_audio(message))
-                    await self.task.running()
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(self.record_message_audio(message))
                 elif message.content_type == "document":
-                    print("document")
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(self.record_message_document(message))
                 elif message.content_type == "photo":
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("photo")
                 elif message.content_type == "sticker":
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("sticker")
                 elif message.content_type == "video":
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("video")
                 elif message.content_type == "video_note":
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("video_note")
                 elif message.content_type == "voice":
-                    await self.record_message_voice(message)
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(self.record_message_voice(message))
                 elif message.content_type == "location":
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("location")
                 elif message.content_type == "contact":
+                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("contact")
                 else:
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
@@ -1433,6 +1450,27 @@ class DispatcherMessage(Dispatcher):
         await self.execute.record_content_delivery(message.from_user.id, string_record)
         await self.timer.start(message.from_user.id)
 
+    async def record_message_document(self, message: Message):
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        await self.delete_messages(message.from_user.id, head_message)
+        arr_message = [str(message.message_id)]
+        change_text = f"Сообщение получено"
+        answer = await self.answer_text(message, change_text)
+        arr_message.append(str(answer.message_id))
+        await self.execute.add_arr_messages(message.from_user.id, arr_message)
+        document_info = await self.bot.save_document(message)
+        arr_content = await self.execute.get_content_delivery(message.from_user.id)
+        dict_content = self.get_dict_content_delivery(arr_content)
+        if dict_content['document'].get('empty') == 'None':
+            dict_content['document'].clear()
+            dict_content['document'][document_info[0]] = document_info[1]
+        else:
+            dict_content['document'][document_info[0]] = document_info[1]
+        string_record = self.assembling_content_delivery_dict(dict_content)
+        await self.execute.record_content_delivery(message.from_user.id, string_record)
+        await self.timer.start(message.from_user.id)
+
     async def record_message_voice(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
         head_message = arr_messages[0]
@@ -1816,18 +1854,3 @@ class TimerClean:
 
     def clean_timer(self, user: int):
         self.t.pop(user)
-
-
-class RunningTask:
-    def __init__(self):
-        self.task = None
-        self.finish = False
-
-    async def get_task(self, coroutine):
-        self.task = None
-        self.finish = False
-        self.task = asyncio.create_task(coroutine)
-
-    async def running(self):
-        while self.finish:
-            await self.task

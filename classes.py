@@ -51,10 +51,10 @@ class BotMessage(Bot):
         await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
-    async def send_message_order(self, chat_id: int, user: str, order: str, contact: str,
+    async def send_message_order(self, chat_id: int, user: str, order: str, contact: str, number_order: str,
                                  keyboard: InlineKeyboardMarkup):
         return await self.send_document(chat_id=chat_id, document=FSInputFile(order),
-                                        caption=f"От клиента {user} получен новый заказ! {contact}",
+                                        caption=f"От клиента {user} получен новый заказ №{number_order}! {contact}",
                                         parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
@@ -418,6 +418,11 @@ class DispatcherMessage(Dispatcher):
                     await self.delivery(callback)
                 await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'attachments'))
+        async def send_attachments(callback: CallbackQuery):
+            await self.show_attachments(callback)
+            await self.timer.start(callback.from_user.id)
+
     async def checking_bot(self, message: Message):
         if message.from_user.is_bot:
             await self.bot.restrict_chat_member(message.chat.id, message.from_user.id, ChatPermissions())
@@ -553,14 +558,18 @@ class DispatcherMessage(Dispatcher):
         arr_answers = []
         for key, value in current_nomenclature['Стр.1'].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
-            answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+            if value[1]:
+                photo = value[1].split()[0]
+            else:
+                photo = "https://www.rossvik.moscow/images/no_foto.png"
+            answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
     async def description(self, call_back: CallbackQuery, id_nomenclature: str):
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
-        arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1])
+        arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1], 10)
         basket = await self.data.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
         answer_description = await self.answer_message(arr_answer[0], current_description[2],
@@ -621,7 +630,11 @@ class DispatcherMessage(Dispatcher):
             arr_answers = []
             for key, value in current_nomenclature[call_back.data].items():
                 menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
-                answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+                if value[1]:
+                    photo = value[1].split()[0]
+                else:
+                    photo = "https://www.rossvik.moscow/images/no_foto.png"
+                answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
             return True
@@ -641,7 +654,11 @@ class DispatcherMessage(Dispatcher):
         arr_answers = [str(heading.message_id)]
         for key, value in current_nomenclature[current_page].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
-            answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+            if value[1]:
+                photo = value[1].split()[0]
+            else:
+                photo = "https://www.rossvik.moscow/images/no_foto.png"
+            answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
@@ -671,7 +688,10 @@ class DispatcherMessage(Dispatcher):
                                     f'Наличие: {self.format_text(availability)}{whitespace}' \
                                     f'Введите количество, которое нужно добавить в корзину:{whitespace}'
         menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
-        await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+        if call_back.message.caption:
+            await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+        else:
+            await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
 
     async def back_add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -690,7 +710,10 @@ class DispatcherMessage(Dispatcher):
             info_nomenclature = f'{self.format_text(arr_description[2])}'
             menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                            f'{id_nomenclature}add': 'Добавить ✅🗑️'}
-        await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 2))
+        if call_back.message.caption:
+            await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 2))
+        else:
+            await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
 
     async def change_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -698,37 +721,47 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = call_back.data.split('///')[0]
         menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        amount = self.get_amount(call_back.message.text, button)
+        if call_back.message.caption:
+            amount = self.get_amount(call_back.message.caption, button)
+        else:
+            amount = self.get_amount(call_back.message.text, button)
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         sum_nomenclature = float(amount) * float(price)
-        text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-               f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-        try:
+        if call_back.message.caption:
+            text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
+                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+            await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+        else:
+            text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-        except TelegramBadRequest as error:
-            print(error)
 
     async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
         id_nomenclature = self.dict_minus[call_back.data]
         menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        amount = self.get_amount_minus(call_back.message.text)
+        if call_back.message.caption:
+            amount = self.get_amount_minus(call_back.message.caption)
+        else:
+            amount = self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
-            text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            try:
+            if call_back.message.caption:
+                text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
+                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+            else:
+                text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-            except TelegramBadRequest as error:
-                print(error)
         else:
             pass
 
@@ -737,19 +770,24 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = self.dict_plus[call_back.data]
         menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        amount = self.get_amount_plus(call_back.message.text)
+        if call_back.message.caption:
+            amount = self.get_amount_minus(call_back.message.caption)
+        else:
+            amount = self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
-            text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            try:
+            if call_back.message.caption:
+                text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
+                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+            else:
+                text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-            except TelegramBadRequest as error:
-                print(error)
         else:
             pass
 
@@ -758,19 +796,24 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = self.dict_delete[call_back.data]
         menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
-        amount = self.get_amount_delete(call_back.message.text)
+        if call_back.message.caption:
+            amount = self.get_amount_delete(call_back.message.caption)
+        else:
+            amount = self.get_amount_delete(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
-            text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            try:
+            if call_back.message.caption:
+                text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
+                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+            else:
+                text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
+                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-            except TelegramBadRequest as error:
-                print(error)
         else:
             pass
 
@@ -778,7 +821,10 @@ class DispatcherMessage(Dispatcher):
         whitespace = '\n'
         id_nomenclature = self.dict_done[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
-        amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
+        if call_back.message.caption:
+            amount = await self.check_amount(call_back.message.caption, call_back.id, arr_description[7])
+        else:
+            amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
         if self.arr_auth_user[call_back.from_user.id] == 'diler':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
@@ -799,10 +845,10 @@ class DispatcherMessage(Dispatcher):
             else:
                 menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                                f'{id_nomenclature}add': 'Добавить ✅🗑️'}
-            try:
+            if call_back.message.caption:
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 2))
+            else:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
-            except TelegramBadRequest as error:
-                print(error)
         else:
             pass
 
@@ -907,9 +953,14 @@ class DispatcherMessage(Dispatcher):
             text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
             menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                            'choice_delivery': 'Оформить заказ 📧📦📲'}
-            heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
-            await self.delete_messages(call_back.from_user.id, heading.message_id)
-            arr_answers = []
+            if call_back.message.caption:
+                heading = await self.answer_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+                await self.delete_messages(call_back.from_user.id)
+                arr_answers = [str(heading.message_id)]
+            else:
+                heading = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+                await self.delete_messages(call_back.from_user.id, heading.message_id)
+                arr_answers = []
             for key, item in current_basket_dict.items():
                 name = await self.execute.current_description(key)
                 text = f"{name[2]}:{whitespace}{item[0]} шт. на сумму {self.format_price(float(item[1]))}"
@@ -1139,7 +1190,11 @@ class DispatcherMessage(Dispatcher):
         arr_answers = [str(heading.message_id)]
         for key, value in result_search['Поиск_Стр.1'].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
-            answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+            if value[1]:
+                photo = value[1].split()[0]
+            else:
+                photo = "https://www.rossvik.moscow/images/no_foto.png"
+            answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(id_user, arr_answers)
 
@@ -1152,15 +1207,25 @@ class DispatcherMessage(Dispatcher):
             pages = {}
             for page in result_search.keys():
                 pages[page] = page
-            heading = await self.edit_message(call_back.message,
-                                              f"{call_back.message.text.split('№')[0]}"
-                                              f"№{self.pages_search[call_back.data]}",
-                                              self.build_keyboard(pages, 3))
+            if call_back.message.caption:
+                heading = await self.edit_caption(call_back.message,
+                                                  f"{call_back.message.text.split('№')[0]}"
+                                                  f"№{self.pages_search[call_back.data]}",
+                                                  self.build_keyboard(pages, 3))
+            else:
+                heading = await self.edit_message(call_back.message,
+                                                  f"{call_back.message.text.split('№')[0]}"
+                                                  f"№{self.pages_search[call_back.data]}",
+                                                  self.build_keyboard(pages, 3))
             await self.delete_messages(call_back.from_user.id, heading.message_id)
             arr_answers = []
             for key, value in result_search[call_back.data].items():
                 menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
-                answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+                if value[1]:
+                    photo = value[1].split()[0]
+                else:
+                    photo = "https://www.rossvik.moscow/images/no_foto.png"
+                answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
             return True
@@ -1170,15 +1235,24 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in result_search.keys():
             pages[page] = page
-        heading = await self.edit_message(call_back.message,
-                                          self.format_text(f"Результаты поиска:{number_page}"),
-                                          self.build_keyboard(pages, 3))
+        if call_back.message.caption:
+            heading = await self.edit_caption(call_back.message,
+                                              self.format_text(f"Результаты поиска:{number_page}"),
+                                              self.build_keyboard(pages, 3))
+        else:
+            heading = await self.edit_message(call_back.message,
+                                              self.format_text(f"Результаты поиска:{number_page}"),
+                                              self.build_keyboard(pages, 3))
         await self.delete_messages(call_back.from_user.id, heading.message_id)
         await asyncio.sleep(0.5)
         arr_answers = []
         for key, value in result_search[current_page].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
-            answer = await self.answer_message(heading, value, self.build_keyboard(menu_button, 2))
+            if value[1]:
+                photo = value[1].split()[0]
+            else:
+                photo = "https://www.rossvik.moscow/images/no_foto.png"
+            answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
@@ -1243,7 +1317,7 @@ class DispatcherMessage(Dispatcher):
         y = 1
         for item_nomenclature in sorted(arr, key=itemgetter(2), reverse=False):
             if i < 7:
-                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                dict_m[item_nomenclature[0]] = [item_nomenclature[1], item_nomenclature[3]]
                 i += 1
 
             else:
@@ -1251,7 +1325,7 @@ class DispatcherMessage(Dispatcher):
                 i = 1
                 dict_m = {}
                 y += 1
-                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                dict_m[item_nomenclature[0]] = [item_nomenclature[1], item_nomenclature[3]]
                 i += 1
         assembling_dict_search['Поиск_Стр.' + str(y)] = dict_m
         return assembling_dict_search
@@ -1279,7 +1353,7 @@ class DispatcherMessage(Dispatcher):
         number_order = order[0]
         order_dict = order[1]
         list_user_admin = await self.execute.get_user_admin
-        menu_button = {'take_order': '💬 Взять заказ в обработку'}
+        menu_button = {'attachments': 'Показать вложения', 'take_order': '💬 Взять заказ в обработку'}
         delivery_address_from_user = await self.execute.get_delivery_address(call_back.from_user.id)
         if delivery_address_from_user is None:
             delivery_address_from_user = 'Частное лицо'
@@ -1302,6 +1376,7 @@ class DispatcherMessage(Dispatcher):
                                                        f'{call_back.from_user.last_name} ',
                                                        order_dict[number_order]['path_order'],
                                                        f"{value_d}\n{kind_d}\n{current_contact}",
+                                                       number_order,
                                                        self.build_keyboard(menu_button, 1))
             list_messages_admins.append(str(answer.message_id))
         order_dict[number_order]['id_message_admins'] = list_messages_admins
@@ -1492,6 +1567,18 @@ class DispatcherMessage(Dispatcher):
         await self.execute.record_content_delivery(message.from_user.id, string_record)
         await self.timer.start(message.from_user.id)
 
+    async def get_attachments(self, id_user: int):
+        arr_attachments = []
+        arr_content = await self.execute.get_content_delivery(id_user)
+        dict_content = self.get_dict_content_delivery(arr_content)
+        for value in dict_content.values():
+            if value.get('empty') != 'None':
+                for key in value.keys():
+                    string_key = key.split()
+                    arr_attachments.append('___'.join(string_key))
+        string_attachments = '_____'.join(arr_attachments)
+        return string_attachments
+
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         head_message = arr_messages[0]
@@ -1541,8 +1628,11 @@ class DispatcherMessage(Dispatcher):
         new_book.save(filepath)
         new_book.close()
         list_filepath = filepath.split()
+        string_filepath_for_record = '_____'.join(list_filepath)
+        attachments = await self.get_attachments(call_back.from_user.id)
+        # await self.execute.clean_content_delivery(call_back.from_user.id)
         list_order = [number_order, 'no_message', self.assembling_basket_dict_for_order(basket),
-                      '_____'.join(list_filepath), 'no_score', 'new', 'no_contact']
+                      string_filepath_for_record, 'no_score', 'new', 'no_contact', attachments]
         return number_order, self.get_order_dict('/////'.join(list_order))
 
     async def record_order_base(self, call_back: CallbackQuery, order_dict: dict):
@@ -1553,6 +1643,15 @@ class DispatcherMessage(Dispatcher):
             await self.execute.record_order(call_back.from_user.id, new_list_order)
         else:
             await self.execute.record_order(call_back.from_user.id, order_for_record)
+
+    async def show_attachments(self, call_back: CallbackQuery):
+        string_order = await self.execute.get_arr_order(call_back.from_user.id)
+        print(string_order)
+        arr_order = self.get_order_dict(string_order)
+        number_order = call_back.message.text.split('№')[1].split('!')[0]
+        if number_order in arr_order.keys():
+            attachments = arr_order[number_order]['attachments_order']
+            return attachments
 
     def get_order_dict(self, order_string: str):
         list_order = order_string.split()
@@ -1571,6 +1670,8 @@ class DispatcherMessage(Dispatcher):
             dict_order['status_order'] = list_data[5]
             contact_delivery = list_data[6].split('_____')
             dict_order['contact_order'] = ' '.join(contact_delivery)
+            attachments = list_data[7].split('_____')
+            dict_order['attachments_order'] = ' '.join(attachments)
             dict_orders[list_data[0]] = dict_order
             dict_order = {}
         return dict_orders
@@ -1580,12 +1681,16 @@ class DispatcherMessage(Dispatcher):
         for key, item in order_dict.items():
             id_message_admins = '_____'.join(item['id_message_admins'])
             composition_order = self.assembling_basket_dict_for_order(item['composition_order'])
-            filepath = item['path_order']
+            string_filepath = item['path_order'].split()
+            filepath = '_____'.join(string_filepath)
             path_score = item['path_score']
             status_order = item['status_order']
-            contact_order = item['contact_order'].split()
+            string_contact = item['contact_order'].split()
+            contact_order = '_____'.join(string_contact)
+            string_attachments = item['attachments_order'].split()
+            attachments = '_____'.join(string_attachments)
             order = f"{key}/////{id_message_admins}/////{composition_order}/////{filepath}/////{path_score}" \
-                    f"/////{status_order}/////{'_____'.join(contact_order)}"
+                    f"/////{status_order}/////{contact_order}/////{attachments}"
             list_order.append(order)
         return ' '.join(list_order)
 
@@ -1690,10 +1795,14 @@ class DispatcherMessage(Dispatcher):
         return await message.edit_caption(caption=self.format_text(text), parse_mode=ParseMode.HTML,
                                           reply_markup=keyboard)
 
-    async def send_photo(self, message: Message, photo: str, text: str):
+    async def answer_photo(self, message: Message, photo: str, caption: str, keyboard: InlineKeyboardMarkup):
+        return await message.answer_photo(photo=photo, caption=self.format_text(caption), parse_mode=ParseMode.HTML,
+                                          reply_markup=keyboard)
+
+    async def send_photo(self, message: Message, photo: str, text: str, amount_photo: int):
         media_group = MediaGroupBuilder(caption=text)
         if photo:
-            arr_photo = photo.split()[:10]
+            arr_photo = photo.split()[:amount_photo]
         else:
             arr_photo = ["https://www.rossvik.moscow/images/no_foto.png"]
         for item in arr_photo:

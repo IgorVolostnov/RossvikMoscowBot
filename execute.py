@@ -296,7 +296,7 @@ class Execute:
 
     async def execute_current_nomenclature(self, id_parent: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE, PHOTO FROM NOMENCLATURE " \
                                f"WHERE CATEGORY_ID = '{id_parent}' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
@@ -328,7 +328,7 @@ class Execute:
 
     async def execute_search_in_base_article(self, search_text: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE, PHOTO FROM NOMENCLATURE " \
                                f"WHERE ARTICLE_CHANGE LIKE '%{search_text}%' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
@@ -343,7 +343,7 @@ class Execute:
 
     async def execute_search_in_base_name(self, search_text: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE FROM NOMENCLATURE " \
+            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE, PHOTO FROM NOMENCLATURE " \
                                f"WHERE NAME LIKE '%{search_text}%' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
@@ -594,7 +594,7 @@ class Execute:
         y = 1
         for item_nomenclature in sorted(arr, key=itemgetter(2), reverse=False):
             if i < 7:
-                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                dict_m[item_nomenclature[0]] = [item_nomenclature[1], item_nomenclature[3]]
                 i += 1
 
             else:
@@ -602,7 +602,7 @@ class Execute:
                 i = 1
                 dict_m = {}
                 y += 1
-                dict_m[item_nomenclature[0]] = item_nomenclature[1]
+                dict_m[item_nomenclature[0]] = [item_nomenclature[1], item_nomenclature[3]]
                 i += 1
         assembling_dict_nomenclatures['Стр.' + str(y)] = dict_m
         return assembling_dict_nomenclatures

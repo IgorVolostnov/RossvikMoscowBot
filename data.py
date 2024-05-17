@@ -72,6 +72,20 @@ class DATA:
         return dict_nomenclature
 
     @property
+    def get_dealer_price_remove(self):
+        dict_dealer_price_remove = {}
+        for item in range(4000, 30000):
+            dict_dealer_price_remove[f'{str(item)}remove_dealer_price'] = str(item)
+        return dict_dealer_price_remove
+
+    @property
+    def get_dealer_price_show(self):
+        dict_dealer_price_show = {}
+        for item in range(4000, 30000):
+            dict_dealer_price_show[f'{str(item)}show_dealer_price'] = str(item)
+        return dict_dealer_price_show
+
+    @property
     def get_pages(self):
         dict_pages = {}
         for item in range(100):

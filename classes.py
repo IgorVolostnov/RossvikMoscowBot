@@ -51,6 +51,14 @@ class BotMessage(Bot):
         await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def hide_dealer_caption(self, text_caption: str, chat_message: int, id_message: int):
+        await self.edit_message_caption(caption=text_caption, chat_id=chat_message, message_id=id_message,
+                                        parse_mode=ParseMode.HTML)
+
+    async def show_dealer_caption(self, text_caption: str, dealer_price: str, chat_message: int, id_message: int):
+        await self.edit_message_caption(caption=text_caption, chat_id=chat_message, message_id=id_message,
+                                        parse_mode=ParseMode.HTML)
+
     async def send_message_order(self, chat_id: int, user: str, order: str, contact: str, number_order: str,
                                  keyboard: InlineKeyboardMarkup):
         return await self.send_document(chat_id=chat_id, document=FSInputFile(order),
@@ -123,6 +131,8 @@ class DispatcherMessage(Dispatcher):
         self.choice_delivery = self.data.delivery
         self.kind_pickup = self.data.kind_pickup
         self.kind_delivery = self.data.kind_delivery
+        self.dict_hide_dealer = self.data.get_dealer_price_remove
+        self.dict_show_dealer = self.data.get_dealer_price_show
 
         @self.message(Command("help"))
         async def cmd_help(message: Message):
@@ -243,6 +253,16 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'answer_order'))
         async def answer_order_user(callback: CallbackQuery):
             print('answer')
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_hide_dealer)))
+        async def remove_dealer_price(callback: CallbackQuery):
+            await self.remove_price(callback)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_show_dealer)))
+        async def show_dealer_price(callback: CallbackQuery):
+            await self.show_price(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.category)))
         async def send_next_category(callback: CallbackQuery):
@@ -572,14 +592,43 @@ class DispatcherMessage(Dispatcher):
         arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1], 10)
         basket = await self.data.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
-        answer_description = await self.answer_message(arr_answer[0], current_description[2],
-                                                       self.build_keyboard(menu_button, 2))
+        if current_description[3]:
+            answer_description = await self.answer_message(arr_answer[0], current_description[2],
+                                                           self.build_keyboard(menu_button, 2, current_description[3]))
+        else:
+            answer_description = await self.answer_message(arr_answer[0], current_description[2],
+                                                           self.build_keyboard(menu_button, 2))
         arr_answer.append(answer_description)
         arr_message = []
         for item_message in arr_answer:
             arr_message.append(str(item_message.message_id))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
+
+    async def remove_price(self, call_back: CallbackQuery):
+        id_nomenclature = call_back.data.split('remove_dealer_price')[0]
+        current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
+                                                                  call_back.id)
+        arr_text = current_description[1].split('\n')
+        arr_text.pop(4)
+        new_text = '\n'.join(arr_text)
+        basket = await self.data.get_basket(call_back.from_user.id)
+        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
+        dict_show = {f'{id_nomenclature}show_dealer_price': '👀 Показать дилерскую цену'}
+        arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+        await self.bot.hide_dealer_caption(new_text, call_back.message.chat.id, arr_messages[0])
+        await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_show))
+
+    async def show_price(self, call_back: CallbackQuery):
+        id_nomenclature = call_back.data.split('show_dealer_price')[0]
+        current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
+                                                                  call_back.id)
+        basket = await self.data.get_basket(call_back.from_user.id)
+        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
+        dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
+        arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+        await self.bot.hide_dealer_caption(current_description[1], call_back.message.chat.id, arr_messages[0])
+        await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_hide))
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         whitespace = '\n'
@@ -601,17 +650,19 @@ class DispatcherMessage(Dispatcher):
                                 f'Дилерская цена: {self.format_text(self.format_price(float(dealer)))}' \
                                 f'{whitespace}' \
                                 f'Наличие: {self.format_text(availability)}{whitespace}'
+            dict_hide = {f'{id_item}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
         else:
             info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
                                 f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
                                 f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
                                 f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}{whitespace}' \
                                 f'Наличие: {self.format_text(availability)}{whitespace}'
+            dict_hide = None
         description_text = f'{arr_description[4]}{whitespace}' \
                            f'{arr_description[5]}'
         if re.sub('\W+', '', description_text) == "":
             description_text = "Нет подробной информации"
-        return arr_description[6], info_nomenclature, description_text
+        return arr_description[6], info_nomenclature, description_text, dict_hide
 
     async def next_page(self, call_back: CallbackQuery):
         if self.pages[call_back.data] == call_back.message.caption.split('№')[1]:
@@ -756,11 +807,13 @@ class DispatcherMessage(Dispatcher):
             sum_nomenclature = float(amount) * float(price)
             if call_back.message.caption:
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {self.format_price(float(price))} = " \
+                       f"{self.format_price(float(sum_nomenclature))}"
                 await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {self.format_price(float(price))} = " \
+                       f"{self.format_price(float(sum_nomenclature))}"
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         else:
             pass
@@ -782,11 +835,13 @@ class DispatcherMessage(Dispatcher):
             sum_nomenclature = float(amount) * float(price)
             if call_back.message.caption:
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {self.format_price(float(price))} = " \
+                       f"{self.format_price(float(sum_nomenclature))}"
                 await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {self.format_price(float(price))} = " \
+                       f"{self.format_price(float(sum_nomenclature))}"
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         else:
             pass
@@ -808,11 +863,13 @@ class DispatcherMessage(Dispatcher):
             sum_nomenclature = float(amount) * float(price)
             if call_back.message.caption:
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {self.format_price(float(price))} = " \
+                       f"{self.format_price(float(sum_nomenclature))}"
                 await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {self.format_price(float(price))} = " \
+                       f"{self.format_price(float(sum_nomenclature))}"
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         else:
             pass

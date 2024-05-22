@@ -568,11 +568,7 @@ class DispatcherMessage(Dispatcher):
         else:
             new_current = await self.execute.delete_element_history(call_back.from_user.id, 1)
             if new_current == 'catalog':
-                if call_back.message.caption:
-                    answer_message = await self.create_price_edit_caption(call_back)
-                    await self.delete_messages(call_back.from_user.id, answer_message.message_id)
-                else:
-                    await self.catalog(call_back)
+                await self.catalog(call_back)
             else:
                 current_category = await self.execute.current_category(new_current)
                 await self.create_keyboard_push_photo(call_back, current_category, new_current)
@@ -1882,13 +1878,6 @@ class DispatcherMessage(Dispatcher):
             for item in arr_photo:
                 media_group.add_photo(media=item, parse_mode=ParseMode.HTML)
             return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
-
-    async def create_price_edit_caption(self, call_back: CallbackQuery):
-        menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.edit_caption(call_back.message,
-                                         self.format_text("Каталог товаров ROSSVIK 📖"),
-                                         self.build_keyboard(self.data.get_prices, 1, menu_button))
-        return answer
 
     async def create_keyboard_edit_caption(self, call_back: CallbackQuery, list_category: list, id_category: str):
         menu_button = {'back': '◀ 👈 Назад'}

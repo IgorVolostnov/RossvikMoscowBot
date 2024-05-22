@@ -48,16 +48,20 @@ class BotMessage(Bot):
 
     async def edit_head_message(self, text_message: str, chat_message: int, id_message: int,
                                 keyboard: InlineKeyboardMarkup):
-        return await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message, message_id=id_message,
-                                            parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        return await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message,
+                                            message_id=id_message, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def hide_dealer_caption(self, text_caption: str, chat_message: int, id_message: int):
         await self.edit_message_caption(caption=text_caption, chat_id=chat_message, message_id=id_message,
                                         parse_mode=ParseMode.HTML)
 
-    async def show_dealer_caption(self, text_caption: str, dealer_price: str, chat_message: int, id_message: int):
+    async def show_dealer_caption(self, text_caption: str, chat_message: int, id_message: int):
         await self.edit_message_caption(caption=text_caption, chat_id=chat_message, message_id=id_message,
                                         parse_mode=ParseMode.HTML)
+
+    async def send_message_start(self, chat_id: int, keyboard: InlineKeyboardMarkup):
+        return await self.send_message(chat_id=chat_id, text=self.format_text("Выберете, что Вас интересует"),
+                                       parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def send_message_order(self, chat_id: int, user: str, order: str, contact: str, number_order: str,
                                  keyboard: InlineKeyboardMarkup):
@@ -109,7 +113,7 @@ class BotMessage(Bot):
 class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
         Dispatcher.__init__(self, **kw)
-        self.timer = TimerClean(self, 300)
+        self.timer = TimerClean(self, 39600)
         self.bot = parent
         self.data = DATA()
         self.execute = self.data.execute
@@ -144,6 +148,7 @@ class DispatcherMessage(Dispatcher):
                 self.arr_auth_user[message.from_user.id] = None
             await self.help_message(message)
             await self.execute.add_element_history(message.from_user.id, 'help')
+            await self.timer.start(message.from_user.id)
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
@@ -159,7 +164,7 @@ class DispatcherMessage(Dispatcher):
                 self.arr_auth_user[message.from_user.id] = None
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
-            await self.timer.start(message.from_user.id, answer)
+            await self.timer.start(message.from_user.id)
 
         @self.message(Command("catalog"))
         async def cmd_catalog(message: Message):
@@ -171,23 +176,26 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
             await self.execute.restart_catalog(message, '/start catalog')
-            await self.timer.start(message.from_user.id, answer)
+            await self.timer.start(message.from_user.id)
 
         @self.message(Command("news"))
         async def cmd_news(message: Message):
             await self.checking_bot(message)
             await self.show_link(message)
             await self.execute.add_element_history(message.from_user.id, 'news')
+            await self.timer.start(message.from_user.id)
 
         @self.message(Command("basket"))
         async def cmd_basket(message: Message):
             await self.checking_bot(message)
             await self.show_basket_by_command(message, message.from_user.id)
             await self.execute.add_element_history(message.from_user.id, 'basket')
+            await self.timer.start(message.from_user.id)
 
         @self.message(Command("order"))
         async def cmd_order(message: Message):
             await self.checking_bot(message)
+            await self.timer.start(message.from_user.id)
 
         @self.message(F.from_user.id.in_(self.arr_auth_user) & F.content_type.in_({
             "text", "audio", "document", "photo", "sticker", "video", "video_note", "voice", "location", "contact",
@@ -201,15 +209,18 @@ class DispatcherMessage(Dispatcher):
                 if message.content_type == "text":
                     try:
                         await self.record_message_comment_user(message)
+                        await self.timer.start(message.from_user.id)
                     except IndexError:
                         await self.checking_bot(message)
                         await self.send_search_result(message)
                 elif message.content_type == "audio":
                     loop = asyncio.get_event_loop()
                     loop.create_task(self.record_message_audio(message))
+                    await self.timer.start(message.from_user.id)
                 elif message.content_type == "document":
                     loop = asyncio.get_event_loop()
                     loop.create_task(self.record_message_document(message))
+                    await self.timer.start(message.from_user.id)
                 elif message.content_type == "photo":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("photo")
@@ -225,6 +236,7 @@ class DispatcherMessage(Dispatcher):
                 elif message.content_type == "voice":
                     loop = asyncio.get_event_loop()
                     loop.create_task(self.record_message_voice(message))
+                    await self.timer.start(message.from_user.id)
                 elif message.content_type == "location":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("location")
@@ -244,6 +256,7 @@ class DispatcherMessage(Dispatcher):
         async def send_catalog_message(callback: CallbackQuery):
             await self.catalog(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'answer_order'))
         async def answer_order_user(callback: CallbackQuery):
@@ -252,90 +265,110 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_hide_dealer)))
         async def remove_dealer_price(callback: CallbackQuery):
             await self.remove_price(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_show_dealer)))
         async def show_dealer_price(callback: CallbackQuery):
             await self.show_price(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.category)))
         async def send_next_category(callback: CallbackQuery):
             if await self.next_category(callback):
                 await self.execute.add_element_history(callback.from_user.id, callback.data)
+                await self.timer.start(callback.from_user.id)
             else:
                 await self.execute.add_element_history(callback.from_user.id, f"{callback.data} Стр.1")
+                await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages)))
         async def send_next_page(callback: CallbackQuery):
             if await self.next_page(callback):
                 await self.execute.add_element_history(callback.from_user.id, callback.data)
+                await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages_search)))
         async def send_next_page_search(callback: CallbackQuery):
             if await self.next_page_search(callback):
                 await self.execute.add_element_history(callback.from_user.id, callback.data)
+                await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.nomenclatures)))
         async def send_description(callback: CallbackQuery):
             await self.description(callback, callback.data)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_add)))
         async def send_add(callback: CallbackQuery):
             await self.add_nomenclature(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_back_add)))
         async def send_back_add(callback: CallbackQuery):
             await self.back_add_nomenclature(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_button_calculater)))
         async def send_change_amount(callback: CallbackQuery):
             await self.change_amount(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_minus)))
         async def send_change_minus(callback: CallbackQuery):
             await self.minus_amount(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_plus)))
         async def send_change_plus(callback: CallbackQuery):
             await self.plus_amount(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_delete)))
         async def send_change_delete(callback: CallbackQuery):
             await self.delete_amount(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_done)))
         async def send_done_basket(callback: CallbackQuery):
             await self.add_to_basket(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'basket'))
         async def send_show_basket(callback: CallbackQuery):
             await self.show_basket(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_basket_minus)))
         async def send_basket_minus(callback: CallbackQuery):
             await self.minus_amount_basket(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_basket_plus)))
         async def send_basket_plus(callback: CallbackQuery):
             await self.plus_amount_basket(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             await self.execute.clean_basket(callback.from_user.id)
             await self.show_basket(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
         async def post_order(callback: CallbackQuery):
             list_history = await self.execute.get_arr_history(callback.from_user.id)
             await self.post_admin(callback, list_history[-2], list_history[-1])
             await self.execute.delete_element_history(callback.from_user.id, 3)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_delivery'))
         async def send_choice_delivery(callback: CallbackQuery):
             await self.delete_messages(callback.from_user.id, callback.message.message_id)
             await self.choice_delivery_user(callback)
             await self.execute.add_element_history(callback.from_user.id, 'choice_delivery')
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.choice_delivery)))
         async def send_pickup_delivery(callback: CallbackQuery):
@@ -344,25 +377,29 @@ class DispatcherMessage(Dispatcher):
             elif callback.data == 'delivery':
                 await self.delivery(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_pickup)))
         async def send_kind_pickup(callback: CallbackQuery):
             await self.record_answer_pickup(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_delivery)))
         async def send_kind_delivery(callback: CallbackQuery):
             await self.record_answer_delivery(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_contact'))
         async def send_choice_contact(callback: CallbackQuery):
             await self.choice_comment_user(callback)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'delete_record'))
         async def send_choice_contact(callback: CallbackQuery):
             await self.delete_record_user(callback)
-            await self.timer.start(callback.from_user.id, callback.message)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
@@ -406,9 +443,10 @@ class DispatcherMessage(Dispatcher):
             elif current in self.choice_delivery:
                 if current == 'pickup':
                     await self.pickup(callback)
+                    await self.timer.start(callback.from_user.id)
                 elif current == 'delivery':
                     await self.delivery(callback)
-                await self.timer.start(callback.from_user.id)
+                    await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'attachments'))
         async def send_attachments(callback: CallbackQuery):
@@ -447,7 +485,6 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
-        await self.timer.start(message.from_user.id, answer)
 
     async def return_help_message(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -485,13 +522,10 @@ class DispatcherMessage(Dispatcher):
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
-    async def start_for_timer(self, user_id: int, message: Message):
+    async def start_for_timer(self, user_id: int):
         first_keyboard = await self.data.get_first_keyboard(user_id)
-        answer = await self.answer_message(message, "Выберете, что Вас интересует",
-                                           self.build_keyboard(first_keyboard, 1))
-        await self.delete_messages(user_id)
+        answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1))
         await self.execute.add_element_message(user_id, answer.message_id)
-        await self.timer.start(user_id)
 
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
@@ -499,7 +533,6 @@ class DispatcherMessage(Dispatcher):
                                            self.build_keyboard(self.data.get_prices, 1, menu_button))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-        await self.timer.start(call_back.from_user.id, answer)
 
     async def show_link(self, message: Message):
         link_keyboard = {'https://t.me/rossvik_moscow': 'Канал @ROSSVIK_MOSCOW 📣💬',
@@ -509,7 +542,6 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
-        await self.timer.start(message.from_user.id, answer)
 
     async def return_show_link(self, call_back: CallbackQuery):
         link_keyboard = {'https://t.me/rossvik_moscow': 'Канал @ROSSVIK_MOSCOW 📣💬',
@@ -523,8 +555,7 @@ class DispatcherMessage(Dispatcher):
     async def next_category(self, call_back: CallbackQuery):
         current_category = await self.execute.current_category(call_back.data)
         if current_category:
-            answer = await self.create_keyboard_edit_caption(call_back, current_category, call_back.data)
-            await self.timer.start(call_back.from_user.id, answer)
+            await self.create_keyboard_edit_caption(call_back, current_category, call_back.data)
             return True
         else:
             await self.list_nomenclature(call_back)
@@ -566,7 +597,6 @@ class DispatcherMessage(Dispatcher):
             answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-        await self.timer.start(call_back.from_user.id, heading)
 
     async def description(self, call_back: CallbackQuery, id_nomenclature: str):
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
@@ -586,7 +616,6 @@ class DispatcherMessage(Dispatcher):
             arr_message.append(str(item_message.message_id))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
-        await self.timer.start(call_back.from_user.id, answer_description)
 
     async def remove_price(self, call_back: CallbackQuery):
         id_nomenclature = call_back.data.split('remove_dealer_price')[0]
@@ -600,8 +629,7 @@ class DispatcherMessage(Dispatcher):
         dict_show = {f'{id_nomenclature}show_dealer_price': '👀 Показать дилерскую цену'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(new_text, call_back.message.chat.id, arr_messages[0])
-        heading = await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_show))
-        await self.timer.start(call_back.from_user.id, heading)
+        await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_show))
 
     async def show_price(self, call_back: CallbackQuery):
         id_nomenclature = call_back.data.split('show_dealer_price')[0]
@@ -612,8 +640,7 @@ class DispatcherMessage(Dispatcher):
         dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(current_description[1], call_back.message.chat.id, arr_messages[0])
-        heading = await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_hide))
-        await self.timer.start(call_back.from_user.id, heading)
+        await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_hide))
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         whitespace = '\n'
@@ -673,7 +700,6 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-            await self.timer.start(call_back.from_user.id, heading)
             return True
 
     async def return_page(self, call_back: CallbackQuery, current_page: str):
@@ -726,10 +752,9 @@ class DispatcherMessage(Dispatcher):
                                     f'Введите количество, которое нужно добавить в корзину:{whitespace}'
         menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
         if call_back.message.caption:
-            answer = await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+            await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
         else:
-            answer = await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
-        await self.timer.start(call_back.from_user.id, answer)
+            await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
 
     async def back_add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -749,10 +774,9 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                            f'{id_nomenclature}add': 'Добавить ✅🗑️'}
         if call_back.message.caption:
-            answer = await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 2))
+            await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 2))
         else:
-            answer = await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
-        await self.timer.start(call_back.from_user.id, answer)
+            await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
 
     async def change_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -772,12 +796,11 @@ class DispatcherMessage(Dispatcher):
         if call_back.message.caption:
             text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            answer = await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+            await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
         else:
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-        await self.timer.start(call_back.from_user.id, answer)
+            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
 
     async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -798,13 +821,12 @@ class DispatcherMessage(Dispatcher):
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                answer = await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-            await self.timer.start(call_back.from_user.id, answer)
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         else:
             pass
 
@@ -827,13 +849,12 @@ class DispatcherMessage(Dispatcher):
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                answer = await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-            await self.timer.start(call_back.from_user.id, answer)
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         else:
             pass
 
@@ -856,13 +877,12 @@ class DispatcherMessage(Dispatcher):
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                answer = await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
-            await self.timer.start(call_back.from_user.id, answer)
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
         else:
             pass
 
@@ -895,10 +915,9 @@ class DispatcherMessage(Dispatcher):
                 menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                                f'{id_nomenclature}add': 'Добавить ✅🗑️'}
             if call_back.message.caption:
-                answer = await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 2))
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 2))
             else:
-                answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
-            await self.timer.start(call_back.from_user.id, answer)
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
         else:
             pass
 
@@ -998,7 +1017,6 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад'}
             answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
-            await self.timer.start(call_back.from_user.id, answer)
         else:
             sum_basket = self.sum_basket(current_basket_dict)
             text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
@@ -1019,7 +1037,6 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-            await self.timer.start(call_back.from_user.id, heading)
 
     async def show_basket_by_command(self, message: Message, id_user: int):
         whitespace = '\n'
@@ -1031,7 +1048,6 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
-            await self.timer.start(message.from_user.id, answer)
         else:
             sum_basket = self.sum_basket(current_basket_dict)
             text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {self.format_price(float(sum_basket))}:"
@@ -1049,7 +1065,6 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.answer_message(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(message.from_user.id, arr_answers)
-            await self.timer.start(message.from_user.id, heading)
 
     async def minus_amount_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -1073,9 +1088,8 @@ class DispatcherMessage(Dispatcher):
                                 'choice_delivery': 'Оформить заказ 📧📦📲'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-            answer = await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
-                                                      self.build_keyboard(head_menu_button, 2))
-            await self.timer.start(call_back.from_user.id, answer)
+            await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
+                                             self.build_keyboard(head_menu_button, 2))
         else:
             current_basket_dict.pop(self.button_basket_minus[call_back.data])
             if len(current_basket_dict) == 0:
@@ -1084,9 +1098,8 @@ class DispatcherMessage(Dispatcher):
                 head_text = 'Ваша корзина пуста 😭😔💔'
                 head_menu_button = {'back': '◀ 👈 Назад'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                answer = await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
-                                                          self.build_keyboard(head_menu_button, 1))
-                await self.timer.start(call_back.from_user.id, answer)
+                await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
+                                                 self.build_keyboard(head_menu_button, 1))
             else:
                 await self.execute.add_basket_product(call_back.from_user.id,
                                                       self.assembling_basket_dict(current_basket_dict))
@@ -1097,9 +1110,8 @@ class DispatcherMessage(Dispatcher):
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                answer = await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
-                                                          self.build_keyboard(head_menu_button, 2))
-                await self.timer.start(call_back.from_user.id, answer)
+                await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
+                                                 self.build_keyboard(head_menu_button, 2))
 
     async def plus_amount_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -1126,9 +1138,8 @@ class DispatcherMessage(Dispatcher):
                                 'choice_delivery': 'Оформить заказ 📧📦📲'}
             await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
             arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-            answer = await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
-                                                      self.build_keyboard(head_menu_button, 2))
-            await self.timer.start(call_back.from_user.id, answer)
+            await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
+                                             self.build_keyboard(head_menu_button, 2))
 
     @staticmethod
     def assembling_basket_dict(basket_dict: dict):
@@ -1208,6 +1219,7 @@ class DispatcherMessage(Dispatcher):
                                                        f'search___{self.change_record_search(change_result)}')
                 await self.timer.start(id_user)
         else:
+            print('Показать результат')
             await self.show_result_search(id_user, message, result_search)
             if 'search' in current_history:
                 await self.execute.delete_element_history(id_user, 1)
@@ -1285,7 +1297,6 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-            await self.timer.start(call_back.from_user.id, heading)
             return True
 
     async def return_page_search(self, call_back: CallbackQuery, result_search: dict, current_page: str):
@@ -1447,14 +1458,12 @@ class DispatcherMessage(Dispatcher):
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
-        await self.timer.start(call_back.from_user.id, answer)
 
     async def choice_delivery_user(self, call_back: CallbackQuery):
         head_menu_button = {'pickup': 'Самовывоз 🖐🏻', 'delivery': 'Доставка 📦', 'back': '◀ 👈 Назад'}
         head_text = f"Выберете вариант получения товара:"
         answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
-        await self.timer.start(call_back.from_user.id, answer)
 
     async def pickup(self, call_back: CallbackQuery):
         head_menu_button = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
@@ -1463,7 +1472,6 @@ class DispatcherMessage(Dispatcher):
         head_text = f"Выберете откуда будете забирать товар:"
         answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
-        await self.timer.start(call_back.from_user.id, answer)
 
     async def delivery(self, call_back: CallbackQuery):
         head_menu_button = {'record_answer_moscow': 'В пределах МКАД',
@@ -1476,7 +1484,6 @@ class DispatcherMessage(Dispatcher):
                     f"либо можем доставить товар своими силами в пределах МКАД:"
         answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
-        await self.timer.start(call_back.from_user.id, answer)
 
     async def record_answer_pickup(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -1539,7 +1546,6 @@ class DispatcherMessage(Dispatcher):
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
             await self.execute.clean_delivery(call_back.from_user.id)
-            await self.timer.start(call_back.from_user.id, answer)
 
     async def record_message_comment_user(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1555,9 +1561,8 @@ class DispatcherMessage(Dispatcher):
         if messages_from_user is None:
             await self.execute.record_delivery(message.from_user.id, message.text)
             change_text_head = f"Сообщение для отправки вместе с заказом:\n{message.text}"
-            heading = await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
-                                                       self.build_keyboard(head_menu_button, 2))
-            await self.timer.start(message.from_user.id, heading)
+            await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
+                                             self.build_keyboard(head_menu_button, 2))
         else:
             arr_messages_from_user = self.get_arr_message_user(messages_from_user)
             new_arr_message_from_user = self.add_message_user(arr_messages_from_user, message.text)
@@ -1565,9 +1570,8 @@ class DispatcherMessage(Dispatcher):
             await self.execute.record_delivery(message.from_user.id, new_string_message)
             new_string = '\n'.join(new_string_message.split('/////'))
             change_text_head = f"Сообщение для отправки вместе с заказом:\n{new_string}"
-            heading = await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
-                                                       self.build_keyboard(head_menu_button, 2))
-            await self.timer.start(message.from_user.id, heading)
+            await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
+                                             self.build_keyboard(head_menu_button, 2))
 
     async def record_message_audio(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1588,7 +1592,6 @@ class DispatcherMessage(Dispatcher):
             dict_content['audio'][audio_info[0]] = audio_info[1]
         string_record = self.assembling_content_delivery_dict(dict_content)
         await self.execute.record_content_delivery(message.from_user.id, string_record)
-        await self.timer.start(message.from_user.id)
 
     async def record_message_document(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1609,7 +1612,6 @@ class DispatcherMessage(Dispatcher):
             dict_content['document'][document_info[0]] = document_info[1]
         string_record = self.assembling_content_delivery_dict(dict_content)
         await self.execute.record_content_delivery(message.from_user.id, string_record)
-        await self.timer.start(message.from_user.id)
 
     async def record_message_voice(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1630,7 +1632,6 @@ class DispatcherMessage(Dispatcher):
             dict_content['voice'][voice_info] = None
         string_record = self.assembling_content_delivery_dict(dict_content)
         await self.execute.record_content_delivery(message.from_user.id, string_record)
-        await self.timer.start(message.from_user.id)
 
     async def get_attachments(self, id_user: int):
         arr_attachments = []
@@ -1650,10 +1651,9 @@ class DispatcherMessage(Dispatcher):
         head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
         await self.execute.record_delivery(call_back.from_user.id, call_back.message.text)
         change_text_head = f"Сообщение для отправки вместе с заказом:\n{call_back.message.text}"
-        answer = await self.bot.edit_head_message(change_text_head, call_back.message.chat.id, int(head_message),
-                                                  self.build_keyboard(head_menu_button, 2))
+        await self.bot.edit_head_message(change_text_head, call_back.message.chat.id, int(head_message),
+                                         self.build_keyboard(head_menu_button, 2))
         await self.delete_messages(call_back.from_user.id, head_message)
-        await self.timer.start(call_back.from_user.id, answer)
 
     async def delete_record_user(self, call_back: CallbackQuery):
         arr_history = await self.execute.get_arr_history(call_back.from_user.id)
@@ -2012,21 +2012,22 @@ class TimerClean:
         self._clean_time = second
         self.t = {}
 
-    async def start(self, user: int, message: Message):
+    async def start(self, user: int):
         if user in self.t.keys():
             self.t[user].cancel()
             self.t.pop(user)
-            self.t[user] = asyncio.create_task(self.clean_chat(user, message))
+            self.t[user] = asyncio.create_task(self.clean_chat(user))
             await self.t[user]
         else:
-            self.t[user] = asyncio.create_task(self.clean_chat(user, message))
+            self.t[user] = asyncio.create_task(self.clean_chat(user))
             await self.t[user]
 
-    async def clean_chat(self, user: int, message: Message):
+    async def clean_chat(self, user: int):
         await asyncio.sleep(self._clean_time)
-        await self.parent.start_for_timer(user, message)
+        await self.parent.delete_messages(user)
         print(f'Очищен чат у клиента {str(user)}')
-        self.clean_timer(user)
+        await self.clean_timer(user)
 
-    def clean_timer(self, user: int):
+    async def clean_timer(self, user: int):
         self.t.pop(user)
+        await self.parent.start_for_timer(user)

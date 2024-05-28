@@ -107,15 +107,12 @@ class DATA:
                       f'{id_nomenclature}plus': '➕',  f'{id_nomenclature}back_add': '◀👈 Назад',
                       f'{id_nomenclature}delete': '⌫', f'{id_nomenclature}done': 'Готово ✅🗑️',
                       'basket': f'Корзина 🛒(0 шт на 0 руб.)'}
-        arr_basket = await self.execute.current_basket(id_user)
-        if arr_basket is None:
+        amount = await self.execute.current_amount_basket(id_user)
+        sum_basket = await self.execute.current_sum_basket(id_user)
+        if amount is None:
             calculater['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
         else:
-            sum_item = 0
-            for item in arr_basket:
-                arr_item = item.split('///')
-                sum_item += float(arr_item[2])
-            calculater['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {self.format_price(float(sum_item))})"
+            calculater['basket'] = f"Корзина 🛒({int(amount)} шт. на {self.format_price(float(sum_basket))})"
         return calculater
 
     @property
@@ -135,15 +132,12 @@ class DATA:
 
     async def get_basket(self, id_user: int):
         basket = {}
-        arr_basket = await self.execute.current_basket(id_user)
-        if arr_basket is None:
+        amount = await self.execute.current_amount_basket(id_user)
+        sum_basket = await self.execute.current_sum_basket(id_user)
+        if amount is None:
             basket['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
         else:
-            sum_item = 0
-            for item in arr_basket:
-                arr_item = item.split('///')
-                sum_item += float(arr_item[2])
-            basket['basket'] = f"Корзина 🛒({len(arr_basket)} шт. на {self.format_price(float(sum_item))})"
+            basket['basket'] = f"Корзина 🛒({int(amount)} шт. на {self.format_price(float(sum_basket))})"
         return basket
 
     @staticmethod

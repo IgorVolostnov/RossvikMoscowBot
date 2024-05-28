@@ -358,41 +358,112 @@ class Execute:
 
     async def execute_current_basket(self, id_user: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
+            sql_basket = f"SELECT * FROM BASKET WHERE Id_user = {self.quote(id_user)} "
+            await cursor.execute(sql_basket)
+            basket = await cursor.fetchall()
+            if len(basket) == 0:
+                return None
+            else:
+                return self.assembling_basket(basket)
+
+    async def current_amount_basket(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_current_amount_basket(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе current_amount_basket', os.getenv('EMAIL'), str(e))
+
+    async def execute_current_amount_basket(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_basket = f"SELECT SUM(Amount) FROM BASKET WHERE Id_user = {self.quote(id_user)} "
             await cursor.execute(sql_basket)
             basket = await cursor.fetchone()
             if basket[0] is None:
                 return None
             else:
-                return basket[0].split()
+                return basket[0]
 
-    async def current_basket_dict(self, id_user: int):
+    async def current_sum_basket(self, id_user: int):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_current_basket_dict(id_user)
+                return await self.execute_current_sum_basket(id_user)
         except Exception as e:
-            await send_message('Ошибка запроса в методе current_basket_dict', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе current_sum_basket', os.getenv('EMAIL'), str(e))
 
-    async def execute_current_basket_dict(self, id_user: int):
+    async def execute_current_sum_basket(self, id_user: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_basket = f"SELECT BASKET FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
+            sql_basket = f"SELECT SUM(Sum_price) FROM BASKET WHERE Id_user = {self.quote(id_user)} "
             await cursor.execute(sql_basket)
             basket = await cursor.fetchone()
-            return self.get_basket_dict(basket[0])
+            if basket[0] is None:
+                return None
+            else:
+                return basket[0]
 
-    async def add_basket_product(self, id_user: int, record_item: str):
+    async def current_nomenclature_basket(self, id_user: int, id_nomenclature: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                await self.execute_add_basket_product(id_user, record_item)
+                return await self.execute_current_nomenclature_basket(id_user, id_nomenclature)
         except Exception as e:
-            await send_message('Ошибка запроса в методе add_basket_product', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе current_nomenclature_basket', os.getenv('EMAIL'), str(e))
 
-    async def execute_add_basket_product(self, id_user: int, record_item: str):
+    async def execute_current_nomenclature_basket(self, id_user: int, id_nomenclature: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"BASKET = '{record_item}' " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
+            sql_basket = f"SELECT * FROM BASKET WHERE Id_user = {self.quote(id_user)} AND " \
+                         f"Id_nomenclature = {self.quote(id_nomenclature)}"
+            await cursor.execute(sql_basket)
+            nomenclature = await cursor.fetchone()
+            if nomenclature is None:
+                return None
+            else:
+                return nomenclature
+
+    async def add_basket_nomenclature(self, id_user: int, id_nomenclature: str, amount: float, sum_: float):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_add_basket_nomenclature(id_user, id_nomenclature, amount, sum_)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе add_basket_nomenclature', os.getenv('EMAIL'), str(e))
+
+    async def execute_add_basket_nomenclature(self, id_user: int, id_nomenclature: str, amount: float, sum_: float):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"INSERT INTO [BASKET] " \
+                             f"([Id_user], [Id_nomenclature], [Amount], [Sum_price]) " \
+                             f"VALUES ('{id_user}', " \
+                             f"'{id_nomenclature}', " \
+                             f"'{amount}', " \
+                             f"'{sum_}') "
             await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def update_basket_nomenclature(self, id_user: int, id_nomenclature: str, amount: float, sum_: float):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_update_basket_nomenclature(id_user, id_nomenclature, amount, sum_)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе update_basket_nomenclature', os.getenv('EMAIL'), str(e))
+
+    async def execute_update_basket_nomenclature(self, id_user: int, id_nomenclature: str, amount: float, sum_: float):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_update = f"UPDATE BASKET SET Amount = '{amount}'," \
+                         f"Sum_price = '{sum_}' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND " \
+                         f"Id_nomenclature = {self.quote(id_nomenclature)}"
+            await cursor.execute(sql_update)
+            await self.conn.commit()
+
+    async def delete_nomenclature_basket(self, id_user: int, id_nomenclature: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_delete_nomenclature_basket(id_user, id_nomenclature)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе clean_basket', os.getenv('EMAIL'), str(e))
+
+    async def execute_delete_nomenclature_basket(self, id_user: int, id_nomenclature: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_delete = f"DELETE FROM BASKET WHERE Id_user = {self.quote(id_user)} AND " \
+                         f"Id_nomenclature = {self.quote(id_nomenclature)}"
+            await cursor.execute(sql_delete)
             await self.conn.commit()
 
     async def clean_basket(self, id_user: int):
@@ -404,10 +475,8 @@ class Execute:
 
     async def execute_clean_basket(self, id_user: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"BASKET = NULL " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
-            await cursor.execute(sql_record)
+            sql_delete = f"DELETE FROM BASKET WHERE Id_user = {self.quote(id_user)}"
+            await cursor.execute(sql_delete)
             await self.conn.commit()
 
     async def get_arr_order(self, user_id: int):
@@ -606,6 +675,26 @@ class Execute:
                 i += 1
         assembling_dict_nomenclatures['Стр.' + str(y)] = dict_m
         return assembling_dict_nomenclatures
+
+    @staticmethod
+    def assembling_basket(arr: list):
+        assembling_dict_basket = {}
+        dict_m = {}
+        i = 1
+        y = 1
+        for item_nomenclature in arr:
+            if i < 4:
+                dict_m[item_nomenclature[1]] = [item_nomenclature[2], item_nomenclature[3]]
+                i += 1
+            else:
+                assembling_dict_basket['Стр.' + str(y)] = dict_m
+                i = 1
+                dict_m = {}
+                y += 1
+                dict_m[item_nomenclature[1]] = [item_nomenclature[2], item_nomenclature[3]]
+                i += 1
+        assembling_dict_basket['Стр.' + str(y)] = dict_m
+        return assembling_dict_basket
 
     @staticmethod
     def get_basket_dict(basket: str):

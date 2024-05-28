@@ -169,6 +169,21 @@ class Execute:
             await cursor.execute(sql_record)
             await self.conn.commit()
 
+    async def update_history(self, id_user: int, history: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_update_history(id_user, history)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе add_element_history', os.getenv('EMAIL'), str(e))
+
+    async def execute_update_history(self, id_user: int, history: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"HISTORY = '{history}' " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
     async def delete_element_history(self, id_user: int, amount_element: int):
         current = await self.get_info_user(id_user)
         if current[0] is None:

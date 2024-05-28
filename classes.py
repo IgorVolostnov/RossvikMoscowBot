@@ -368,7 +368,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
             await self.execute.clean_basket(callback.from_user.id)
-            await self.show_basket(callback, 'Корзина_Стр.1')
+            await self.clean_basket_message(callback)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
@@ -1054,7 +1054,8 @@ class DispatcherMessage(Dispatcher):
                 menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                'choice_delivery': 'Оформить заказ 📧📦📲'}
                 if call_back.message.caption:
-                    heading = await self.answer_message_by_basket(call_back.message, text + self.format_text(number_page),
+                    heading = await self.answer_message_by_basket(call_back.message,
+                                                                  text + self.format_text(number_page),
                                                                   self.build_keyboard(pages, 3, menu_button))
                     await self.delete_messages(call_back.from_user.id)
                     arr_answers = [str(heading.message_id)]
@@ -1108,6 +1109,18 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.answer_message_by_basket(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(id_user, arr_answers)
+
+    async def clean_basket_message(self, call_back: CallbackQuery):
+        text = 'Ваша корзина пуста 😭😔💔'
+        menu_button = {'back': '◀ 👈 Назад'}
+        answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
+        await self.delete_messages(call_back.from_user.id, answer.message_id)
+        arr_history = await self.execute.get_arr_history(call_back.from_user.id)
+        new_arr_history = []
+        for item in arr_history:
+            if 'Корзина' not in item:
+                new_arr_history.append(item)
+        await self.execute.update_history(call_back.from_user.id, ' '.join(new_arr_history))
 
     async def minus_amount_basket(self, call_back: CallbackQuery, number_page: str):
         try:
@@ -1214,7 +1227,6 @@ class DispatcherMessage(Dispatcher):
                                                               self.button_basket_plus[call_back.data],
                                                               new_amount,
                                                               new_sum)
-
                 name = await self.execute.current_description(self.button_basket_plus[call_back.data])
                 text = f"{name[2]}:{whitespace}{self.format_text(str(int(new_amount)))} шт. на сумму " \
                        f"{self.format_text(self.format_price(float(new_sum)))}"
@@ -1240,14 +1252,6 @@ class DispatcherMessage(Dispatcher):
             pass
 
     @staticmethod
-    def assembling_basket_dict(basket_dict: dict):
-        list_basket = []
-        for key, value in basket_dict.items():
-            item = f'{key}///{value[0]}///{value[1]}'
-            list_basket.append(item)
-        return ' '.join(list_basket)
-
-    @staticmethod
     def assembling_basket_dict_for_order(basket_dict: dict):
         list_basket = []
         for key, value in basket_dict.items():
@@ -1265,13 +1269,6 @@ class DispatcherMessage(Dispatcher):
                 row = item.split('///')
                 basket_dict[row[0]] = [row[1], row[2]]
         return basket_dict
-
-    @staticmethod
-    def sum_basket(current_basket: dict):
-        sum_item = 0
-        for item in current_basket.values():
-            sum_item += float(item[1])
-        return sum_item
 
     async def search(self, text_for_search: list):
         print(text_for_search)

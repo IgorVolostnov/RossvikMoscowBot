@@ -687,13 +687,13 @@ class Execute:
                 dict_m[item_nomenclature[1]] = [item_nomenclature[2], item_nomenclature[3]]
                 i += 1
             else:
-                assembling_dict_basket['Стр.' + str(y)] = dict_m
+                assembling_dict_basket['Корзина_Стр.' + str(y)] = dict_m
                 i = 1
                 dict_m = {}
                 y += 1
                 dict_m[item_nomenclature[1]] = [item_nomenclature[2], item_nomenclature[3]]
                 i += 1
-        assembling_dict_basket['Стр.' + str(y)] = dict_m
+        assembling_dict_basket['Корзина_Стр.' + str(y)] = dict_m
         return assembling_dict_basket
 
     @staticmethod

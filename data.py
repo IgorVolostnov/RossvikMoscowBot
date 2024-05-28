@@ -99,6 +99,13 @@ class DATA:
             dict_pages_search['Поиск_Стр.' + str(item)] = str(item)
         return dict_pages_search
 
+    @property
+    def get_pages_basket(self):
+        dict_pages_basket = {}
+        for item in range(100):
+            dict_pages_basket['Корзина_Стр.' + str(item)] = str(item)
+        return dict_pages_basket
+
     async def get_calculater(self, id_user: int, id_nomenclature: str):
         calculater = {f'{id_nomenclature}///1': '1⃣', f'{id_nomenclature}///2': '2⃣', f'{id_nomenclature}///3': '3⃣',
                       f'{id_nomenclature}///4': '4⃣', f'{id_nomenclature}///5': '5⃣', f'{id_nomenclature}///6': '6⃣',

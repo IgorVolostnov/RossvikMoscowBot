@@ -58,7 +58,7 @@ class Execute:
 
     async def execute_get_info_user(self, id_user: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_auth = f"SELECT HISTORY, MESSAGES, ORDER_USER FROM TELEGRAMMBOT " \
+            sql_auth = f"SELECT HISTORY, MESSAGES FROM TELEGRAMMBOT " \
                        f"WHERE ID_USER = {self.quote(id_user)} "
             await cursor.execute(sql_auth)
             row_table = await cursor.fetchone()
@@ -92,10 +92,8 @@ class Execute:
 
     async def execute_start_record_new_user(self, message: Message):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, CONTACT, CONTENT_DELIVERY) " \
-                         f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}, " \
-                         f"'empty///empty/////empty///empty///empty///empty///empty', " \
-                         f"'empty/////empty/////empty/////empty/////empty/////empty/////empty/////empty/////empty') "
+            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES) " \
+                         f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}) "
             await cursor.execute(sql_record)
             print(f'Новый клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
                   f'зашел с сообщением: {str(message.message_id)}')

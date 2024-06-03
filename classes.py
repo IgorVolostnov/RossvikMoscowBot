@@ -51,6 +51,11 @@ class BotMessage(Bot):
         return await self.edit_message_text(text=self.format_text(text_message), chat_id=chat_message,
                                             message_id=id_message, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def edit_head_message_by_basket(self, text_message: str, chat_message: int, id_message: int,
+                                          keyboard: InlineKeyboardMarkup):
+        return await self.edit_message_text(text=text_message, chat_id=chat_message,
+                                            message_id=id_message, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
     async def hide_dealer_caption(self, text_caption: str, chat_message: int, id_message: int):
         await self.edit_message_caption(caption=text_caption, chat_id=chat_message, message_id=id_message,
                                         parse_mode=ParseMode.HTML)
@@ -1157,9 +1162,9 @@ class DispatcherMessage(Dispatcher):
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                await self.bot.edit_head_message(head_text + self.format_text(number_page_basket),
-                                                 call_back.message.chat.id, arr_messages[0],
-                                                 self.build_keyboard(pages, 3, head_menu_button))
+                await self.bot.edit_head_message_by_basket(head_text + self.format_text(number_page_basket),
+                                                           call_back.message.chat.id, arr_messages[0],
+                                                           self.build_keyboard(pages, 3, head_menu_button))
                 return number_page
             else:
                 await self.execute.delete_nomenclature_basket(call_back.from_user.id,
@@ -1189,9 +1194,11 @@ class DispatcherMessage(Dispatcher):
                     else:
                         new_number = number
                     number_page_basket = f'{whitespace}Страница №{str(new_number)}'
-                    heading = await self.bot.edit_head_message(head_text + self.format_text(number_page_basket),
-                                                               call_back.message.chat.id, arr_messages[0],
-                                                               self.build_keyboard(pages, 3, head_menu_button))
+                    heading = await self.bot.edit_head_message_by_basket(head_text +
+                                                                         self.format_text(number_page_basket),
+                                                                         call_back.message.chat.id, arr_messages[0],
+                                                                         self.build_keyboard(pages, 3,
+                                                                                             head_menu_button))
                     await self.delete_messages(call_back.from_user.id, heading.message_id)
                     arr_answers = []
                     for key, item in current_basket_dict[f'Корзина_Стр.{str(new_number)}'].items():
@@ -1244,9 +1251,9 @@ class DispatcherMessage(Dispatcher):
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                await self.bot.edit_head_message(head_text + self.format_text(number_page_basket),
-                                                 call_back.message.chat.id, arr_messages[0],
-                                                 self.build_keyboard(pages, 3, head_menu_button))
+                await self.bot.edit_head_message_by_basket(head_text + self.format_text(number_page_basket),
+                                                           call_back.message.chat.id, arr_messages[0],
+                                                           self.build_keyboard(pages, 3, head_menu_button))
                 return number_page
         except TelegramBadRequest:
             pass

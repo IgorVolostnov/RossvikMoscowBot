@@ -492,65 +492,128 @@ class Execute:
             await cursor.execute(sql_delete)
             await self.conn.commit()
 
-    async def get_arr_order(self, user_id: int):
+    async def record_new_order(self, id_user: int, type_delivery: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_get_arr_order(user_id)
+                return await self.execute_record_new_order(id_user, type_delivery)
         except Exception as e:
-            await send_message('Ошибка запроса в методе get_arr_order', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе record_new_order', os.getenv('EMAIL'), str(e))
 
-    async def execute_get_arr_order(self, user_id: int):
+    async def execute_record_new_order(self, id_user: int, type_delivery: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_arr_order = f"SELECT ORDER_USER FROM TELEGRAMMBOT " \
-                            f"WHERE ID_USER = {self.quote(user_id)} "
-            await cursor.execute(sql_arr_order)
-            row_table = await cursor.fetchone()
-            return self.get_arr_orders(row_table[0])
-
-    async def record_order(self, id_user: int, list_order: str):
-        try:
-            async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_record_order(id_user, list_order)
-        except Exception as e:
-            await send_message('Ошибка запроса в методе record_order', os.getenv('EMAIL'), str(e))
-
-    async def execute_record_order(self, id_user: int, list_order: str):
-        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"ORDER_USER = '{list_order}' " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
+            sql_record = f"INSERT INTO [ORDER_USER] " \
+                         f"([Id_user], [Id_order], [Status], [Messages_by_admin], [Order_XLS], [Score], " \
+                         f"[Type_delivery], [Kind_transport_company], [Comment], [Content]) " \
+                         f"VALUES ('{id_user}', " \
+                         f"'', " \
+                         f"'New', " \
+                         f"'', " \
+                         f"'', " \
+                         f"'', " \
+                         f"'{type_delivery}', " \
+                         f"'', " \
+                         f"'', " \
+                         f"'') "
             await cursor.execute(sql_record)
             await self.conn.commit()
 
-    async def get_arr_contact(self, user_id: int):
+    async def record_order_type_delivery(self, id_user: int, type_delivery: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_get_arr_contact(user_id)
+                return await self.execute_record_order_type_delivery(id_user, type_delivery)
         except Exception as e:
-            await send_message('Ошибка запроса в методе get_arr_contact', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе record_order_type_delivery', os.getenv('EMAIL'), str(e))
 
-    async def execute_get_arr_contact(self, user_id: int):
+    async def execute_record_order_type_delivery(self, id_user: int, type_delivery: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_arr_contact = f"SELECT CONTACT FROM TELEGRAMMBOT " \
-                              f"WHERE ID_USER = {self.quote(user_id)} "
-            await cursor.execute(sql_arr_contact)
-            row_table = await cursor.fetchone()
-            return row_table[0]
-
-    async def record_contact(self, id_user: int, delivery: str):
-        try:
-            async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_record_contact(id_user, delivery)
-        except Exception as e:
-            await send_message('Ошибка запроса в методе record_contact', os.getenv('EMAIL'), str(e))
-
-    async def execute_record_contact(self, id_user: int, delivery: str):
-        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"CONTACT = '{delivery}' " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
+            sql_record = f"UPDATE ORDER_USER SET " \
+                         f"Type_delivery = '{type_delivery}'," \
+                         f"Kind_transport_company = ''," \
+                         f"Comment = ''," \
+                         f"Content = '' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
             await cursor.execute(sql_record)
             await self.conn.commit()
+
+    async def record_order_kind_transport_company(self, id_user: int, kind_transport_company: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_kind_transport_company(id_user, kind_transport_company)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_kind_transport_company', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_order_kind_transport_company(self, id_user: int, kind_transport_company: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE ORDER_USER SET " \
+                         f"Kind_transport_company = '{kind_transport_company}'," \
+                         f"Comment = ''," \
+                         f"Content = '' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def record_order_xlsx(self, id_user: int, id_order: str, path_order: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_xlsx(id_user, id_order, path_order)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_xlsx', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_order_xlsx(self, id_user: int, id_order: str, path_order: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE ORDER_USER SET " \
+                         f"Id_order = '{id_order}'," \
+                         f"Order_XLS =  '{path_order}' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status = 'New' "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def record_order_answer_admin(self, id_user: int, id_order: str, answer_admin: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_answer_admin(id_user, id_order, answer_admin)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_answer_admin', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_order_answer_admin(self, id_user: int, id_order: str, answer_admin: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE ORDER_USER SET " \
+                         f"Messages_by_admin = '{answer_admin}'," \
+                         f"Status =  'Posted' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Id_order = {self.quote(id_order)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def delete_new_order(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_delete_new_order(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе clean_basket', os.getenv('EMAIL'), str(e))
+
+    async def execute_delete_new_order(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_delete = f"DELETE FROM ORDER_USER WHERE Id_user = {self.quote(id_user)} AND Status = 'New' "
+            await cursor.execute(sql_delete)
+            await self.conn.commit()
+
+    async def get_info_order(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_info_order(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_delivery_address', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_info_order(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_info_order = f"SELECT * FROM ORDER_USER " \
+                            f"WHERE ID_USER = {self.quote(user_id)} AND Status = 'New' "
+            await cursor.execute(sql_info_order)
+            row_table = await cursor.fetchone()
+            if row_table is None:
+                return None
+            else:
+                return row_table
 
     async def get_delivery_address(self, user_id: int):
         try:
@@ -561,88 +624,28 @@ class Execute:
 
     async def execute_get_delivery_address(self, user_id: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_arr_order = f"SELECT DELIVERY_ADDRESS FROM TELEGRAMMBOT " \
-                            f"WHERE ID_USER = {self.quote(user_id)} "
+            sql_arr_order = f"SELECT Type_delivery, Kind_transport_company, Comment FROM ORDER_USER " \
+                            f"WHERE ID_USER = {self.quote(user_id)} AND Status = 'New' "
             await cursor.execute(sql_arr_order)
             row_table = await cursor.fetchone()
-            return row_table[0]
+            return row_table
 
-    async def record_delivery(self, id_user: int, current_delivery: str):
+    async def get_contact_user(self, user_id: int, kind_transport_company: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_record_delivery(id_user, current_delivery)
-        except Exception as e:
-            await send_message('Ошибка запроса в методе record_delivery', os.getenv('EMAIL'), str(e))
-
-    async def execute_record_delivery(self, id_user: int, current_delivery: str):
-        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"DELIVERY_ADDRESS = '{current_delivery}' " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
-            await cursor.execute(sql_record)
-            await self.conn.commit()
-
-    async def clean_delivery(self, id_user: int):
-        try:
-            async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_clean_delivery(id_user)
-        except Exception as e:
-            await send_message('Ошибка запроса в методе clean_delivery', os.getenv('EMAIL'), str(e))
-
-    async def execute_clean_delivery(self, id_user: int):
-        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"DELIVERY_ADDRESS = NULL " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
-            await cursor.execute(sql_record)
-            await self.conn.commit()
-
-    async def get_content_delivery(self, user_id: int):
-        try:
-            async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_get_content_delivery(user_id)
+                return await self.execute_get_contact_user(user_id, kind_transport_company)
         except Exception as e:
             await send_message('Ошибка запроса в методе get_delivery_address', os.getenv('EMAIL'), str(e))
 
-    async def execute_get_content_delivery(self, user_id: int):
+    async def execute_get_contact_user(self, user_id: int, kind_transport_company: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_arr_content = f"SELECT CONTENT_DELIVERY FROM TELEGRAMMBOT " \
-                            f"WHERE ID_USER = {self.quote(user_id)} "
-            await cursor.execute(sql_arr_content)
-            row_table = await cursor.fetchone()
-            return row_table[0]
-
-    async def record_content_delivery(self, id_user: int, content_delivery: str):
-        try:
-            async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_record_content_delivery(id_user, content_delivery)
-        except Exception as e:
-            await send_message('Ошибка запроса в методе record_delivery', os.getenv('EMAIL'), str(e))
-
-    async def execute_record_content_delivery(self, id_user: int, current_delivery: str):
-        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"CONTENT_DELIVERY = '{current_delivery}' " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
-            await cursor.execute(sql_record)
-            await self.conn.commit()
-
-    async def clean_content_delivery(self, id_user: int):
-        try:
-            async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_clean_content_delivery(id_user)
-        except Exception as e:
-            await send_message('Ошибка запроса в методе clean_delivery', os.getenv('EMAIL'), str(e))
-
-    async def execute_clean_content_delivery(self, id_user: int):
-        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"CONTENT_DELIVERY = f'empty_____None/////empty_____None/////empty_____None/////" \
-                         f"empty_____None/////empty_____None/////empty_____None/////empty_____None/////" \
-                         f"empty_____None/////empty_____None' " \
-                         f"WHERE ID_USER = {self.quote(id_user)} "
-            await cursor.execute(sql_record)
-            await self.conn.commit()
+            sql_contact_user = f"SELECT Id_order, Comment, Content FROM ORDER_USER " \
+                            f"WHERE ID_USER = {self.quote(user_id)} " \
+                            f"AND Kind_transport_company = {self.quote(kind_transport_company)} " \
+                            f"AND Status != 'New' "
+            await cursor.execute(sql_contact_user)
+            row_table = await cursor.fetchall()
+            return row_table
 
     @staticmethod
     def quote(request):

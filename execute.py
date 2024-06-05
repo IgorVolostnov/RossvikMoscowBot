@@ -172,7 +172,7 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_update_history(id_user, history)
         except Exception as e:
-            await send_message('Ошибка запроса в методе add_element_history', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе update_history', os.getenv('EMAIL'), str(e))
 
     async def execute_update_history(self, id_user: int, history: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
@@ -470,7 +470,7 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_delete_nomenclature_basket(id_user, id_nomenclature)
         except Exception as e:
-            await send_message('Ошибка запроса в методе clean_basket', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе delete_nomenclature_basket', os.getenv('EMAIL'), str(e))
 
     async def execute_delete_nomenclature_basket(self, id_user: int, id_nomenclature: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
@@ -540,7 +540,8 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_record_order_kind_transport_company(id_user, kind_transport_company)
         except Exception as e:
-            await send_message('Ошибка запроса в методе record_order_kind_transport_company', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе record_order_kind_transport_company', os.getenv('EMAIL'),
+                               str(e))
 
     async def execute_record_order_kind_transport_company(self, id_user: int, kind_transport_company: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
@@ -550,6 +551,36 @@ class Execute:
                          f"Content = '' " \
                          f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
             await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def record_order_comment(self, id_user: int, comment: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_comment(id_user, comment)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_comment', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_order_comment(self, id_user: int, comment: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_comment = f"UPDATE ORDER_USER SET " \
+                         f"Comment = '{comment}' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
+            await cursor.execute(sql_comment)
+            await self.conn.commit()
+
+    async def record_order_content(self, id_user: int, content: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_content(id_user, content)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_content', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_order_content(self, id_user: int, content: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_content = f"UPDATE ORDER_USER SET " \
+                         f"Content = '{content}' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
+            await cursor.execute(sql_content)
             await self.conn.commit()
 
     async def record_order_xlsx(self, id_user: int, id_order: str, path_order: str):
@@ -589,7 +620,7 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_delete_new_order(id_user)
         except Exception as e:
-            await send_message('Ошибка запроса в методе clean_basket', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе delete_new_order', os.getenv('EMAIL'), str(e))
 
     async def execute_delete_new_order(self, id_user: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
@@ -602,7 +633,7 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_get_info_order(user_id)
         except Exception as e:
-            await send_message('Ошибка запроса в методе get_delivery_address', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе get_info_order', os.getenv('EMAIL'), str(e))
 
     async def execute_get_info_order(self, user_id: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
@@ -635,7 +666,7 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_get_contact_user(user_id, kind_transport_company)
         except Exception as e:
-            await send_message('Ошибка запроса в методе get_delivery_address', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе get_contact_user', os.getenv('EMAIL'), str(e))
 
     async def execute_get_contact_user(self, user_id: int, kind_transport_company: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:

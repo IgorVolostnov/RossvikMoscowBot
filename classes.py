@@ -59,6 +59,9 @@ class BotMessage(Bot):
         return await self.edit_message_text(text=text_message, chat_id=chat_message,
                                             message_id=id_message, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def edit_head_keyboard(self, chat_message: int, id_message: int, keyboard: InlineKeyboardMarkup):
+        return await self.edit_message_reply_markup(chat_id=chat_message, message_id=id_message, reply_markup=keyboard)
+
     async def hide_dealer_caption(self, text_caption: str, chat_message: int, id_message: int):
         await self.edit_message_caption(caption=text_caption, chat_id=chat_message, message_id=id_message,
                                         parse_mode=ParseMode.HTML)
@@ -107,9 +110,20 @@ class BotMessage(Bot):
         name_file = f"voice_{id_file}"
         filepath = f"{os.path.dirname(__file__)}\\voice\\{name_file}.ogg"
         file_id = message.voice.file_id
+        caption = message.caption
         file = await self.get_file(file_id)
         await self.download_file(file_path=file.file_path, destination=f"{filepath}")
-        return filepath
+        return filepath, caption
+
+    async def save_photo(self, message: Message):
+        id_file = re.sub('\W+', '', str(datetime.datetime.now()))
+        name_file = f"photo_{id_file}"
+        filepath = f"{os.path.dirname(__file__)}\\photo\\{name_file}.jpg"
+        file_id = message.photo[-1].file_id
+        caption = message.caption
+        file = await self.get_file(file_id)
+        await self.download_file(file_path=file.file_path, destination=f"{filepath}")
+        return filepath, caption
 
     @staticmethod
     def format_text(text_message: str):
@@ -231,8 +245,9 @@ class DispatcherMessage(Dispatcher):
                     loop.create_task(self.record_message_document(message))
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "photo":
-                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
-                    print("photo")
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(self.record_message_photo(message))
+                    await self.timer.start(message.from_user.id)
                 elif message.content_type == "sticker":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("sticker")
@@ -1743,22 +1758,27 @@ class DispatcherMessage(Dispatcher):
         answer = await self.answer_text(message, change_text)
         arr_message.append(str(answer.message_id))
         await self.execute.add_arr_messages(message.from_user.id, arr_message)
-        messages_from_user = await self.execute.get_delivery_address(message.from_user.id)
-        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
-        if messages_from_user is None:
-            await self.execute.record_delivery(message.from_user.id, message.text)
-            change_text_head = f"Сообщение для отправки вместе с заказом:\n{message.text}"
-            await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
-                                             self.build_keyboard(head_menu_button, 2))
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if order_info[9] == '':
+            amount_attachments = '0'
         else:
-            arr_messages_from_user = self.get_arr_message_user(messages_from_user)
-            new_arr_message_from_user = self.add_message_user(arr_messages_from_user, message.text)
+            amount_attachments = str(len(order_info[9].split('///')))
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount_attachments})',
+                            'post': 'Отправить заказ 📫'}
+        if order_info[8] == '':
+            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(message.text)}"
+            await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                       self.build_keyboard(head_menu_button, 2))
+            await self.execute.record_order_comment(message.from_user.id, message.text)
+        else:
+            arr_text_from_user = self.get_arr_message_user(order_info[8])
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, message.text)
             new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_delivery(message.from_user.id, new_string_message)
-            new_string = '\n'.join(new_string_message.split('/////'))
-            change_text_head = f"Сообщение для отправки вместе с заказом:\n{new_string}"
-            await self.bot.edit_head_message(change_text_head, message.chat.id, int(head_message),
-                                             self.build_keyboard(head_menu_button, 2))
+            new_string = '\n'.join(new_arr_message_from_user)
+            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
+            await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                       self.build_keyboard(head_menu_button, 2))
+            await self.execute.record_order_comment(message.from_user.id, new_string_message)
 
     async def record_message_audio(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1770,15 +1790,38 @@ class DispatcherMessage(Dispatcher):
         arr_message.append(str(answer.message_id))
         await self.execute.add_arr_messages(message.from_user.id, arr_message)
         audio_info = await self.bot.save_audio(message)
-        arr_content = await self.execute.get_content_delivery(message.from_user.id)
-        dict_content = self.get_dict_content_delivery(arr_content)
-        if dict_content['audio'].get('empty') == 'None':
-            dict_content['audio'].clear()
-            dict_content['audio'][audio_info[0]] = audio_info[1]
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if order_info[9] == '':
+            await self.execute.record_order_content(message.from_user.id, audio_info[0])
         else:
-            dict_content['audio'][audio_info[0]] = audio_info[1]
-        string_record = self.assembling_content_delivery_dict(dict_content)
-        await self.execute.record_content_delivery(message.from_user.id, string_record)
+            arr_text_from_user = self.get_arr_message_user(order_info[9])
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, audio_info[0])
+            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_content(message.from_user.id, new_string_message)
+        if audio_info[1]:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            if order_info[8] == '':
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(audio_info[1])}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, audio_info[1])
+            else:
+                arr_text_from_user = self.get_arr_message_user(order_info[8])
+                new_arr_message_from_user = self.add_message_user(arr_text_from_user, audio_info[1])
+                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+                new_string = '\n'.join(new_arr_message_from_user)
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, new_string_message)
+        else:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
+                                              self.build_keyboard(head_menu_button, 2))
 
     async def record_message_document(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1790,15 +1833,38 @@ class DispatcherMessage(Dispatcher):
         arr_message.append(str(answer.message_id))
         await self.execute.add_arr_messages(message.from_user.id, arr_message)
         document_info = await self.bot.save_document(message)
-        arr_content = await self.execute.get_content_delivery(message.from_user.id)
-        dict_content = self.get_dict_content_delivery(arr_content)
-        if dict_content['document'].get('empty') == 'None':
-            dict_content['document'].clear()
-            dict_content['document'][document_info[0]] = document_info[1]
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if order_info[9] == '':
+            await self.execute.record_order_content(message.from_user.id, document_info[0])
         else:
-            dict_content['document'][document_info[0]] = document_info[1]
-        string_record = self.assembling_content_delivery_dict(dict_content)
-        await self.execute.record_content_delivery(message.from_user.id, string_record)
+            arr_text_from_user = self.get_arr_message_user(order_info[9])
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, document_info[0])
+            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_content(message.from_user.id, new_string_message)
+        if document_info[1]:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            if order_info[8] == '':
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(document_info[1])}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, document_info[1])
+            else:
+                arr_text_from_user = self.get_arr_message_user(order_info[8])
+                new_arr_message_from_user = self.add_message_user(arr_text_from_user, document_info[1])
+                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+                new_string = '\n'.join(new_arr_message_from_user)
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, new_string_message)
+        else:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
+                                              self.build_keyboard(head_menu_button, 2))
 
     async def record_message_voice(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1809,16 +1875,90 @@ class DispatcherMessage(Dispatcher):
         answer = await self.answer_text(message, change_text)
         arr_message.append(str(answer.message_id))
         await self.execute.add_arr_messages(message.from_user.id, arr_message)
-        arr_content = await self.execute.get_content_delivery(message.from_user.id)
-        dict_content = self.get_dict_content_delivery(arr_content)
         voice_info = await self.bot.save_voice(message)
-        if dict_content['voice'].get('empty') == 'None':
-            dict_content['voice'].clear()
-            dict_content['voice'][voice_info] = None
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if order_info[9] == '':
+            await self.execute.record_order_content(message.from_user.id, voice_info[0])
         else:
-            dict_content['voice'][voice_info] = None
-        string_record = self.assembling_content_delivery_dict(dict_content)
-        await self.execute.record_content_delivery(message.from_user.id, string_record)
+            arr_text_from_user = self.get_arr_message_user(order_info[9])
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, voice_info[0])
+            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_content(message.from_user.id, new_string_message)
+        if voice_info[1]:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            if order_info[8] == '':
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(voice_info[1])}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, voice_info[1])
+            else:
+                arr_text_from_user = self.get_arr_message_user(order_info[8])
+                new_arr_message_from_user = self.add_message_user(arr_text_from_user, voice_info[1])
+                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+                new_string = '\n'.join(new_arr_message_from_user)
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, new_string_message)
+        else:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
+                                              self.build_keyboard(head_menu_button, 2))
+
+    async def record_message_photo(self, message: Message):
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        await self.delete_messages(message.from_user.id, head_message)
+        arr_message = [str(message.message_id)]
+        change_text = f"Сообщение получено"
+        answer = await self.answer_text(message, change_text)
+        arr_message.append(str(answer.message_id))
+        await self.execute.add_arr_messages(message.from_user.id, arr_message)
+        photo_info = await self.bot.save_photo(message)
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if order_info[9] == '':
+            await self.execute.record_order_content(message.from_user.id, photo_info[0])
+        else:
+            arr_text_from_user = self.get_arr_message_user(order_info[9])
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, photo_info[0])
+            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_content(message.from_user.id, new_string_message)
+        if photo_info[1]:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            if order_info[8] == '':
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(photo_info[1])}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, photo_info[1])
+            else:
+                arr_text_from_user = self.get_arr_message_user(order_info[8])
+                new_arr_message_from_user = self.add_message_user(arr_text_from_user, photo_info[1])
+                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+                new_string = '\n'.join(new_arr_message_from_user)
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
+                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+                                                           self.build_keyboard(head_menu_button, 2))
+                await self.execute.record_order_comment(message.from_user.id, new_string_message)
+        else:
+            amount = self.check_amount_attachments(order_info[9])
+            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
+                                'post': 'Отправить заказ 📫'}
+            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
+                                              self.build_keyboard(head_menu_button, 2))
+
+    @staticmethod
+    def check_amount_attachments(current_amount_attachments):
+        if current_amount_attachments == '':
+            amount_attachments = '1'
+        else:
+            amount_attachments = str(len(current_amount_attachments.split('///')) + 1)
+        return amount_attachments
 
     async def get_attachments(self, id_user: int):
         arr_attachments = []
@@ -2061,12 +2201,12 @@ class DispatcherMessage(Dispatcher):
 
     @staticmethod
     def get_arr_message_user(messages_user: str):
-        arr_arr_message_user = messages_user.split('/////')
+        arr_arr_message_user = messages_user.split('///')
         return arr_arr_message_user
 
     @staticmethod
     def get_arr_messages_user_for_record(arr_messages: list):
-        string_record = '/////'.join(arr_messages)
+        string_record = '///'.join(arr_messages)
         return string_record
 
     @staticmethod

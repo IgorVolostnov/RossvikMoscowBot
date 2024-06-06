@@ -265,7 +265,7 @@ class Execute:
     async def execute_record_message(self, user_id: int, record_message: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"MESSAGES = '{record_message}' " \
+                         f"MESSAGES = {self.quote(record_message)} " \
                          f"WHERE ID_USER = {self.quote(user_id)} "
             await cursor.execute(sql_record)
             await self.conn.commit()
@@ -378,6 +378,23 @@ class Execute:
                 return None
             else:
                 return self.assembling_basket(basket)
+
+    async def current_basket_for_xlsx(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_current_basket_for_xlsx(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе current_basket', os.getenv('EMAIL'), str(e))
+
+    async def execute_current_basket_for_xlsx(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_basket = f"SELECT * FROM BASKET WHERE Id_user = {self.quote(id_user)} "
+            await cursor.execute(sql_basket)
+            basket = await cursor.fetchall()
+            if len(basket) == 0:
+                return None
+            else:
+                return self.get_basket_dict_for_xlsx(basket)
 
     async def current_amount_basket(self, id_user: int):
         try:
@@ -678,6 +695,25 @@ class Execute:
             row_table = await cursor.fetchall()
             return row_table
 
+    async def get_new_content_user(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_new_content_user(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_new_content_user', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_new_content_user(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_contact_user = f"SELECT Content FROM ORDER_USER " \
+                            f"WHERE ID_USER = {self.quote(user_id)} " \
+                            f"AND Status = 'New' "
+            await cursor.execute(sql_contact_user)
+            row_table = await cursor.fetchone()
+            if row_table is None:
+                return None
+            else:
+                return row_table
+
     @staticmethod
     def quote(request):
         return f"'{str(request)}'"
@@ -744,14 +780,13 @@ class Execute:
         return assembling_dict_basket
 
     @staticmethod
-    def get_basket_dict(basket: str):
+    def get_basket_dict_for_xlsx(basket: list):
         basket_dict = {}
         if basket is None:
             basket_dict = {}
         else:
-            for item in basket.split():
-                row = item.split('///')
-                basket_dict[row[0]] = [row[1], row[2]]
+            for item in basket:
+                basket_dict[item[1]] = [item[2], item[3]]
         return basket_dict
 
     @staticmethod

@@ -125,6 +125,16 @@ class BotMessage(Bot):
         await self.download_file(file_path=file.file_path, destination=f"{filepath}")
         return filepath, caption
 
+    async def save_video(self, message: Message):
+        id_file = re.sub('\W+', '', str(datetime.datetime.now()))
+        name_file = f"video_{id_file}"
+        filepath = f"{os.path.dirname(__file__)}\\video\\{name_file}.mp4"
+        file_id = message.video.file_id
+        caption = message.caption
+        file = await self.get_file(file_id)
+        await self.download_file(file_path=file.file_path, destination=f"{filepath}")
+        return filepath, caption
+
     @staticmethod
     def format_text(text_message: str):
         cleaner = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
@@ -226,40 +236,59 @@ class DispatcherMessage(Dispatcher):
             "group_chat_created", "supergroup_chat_created", "channel_chat_created", "migrate_to_chat_id",
             "migrate_from_chat_id", "pinned_message"}))
         async def get_message(message: Message):
-            # print(message)
             current_history = await self.execute.get_element_history(message.from_user.id, -1)
             if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
                     try:
-                        await self.record_message_comment_user(message)
+                        arr_message = await self.get_answer(message)
+                        info_text = await self.record_message_comment_user(message)
+                        await self.change_head_message(message.from_user.id, int(arr_message[0]), info_text[0],
+                                                       info_text[1])
+                        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
                         await self.timer.start(message.from_user.id)
                     except IndexError:
                         await self.checking_bot(message)
                         await self.send_search_result(message)
                 elif message.content_type == "audio":
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(self.record_message_audio(message))
+                    arr_message = await self.get_answer(message)
+                    info_audio = await self.record_message_audio(message)
+                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_audio[0],
+                                                   info_audio[1])
+                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "document":
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(self.record_message_document(message))
+                    arr_message = await self.get_answer(message)
+                    info_document = await self.record_message_document(message)
+                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_document[0],
+                                                   info_document[1])
+                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "photo":
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(self.record_message_photo(message))
+                    arr_message = await self.get_answer(message)
+                    info_photo = await self.record_message_photo(message)
+                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_photo[0],
+                                                   info_photo[1])
+                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "sticker":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("sticker")
                 elif message.content_type == "video":
-                    await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
-                    print("video")
+                    arr_message = await self.get_answer(message)
+                    info_video = await self.record_message_video(message)
+                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_video[0],
+                                                   info_video[1])
+                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+                    await self.timer.start(message.from_user.id)
                 elif message.content_type == "video_note":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("video_note")
                 elif message.content_type == "voice":
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(self.record_message_voice(message))
+                    arr_message = await self.get_answer(message)
+                    info_voice = await self.record_message_video(message)
+                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_voice[0],
+                                                   info_voice[1])
+                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "location":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
@@ -397,6 +426,7 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
         async def post_order(callback: CallbackQuery):
             await self.post_admin(callback)
+            await self.delete_history_delivery(callback.from_user.id)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_delivery'))
@@ -484,9 +514,9 @@ class DispatcherMessage(Dispatcher):
                     await self.return_delivery(callback)
                     await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'attachments'))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'new_attachments'))
         async def send_attachments(callback: CallbackQuery):
-            await self.show_attachments(callback)
+            await self.show_new_attachments(callback.from_user.id)
             await self.timer.start(callback.from_user.id)
 
     async def checking_bot(self, message: Message):
@@ -1136,12 +1166,7 @@ class DispatcherMessage(Dispatcher):
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
-        arr_history = await self.execute.get_arr_history(call_back.from_user.id)
-        new_arr_history = []
-        for item in arr_history:
-            if 'Корзина' not in item:
-                new_arr_history.append(item)
-        await self.execute.update_history(call_back.from_user.id, ' '.join(new_arr_history))
+        await self.delete_history_basket(call_back.from_user.id, 'Корзина')
 
     async def minus_amount_basket(self, call_back: CallbackQuery, number_page: str):
         try:
@@ -1273,6 +1298,19 @@ class DispatcherMessage(Dispatcher):
                 return number_page
         except TelegramBadRequest:
             pass
+
+    async def delete_history_basket(self, id_user: int, delete_item_history: str):
+        arr_history = await self.execute.get_arr_history(id_user)
+        new_arr_history = []
+        for item in arr_history:
+            if delete_item_history not in item:
+                new_arr_history.append(item)
+        await self.execute.update_history(id_user, ' '.join(new_arr_history))
+
+    async def delete_history_delivery(self, id_user: int):
+        arr_history = await self.execute.get_arr_history(id_user)
+        new_arr_history = arr_history[:-3]
+        await self.execute.update_history(id_user, ' '.join(new_arr_history))
 
     @staticmethod
     def assembling_basket_dict_for_order(basket_dict: dict):
@@ -1552,6 +1590,7 @@ class DispatcherMessage(Dispatcher):
         list_user_admin = await self.execute.get_user_admin
         menu_button = {'attachments': 'Показать вложения', 'take_order': '💬 Взять заказ в обработку'}
         info_delivery_address_from_user = await self.execute.get_delivery_address(call_back.from_user.id)
+        comment = '\n'.join(info_delivery_address_from_user[2].split('///'))
         list_messages_admins = []
         for user in list_user_admin:
             answer = await self.bot.send_message_order(int(user[0]),
@@ -1562,7 +1601,7 @@ class DispatcherMessage(Dispatcher):
                                                        info_order[1],
                                                        f"\n{info_delivery_address_from_user[0]}\n"
                                                        f"{info_delivery_address_from_user[1]}\n"
-                                                       f"{info_delivery_address_from_user[2]}",
+                                                       f"{comment}",
                                                        info_order[0],
                                                        self.build_keyboard(menu_button, 1))
             list_messages_admins.append(str(answer.message_id))
@@ -1575,9 +1614,10 @@ class DispatcherMessage(Dispatcher):
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
+        await self.delete_history_basket(call_back.from_user.id, 'Корзина')
 
     async def record_data_order_by_xlsx(self, call_back: CallbackQuery):
-        current_basket_dict = await self.execute.current_basket(call_back.from_user.id)
+        current_basket_dict = await self.execute.current_basket_for_xlsx(call_back.from_user.id)
         order = await self.save_order(call_back, current_basket_dict)
         number_order = order[0]
         order_path = order[1]
@@ -1665,16 +1705,17 @@ class DispatcherMessage(Dispatcher):
         arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_pickup[call_back.data])
         head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
         if len(arr_contact) == 0:
+            text_format = self.format_text(f"ООО «Алькар»{whitespace}ИНН 9715341213 КПП 771501001{whitespace}"
+                                           f"Юридический, фактический и почтовый адрес: 127562, город Москва, улица "
+                                           f"Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}Тел. +7 (495) 215-000-3, "
+                                           f"8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}"
+                                           f"Приеду во вторник!")
             head_text = f"{call_back.from_user.first_name} {call_back.from_user.last_name} у нас нет контактных " \
                         f"данных по Вашей учетной записи. Мы можем выставить счет на Частное лицо или отправьте нам " \
-                        f"сообщение с Вашими реквизитами, например:{whitespace}ООО «Алькар»{whitespace}" \
-                        f"ИНН 9715341213 КПП 771501001{whitespace}Юридический, фактический и почтовый адрес: " \
-                        f"127562, город Москва, улица Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}" \
-                        f"Тел. +7 (495) 215-000-3, 8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}" \
-                        f"Приеду во вторник!"
+                        f"сообщение с Вашими реквизитами, например:{whitespace}{text_format}"
             if call_back.message.caption:
-                answer = await self.answer_message(call_back.message, head_text,
-                                                   self.build_keyboard(head_menu_button, 2))
+                answer = await self.answer_message_by_basket(call_back.message, head_text,
+                                                             self.build_keyboard(head_menu_button, 2))
                 await self.delete_messages(call_back.from_user.id)
                 await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
             else:
@@ -1685,18 +1726,20 @@ class DispatcherMessage(Dispatcher):
                         f"Можете выбрать из списка ниже либо отправить нам новые реквизиты и комментарии одним или " \
                         f"несколькими сообщениями."
             if call_back.message.caption:
-                answer = await self.answer_message(call_back.message, head_text,
-                                                   self.build_keyboard(head_menu_button, 2))
+                answer = await self.answer_message_by_basket(call_back.message, head_text,
+                                                             self.build_keyboard(head_menu_button, 2))
                 await self.delete_messages(call_back.from_user.id)
                 await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
             else:
-                answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
+                answer = await self.edit_message_by_basket(call_back.message, head_text,
+                                                           self.build_keyboard(head_menu_button, 2))
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
             arr_answers = []
             for contact in arr_contact:
                 menu_contact = {f'choice_contact{contact[0]}': 'Выбрать эти реквизиты ✅',
                                 f'delete_record{contact[0]}': 'Удалить запись 🗑️'}
-                answer_contact = await self.send_file(answer, contact[2], contact[1],
+                comment = '\n'.join(contact[1].split('///'))
+                answer_contact = await self.send_file(answer, contact[2], comment,
                                                       self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
@@ -1707,270 +1750,156 @@ class DispatcherMessage(Dispatcher):
         arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_delivery[call_back.data])
         head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
         if len(arr_contact) == 0:
+            text_format = self.format_text(f"ООО «Алькар»{whitespace}ИНН 9715341213 КПП 771501001{whitespace}"
+                                           f"Юридический, фактический и почтовый адрес:127562, город Москва, улица "
+                                           f"Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}Тел. +7 (495) 215-000-3, "
+                                           f"8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}Адрес "
+                                           f"доставки: Мытищи, 1-ая Новая, 57{whitespace}Режим работы: 9:00 - 20:00")
             head_text = f"{call_back.from_user.first_name} {call_back.from_user.last_name} у нас нет контактных " \
                         f"данных по Вашей учетной записи. Мы можем выставить счет на Частное лицо или отправьте нам " \
-                        f"сообщение с Вашими реквизитами, например:{whitespace}ООО «Алькар»{whitespace}" \
-                        f"ИНН 9715341213 КПП 771501001{whitespace}Юридический, фактический и почтовый адрес: " \
-                        f"127562, город Москва, улица Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}" \
-                        f"Тел. +7 (495) 215-000-3, 8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}" \
-                        f"Адрес доставки: Мытищи, 1-ая Новая, 57{whitespace}" \
-                        f"Режим работы: 9:00 - 20:00"
+                        f"сообщение с Вашими реквизитами, например:{whitespace}{text_format}"
             if call_back.message.caption:
-                answer = await self.answer_message(call_back.message, head_text,
-                                                   self.build_keyboard(head_menu_button, 2))
+                answer = await self.answer_message_by_basket(call_back.message, head_text,
+                                                             self.build_keyboard(head_menu_button, 2))
                 await self.delete_messages(call_back.from_user.id)
                 await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
             else:
-                answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
+                answer = await self.edit_message_by_basket(call_back.message, head_text,
+                                                           self.build_keyboard(head_menu_button, 2))
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
         else:
+            text_format = self.format_text(f"Шиномонтаж на Красной площади{whitespace}Адрес: Москва, ул Тверская, "
+                                           f"д 10{whitespace}Режим работы: 9:00 - 20:00")
             head_text = f"Мы сохранили информацию, которую Вы нам отправляли при предыдущих заказах.{whitespace}" \
                         f"Можете выбрать из списка ниже или отправить нам новые реквизиты и комментарии одним или " \
-                        f"несколькими сообщениями. Например:{whitespace}" \
-                        f"Шиномонтаж на Красной площади{whitespace}" \
-                        f"Адрес: Москва, ул Тверская, д 10{whitespace}" \
-                        f"Режим работы: 9:00 - 20:00"
+                        f"несколькими сообщениями.{whitespace}Например:{whitespace}{text_format}"
             if call_back.message.caption:
-                answer = await self.answer_message(call_back.message, head_text,
-                                                   self.build_keyboard(head_menu_button, 2))
+                answer = await self.answer_message_by_basket(call_back.message, head_text,
+                                                             self.build_keyboard(head_menu_button, 2))
                 await self.delete_messages(call_back.from_user.id)
                 await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
             else:
-                answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
+                answer = await self.edit_message_by_basket(call_back.message, head_text,
+                                                           self.build_keyboard(head_menu_button, 2))
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
             arr_answers = []
             for contact in arr_contact:
                 menu_contact = {f'choice_contact{contact[0]}': 'Выбрать эти реквизиты ✅',
                                 f'delete_record{contact[0]}': 'Удалить запись 🗑️'}
-                answer_contact = await self.send_file(answer, contact[2], contact[1],
+                comment = '\n'.join(contact[1].split('///'))
+                answer_contact = await self.send_file(answer, contact[2], comment,
                                                       self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
         await self.execute.record_order_kind_transport_company(call_back.from_user.id,
                                                                self.kind_delivery[call_back.data])
 
+    async def show_new_attachments(self, id_user: int):
+        content = await self.execute.get_new_content_user(id_user)
+        arr_content = content[0].split('///')
+        print(arr_content)
+
     async def record_message_comment_user(self, message: Message):
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        text_message = await self.change_comment(message.from_user.id, message.text, order_info[8])
+        return order_info[9], text_message
+
+    async def record_message_audio(self, message: Message):
+        audio_info = await self.bot.save_audio(message)
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if audio_info[1]:
+            caption_message = await self.change_comment(message.from_user.id, audio_info[1], order_info[8])
+            amount = await self.amount_content(message.from_user.id, audio_info[0], order_info[9])
+        else:
+            caption_message = None
+            amount = await self.amount_content(message.from_user.id, audio_info[0], order_info[9])
+        return amount, caption_message
+
+    async def record_message_document(self, message: Message):
+        document_info = await self.bot.save_document(message)
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if document_info[1]:
+            caption_message = await self.change_comment(message.from_user.id, document_info[1], order_info[8])
+            amount = await self.amount_content(message.from_user.id, document_info[0], order_info[9])
+        else:
+            caption_message = None
+            amount = await self.amount_content(message.from_user.id, document_info[0], order_info[9])
+        return amount, caption_message
+
+    async def record_message_voice(self, message: Message):
+        voice_info = await self.bot.save_voice(message)
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if voice_info[1]:
+            caption_message = await self.change_comment(message.from_user.id, voice_info[1], order_info[8])
+            amount = await self.amount_content(message.from_user.id, voice_info[0], order_info[9])
+        else:
+            caption_message = None
+            amount = await self.amount_content(message.from_user.id, voice_info[0], order_info[9])
+        return amount, caption_message
+
+    async def record_message_photo(self, message: Message):
+        photo_info = await self.bot.save_photo(message)
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if photo_info[1]:
+            caption_message = await self.change_comment(message.from_user.id, photo_info[1], order_info[8])
+            amount = await self.amount_content(message.from_user.id, photo_info[0], order_info[9])
+        else:
+            caption_message = None
+            amount = await self.amount_content(message.from_user.id, photo_info[0], order_info[9])
+        return amount, caption_message
+
+    async def record_message_video(self, message: Message):
+        video_info = await self.bot.save_video(message)
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        if video_info[1]:
+            caption_message = await self.change_comment(message.from_user.id, video_info[1], order_info[8])
+            amount = await self.amount_content(message.from_user.id, video_info[0], order_info[9])
+        else:
+            caption_message = None
+            amount = await self.amount_content(message.from_user.id, video_info[0], order_info[9])
+        return amount, caption_message
+
+    async def get_answer(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
-        head_message = arr_messages[0]
-        await self.delete_messages(message.from_user.id, head_message)
-        arr_message = [str(message.message_id)]
+        arr_messages.append(str(message.message_id))
         change_text = f"Сообщение получено"
         answer = await self.answer_text(message, change_text)
-        arr_message.append(str(answer.message_id))
-        await self.execute.add_arr_messages(message.from_user.id, arr_message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if order_info[9] == '':
-            amount_attachments = '0'
+        arr_messages.append(str(answer.message_id))
+        return arr_messages
+
+    async def amount_content(self, user_id: int, new_content: str, current_content: str):
+        if current_content == '':
+            await self.execute.record_order_content(user_id, new_content)
+            return '1'
         else:
-            amount_attachments = str(len(order_info[9].split('///')))
-        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount_attachments})',
-                            'post': 'Отправить заказ 📫'}
-        if order_info[8] == '':
-            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(message.text)}"
-            await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                       self.build_keyboard(head_menu_button, 2))
-            await self.execute.record_order_comment(message.from_user.id, message.text)
+            arr_text_from_user = self.get_arr_message_user(current_content)
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_content)
+            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_content(user_id, new_string_message)
+            return str(len(new_arr_message_from_user))
+
+    async def change_comment(self, user_id: int, new_comment: str, current_comment: str):
+        if current_comment == '':
+            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_comment)}"
+            await self.execute.record_order_comment(user_id, new_comment)
         else:
-            arr_text_from_user = self.get_arr_message_user(order_info[8])
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, message.text)
+            arr_text_from_user = self.get_arr_message_user(current_comment)
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_comment)
             new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
             new_string = '\n'.join(new_arr_message_from_user)
             change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
-            await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
+            await self.execute.record_order_comment(user_id, new_string_message)
+        return change_text_head
+
+    async def change_head_message(self, user_id: int, head_message: int, amount_content: str,
+                                  text_head_message: str = None):
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Показать вложения 🗃️ ({amount_content})',
+                            'post': 'Отправить заказ 📫'}
+        if text_head_message:
+            await self.bot.edit_head_message_by_basket(text_head_message, user_id, head_message,
                                                        self.build_keyboard(head_menu_button, 2))
-            await self.execute.record_order_comment(message.from_user.id, new_string_message)
-
-    async def record_message_audio(self, message: Message):
-        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
-        head_message = arr_messages[0]
-        await self.delete_messages(message.from_user.id, head_message)
-        arr_message = [str(message.message_id)]
-        change_text = f"Сообщение получено"
-        answer = await self.answer_text(message, change_text)
-        arr_message.append(str(answer.message_id))
-        await self.execute.add_arr_messages(message.from_user.id, arr_message)
-        audio_info = await self.bot.save_audio(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if order_info[9] == '':
-            await self.execute.record_order_content(message.from_user.id, audio_info[0])
         else:
-            arr_text_from_user = self.get_arr_message_user(order_info[9])
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, audio_info[0])
-            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_content(message.from_user.id, new_string_message)
-        if audio_info[1]:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            if order_info[8] == '':
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(audio_info[1])}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, audio_info[1])
-            else:
-                arr_text_from_user = self.get_arr_message_user(order_info[8])
-                new_arr_message_from_user = self.add_message_user(arr_text_from_user, audio_info[1])
-                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-                new_string = '\n'.join(new_arr_message_from_user)
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, new_string_message)
-        else:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
-                                              self.build_keyboard(head_menu_button, 2))
-
-    async def record_message_document(self, message: Message):
-        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
-        head_message = arr_messages[0]
-        await self.delete_messages(message.from_user.id, head_message)
-        arr_message = [str(message.message_id)]
-        change_text = f"Сообщение получено"
-        answer = await self.answer_text(message, change_text)
-        arr_message.append(str(answer.message_id))
-        await self.execute.add_arr_messages(message.from_user.id, arr_message)
-        document_info = await self.bot.save_document(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if order_info[9] == '':
-            await self.execute.record_order_content(message.from_user.id, document_info[0])
-        else:
-            arr_text_from_user = self.get_arr_message_user(order_info[9])
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, document_info[0])
-            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_content(message.from_user.id, new_string_message)
-        if document_info[1]:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            if order_info[8] == '':
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(document_info[1])}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, document_info[1])
-            else:
-                arr_text_from_user = self.get_arr_message_user(order_info[8])
-                new_arr_message_from_user = self.add_message_user(arr_text_from_user, document_info[1])
-                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-                new_string = '\n'.join(new_arr_message_from_user)
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, new_string_message)
-        else:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
-                                              self.build_keyboard(head_menu_button, 2))
-
-    async def record_message_voice(self, message: Message):
-        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
-        head_message = arr_messages[0]
-        await self.delete_messages(message.from_user.id, head_message)
-        arr_message = [str(message.message_id)]
-        change_text = f"Сообщение получено"
-        answer = await self.answer_text(message, change_text)
-        arr_message.append(str(answer.message_id))
-        await self.execute.add_arr_messages(message.from_user.id, arr_message)
-        voice_info = await self.bot.save_voice(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if order_info[9] == '':
-            await self.execute.record_order_content(message.from_user.id, voice_info[0])
-        else:
-            arr_text_from_user = self.get_arr_message_user(order_info[9])
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, voice_info[0])
-            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_content(message.from_user.id, new_string_message)
-        if voice_info[1]:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            if order_info[8] == '':
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(voice_info[1])}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, voice_info[1])
-            else:
-                arr_text_from_user = self.get_arr_message_user(order_info[8])
-                new_arr_message_from_user = self.add_message_user(arr_text_from_user, voice_info[1])
-                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-                new_string = '\n'.join(new_arr_message_from_user)
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, new_string_message)
-        else:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
-                                              self.build_keyboard(head_menu_button, 2))
-
-    async def record_message_photo(self, message: Message):
-        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
-        head_message = arr_messages[0]
-        await self.delete_messages(message.from_user.id, head_message)
-        arr_message = [str(message.message_id)]
-        change_text = f"Сообщение получено"
-        answer = await self.answer_text(message, change_text)
-        arr_message.append(str(answer.message_id))
-        await self.execute.add_arr_messages(message.from_user.id, arr_message)
-        photo_info = await self.bot.save_photo(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if order_info[9] == '':
-            await self.execute.record_order_content(message.from_user.id, photo_info[0])
-        else:
-            arr_text_from_user = self.get_arr_message_user(order_info[9])
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, photo_info[0])
-            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_content(message.from_user.id, new_string_message)
-        if photo_info[1]:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            if order_info[8] == '':
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(photo_info[1])}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, photo_info[1])
-            else:
-                arr_text_from_user = self.get_arr_message_user(order_info[8])
-                new_arr_message_from_user = self.add_message_user(arr_text_from_user, photo_info[1])
-                new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-                new_string = '\n'.join(new_arr_message_from_user)
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
-                await self.bot.edit_head_message_by_basket(change_text_head, message.chat.id, int(head_message),
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.execute.record_order_comment(message.from_user.id, new_string_message)
-        else:
-            amount = self.check_amount_attachments(order_info[9])
-            head_menu_button = {'back': '◀ 👈 Назад', 'attachments': f'Вложения ({amount})',
-                                'post': 'Отправить заказ 📫'}
-            await self.bot.edit_head_keyboard(message.chat.id, int(head_message),
-                                              self.build_keyboard(head_menu_button, 2))
-
-    @staticmethod
-    def check_amount_attachments(current_amount_attachments):
-        if current_amount_attachments == '':
-            amount_attachments = '1'
-        else:
-            amount_attachments = str(len(current_amount_attachments.split('///')) + 1)
-        return amount_attachments
-
-    async def get_attachments(self, id_user: int):
-        arr_attachments = []
-        arr_content = await self.execute.get_content_delivery(id_user)
-        dict_content = self.get_dict_content_delivery(arr_content)
-        for value in dict_content.values():
-            if value.get('empty') != 'None':
-                for key in value.keys():
-                    string_key = key.split()
-                    arr_attachments.append('___'.join(string_key))
-        string_attachments = '_____'.join(arr_attachments)
-        return string_attachments
+            await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2))
 
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)

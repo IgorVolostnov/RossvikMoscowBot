@@ -570,6 +570,22 @@ class Execute:
             await cursor.execute(sql_record)
             await self.conn.commit()
 
+    async def record_order_comment_and_content(self, id_user: int, comment: str, content: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_comment_and_content(id_user, comment, content)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_comment_and_content', os.getenv('EMAIL'), str(e))
+
+    async def execute_record_order_comment_and_content(self, id_user: int, comment: str, content: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_comment = f"UPDATE ORDER_USER SET " \
+                         f"Comment = '{comment}', " \
+                         f"Content = '{content}' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
+            await cursor.execute(sql_comment)
+            await self.conn.commit()
+
     async def record_order_comment(self, id_user: int, comment: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:

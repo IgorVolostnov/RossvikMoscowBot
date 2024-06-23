@@ -146,6 +146,7 @@ class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
         Dispatcher.__init__(self, **kw)
         self.timer = TimerClean(self, 82800)
+        self.queues = QueuesMedia(self)
         self.bot = parent
         self.data = DATA()
         self.execute = self.data.execute
@@ -257,11 +258,8 @@ class DispatcherMessage(Dispatcher):
                     await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "document":
-                    arr_message = await self.get_answer(message)
-                    info_document = await self.record_message_document(message)
-                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_document[0],
-                                                   info_document[1])
-                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+                    task = asyncio.create_task(self.get_document(message))
+                    await self.queues.start(message.from_user.id, task)
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "photo":
                     arr_message = await self.get_answer(message)
@@ -1799,6 +1797,15 @@ class DispatcherMessage(Dispatcher):
         arr_content = content[0].split('///')
         print(arr_content)
 
+    async def get_document(self, message: Message):
+        document_info = await self.bot.save_document(message)
+        order_info = await self.execute.get_info_order(message.from_user.id)
+        await self.change_comment_and_content(message.from_user.id, document_info[1], order_info[8],
+                                              document_info[0], order_info[9])
+        arr_message = await self.get_answer(message)
+        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+        return True
+
     async def record_message_comment_user(self, message: Message):
         order_info = await self.execute.get_info_order(message.from_user.id)
         text_message = await self.change_comment(message.from_user.id, message.text, order_info[8])
@@ -1815,16 +1822,14 @@ class DispatcherMessage(Dispatcher):
             amount = await self.amount_content(message.from_user.id, audio_info[0], order_info[9])
         return amount, caption_message
 
-    async def record_message_document(self, message: Message):
-        document_info = await self.bot.save_document(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
+    async def record_message_document(self, message: Message, document_info: tuple, order_info: list):
         if document_info[1]:
-            caption_message = await self.change_comment(message.from_user.id, document_info[1], order_info[8])
-            amount = await self.amount_content(message.from_user.id, document_info[0], order_info[9])
+
+            await self.change_comment(message.from_user.id, document_info[1], order_info[8])
+            await self.change_content(message.from_user.id, document_info[0], order_info[9])
         else:
-            caption_message = None
-            amount = await self.amount_content(message.from_user.id, document_info[0], order_info[9])
-        return amount, caption_message
+            await self.change_content(message.from_user.id, document_info[0], order_info[9])
+        print(document_info)
 
     async def record_message_voice(self, message: Message):
         voice_info = await self.bot.save_voice(message)
@@ -1867,39 +1872,56 @@ class DispatcherMessage(Dispatcher):
         arr_messages.append(str(answer.message_id))
         return arr_messages
 
-    async def amount_content(self, user_id: int, new_content: str, current_content: str):
+    async def change_comment_and_content(self, user_id: int, new_comment: str, current_comment: str, new_content: str,
+                                         current_content: str):
+        if current_comment == '' and current_content == '':
+            await self.execute.record_order_comment_and_content(user_id, new_comment, new_content)
+        elif current_comment == '' and current_content != '':
+            arr_text_from_user = self.get_arr_message_user(current_content)
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_content)
+            new_string_content = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_comment_and_content(user_id, new_comment, new_string_content)
+        elif current_comment != '' and current_content == '':
+            arr_text_from_user = self.get_arr_message_user(current_comment)
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_comment)
+            new_string_comment = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_comment_and_content(user_id, new_string_comment, new_content)
+        else:
+            arr_text_from_user_content = self.get_arr_message_user(current_content)
+            new_arr_message_from_user_content = self.add_message_user(arr_text_from_user_content, new_content)
+            new_string_content = self.get_arr_messages_user_for_record(new_arr_message_from_user_content)
+            arr_text_from_user = self.get_arr_message_user(current_comment)
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_comment)
+            new_string_comment = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_comment_and_content(user_id, new_string_comment, new_string_content)
+        return True
+
+    async def change_content(self, user_id: int, new_content: str, current_content: str):
         if current_content == '':
             await self.execute.record_order_content(user_id, new_content)
-            return '1'
         else:
             arr_text_from_user = self.get_arr_message_user(current_content)
             new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_content)
             new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
             await self.execute.record_order_content(user_id, new_string_message)
-            return str(len(new_arr_message_from_user))
+        return True
 
-    async def change_comment(self, user_id: int, new_comment: str, current_comment: str):
-        if current_comment == '':
-            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_comment)}"
-            await self.execute.record_order_comment(user_id, new_comment)
-        else:
-            arr_text_from_user = self.get_arr_message_user(current_comment)
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_comment)
-            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            new_string = '\n'.join(new_arr_message_from_user)
-            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(new_string)}"
-            await self.execute.record_order_comment(user_id, new_string_message)
-        return change_text_head
-
-    async def change_head_message(self, user_id: int, head_message: int, amount_content: str,
-                                  text_head_message: str = None):
-        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Показать вложения 🗃️ ({amount_content})',
+    async def change_head_message_by_media(self, user_id: int):
+        arr_messages = await self.execute.get_arr_messages(user_id)
+        head_message = arr_messages[0]
+        info_order = await self.execute.get_info_order(user_id)
+        amount_content = len(info_order[9].split('///'))
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Показать вложения 🗃️ ({str(amount_content)})',
                             'post': 'Отправить заказ 📫'}
-        if text_head_message:
-            await self.bot.edit_head_message_by_basket(text_head_message, user_id, head_message,
-                                                       self.build_keyboard(head_menu_button, 2))
+        if info_order[8] == '':
+            await self.bot.edit_head_keyboard(user_id, head_message,
+                                              self.build_keyboard(head_menu_button, 2))
         else:
-            await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2))
+            arr_messages = info_order[8].split('///')
+            string_messages = '\n'.join(arr_messages)
+            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
+            await self.bot.edit_head_message_by_basket(change_text_head, user_id, head_message,
+                                                       self.build_keyboard(head_menu_button, 2))
 
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
@@ -2140,7 +2162,10 @@ class DispatcherMessage(Dispatcher):
 
     @staticmethod
     def add_message_user(arr_messages: list, message: str):
-        arr_messages.append(message)
+        if message is None:
+            pass
+        else:
+            arr_messages.append(message)
         return arr_messages
 
     @staticmethod
@@ -2206,3 +2231,38 @@ class TimerClean:
     async def clean_timer(self, user: int):
         self.t.pop(user)
         await self.parent.start_for_timer(user)
+
+
+class QueuesMedia:
+    def __init__(self, parent):
+        self.parent = parent
+        self.task = None
+        self.queues = []
+
+    async def start(self, user_id: int, new_media: asyncio.Task):
+        if len(self.queues) == 0:
+            self.queues.append(new_media)
+            await self.start_task(user_id)
+        else:
+            self.queues.append(new_media)
+
+    async def start_task(self, user_id: int):
+        self.task = self.queues[0]
+        state_task = await self.task
+        await self.delete_task_queues(user_id, state_task)
+
+    async def delete_task_queues(self, user_id: int, finish_task: bool):
+        if finish_task:
+            new_queues = self.queues
+            new_queues.remove(self.task)
+            self.task = None
+            self.queues = new_queues
+        await self.restart_queues(user_id)
+
+    async def restart_queues(self, user_id: int):
+        print(f'Количество задач: {len(self.queues)}')
+        if len(self.queues) != 0:
+            await asyncio.sleep(1)
+            await self.start_task(user_id)
+        else:
+            await self.parent.change_head_message_by_media(user_id)

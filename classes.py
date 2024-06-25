@@ -2,8 +2,8 @@ import asyncio
 import logging
 import re
 import os
-import openpyxl
 import datetime
+import openpyxl
 import requests
 from data import DATA
 from aiogram import F
@@ -241,52 +241,39 @@ class DispatcherMessage(Dispatcher):
             if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
                     try:
+                        await self.record_message_comment_user(message)
+                        await self.change_head_message_by_media(message.from_user.id)
                         arr_message = await self.get_answer(message)
-                        info_text = await self.record_message_comment_user(message)
-                        await self.change_head_message(message.from_user.id, int(arr_message[0]), info_text[0],
-                                                       info_text[1])
                         await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
                         await self.timer.start(message.from_user.id)
                     except IndexError:
                         await self.checking_bot(message)
                         await self.send_search_result(message)
                 elif message.content_type == "audio":
-                    arr_message = await self.get_answer(message)
-                    info_audio = await self.record_message_audio(message)
-                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_audio[0],
-                                                   info_audio[1])
-                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+                    task = asyncio.create_task(self.get_audio(message))
+                    await self.queues.start(message.from_user.id, task)
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "document":
                     task = asyncio.create_task(self.get_document(message))
                     await self.queues.start(message.from_user.id, task)
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "photo":
-                    arr_message = await self.get_answer(message)
-                    info_photo = await self.record_message_photo(message)
-                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_photo[0],
-                                                   info_photo[1])
-                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+                    task = asyncio.create_task(self.get_photo(message))
+                    await self.queues.start(message.from_user.id, task)
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "sticker":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("sticker")
                 elif message.content_type == "video":
-                    arr_message = await self.get_answer(message)
-                    info_video = await self.record_message_video(message)
-                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_video[0],
-                                                   info_video[1])
-                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+                    task = asyncio.create_task(self.get_video(message))
+                    await self.queues.start(message.from_user.id, task)
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "video_note":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
                     print("video_note")
                 elif message.content_type == "voice":
-                    arr_message = await self.get_answer(message)
-                    info_voice = await self.record_message_video(message)
-                    await self.change_head_message(message.from_user.id, int(arr_message[0]), info_voice[0],
-                                                   info_voice[1])
-                    await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+                    task = asyncio.create_task(self.get_voice(message))
+                    await self.queues.start(message.from_user.id, task)
                     await self.timer.start(message.from_user.id)
                 elif message.content_type == "location":
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
@@ -1797,72 +1784,44 @@ class DispatcherMessage(Dispatcher):
         arr_content = content[0].split('///')
         print(arr_content)
 
-    async def get_document(self, message: Message):
-        document_info = await self.bot.save_document(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        await self.change_comment_and_content(message.from_user.id, document_info[1], order_info[8],
-                                              document_info[0], order_info[9])
-        arr_message = await self.get_answer(message)
-        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
-        return True
-
     async def record_message_comment_user(self, message: Message):
         order_info = await self.execute.get_info_order(message.from_user.id)
-        text_message = await self.change_comment(message.from_user.id, message.text, order_info[8])
-        return order_info[9], text_message
+        await self.change_comment(message.from_user.id, message.text, order_info[8])
 
-    async def record_message_audio(self, message: Message):
+    async def get_document(self, message: Message):
+        document_info = await self.bot.save_document(message)
+        arr_message = await self.get_answer(message)
+        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+        return document_info
+
+    async def get_audio(self, message: Message):
         audio_info = await self.bot.save_audio(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if audio_info[1]:
-            caption_message = await self.change_comment(message.from_user.id, audio_info[1], order_info[8])
-            amount = await self.amount_content(message.from_user.id, audio_info[0], order_info[9])
-        else:
-            caption_message = None
-            amount = await self.amount_content(message.from_user.id, audio_info[0], order_info[9])
-        return amount, caption_message
+        arr_message = await self.get_answer(message)
+        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+        return audio_info
 
-    async def record_message_document(self, message: Message, document_info: tuple, order_info: list):
-        if document_info[1]:
-
-            await self.change_comment(message.from_user.id, document_info[1], order_info[8])
-            await self.change_content(message.from_user.id, document_info[0], order_info[9])
-        else:
-            await self.change_content(message.from_user.id, document_info[0], order_info[9])
-        print(document_info)
-
-    async def record_message_voice(self, message: Message):
+    async def get_voice(self, message: Message):
         voice_info = await self.bot.save_voice(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if voice_info[1]:
-            caption_message = await self.change_comment(message.from_user.id, voice_info[1], order_info[8])
-            amount = await self.amount_content(message.from_user.id, voice_info[0], order_info[9])
-        else:
-            caption_message = None
-            amount = await self.amount_content(message.from_user.id, voice_info[0], order_info[9])
-        return amount, caption_message
+        arr_message = await self.get_answer(message)
+        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+        return voice_info
 
-    async def record_message_photo(self, message: Message):
+    async def get_photo(self, message: Message):
         photo_info = await self.bot.save_photo(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if photo_info[1]:
-            caption_message = await self.change_comment(message.from_user.id, photo_info[1], order_info[8])
-            amount = await self.amount_content(message.from_user.id, photo_info[0], order_info[9])
-        else:
-            caption_message = None
-            amount = await self.amount_content(message.from_user.id, photo_info[0], order_info[9])
-        return amount, caption_message
+        arr_message = await self.get_answer(message)
+        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+        return photo_info
 
-    async def record_message_video(self, message: Message):
-        video_info = await self.bot.save_video(message)
-        order_info = await self.execute.get_info_order(message.from_user.id)
-        if video_info[1]:
-            caption_message = await self.change_comment(message.from_user.id, video_info[1], order_info[8])
-            amount = await self.amount_content(message.from_user.id, video_info[0], order_info[9])
-        else:
-            caption_message = None
-            amount = await self.amount_content(message.from_user.id, video_info[0], order_info[9])
-        return amount, caption_message
+    async def get_video(self, message: Message):
+        video_info = await self.bot.save_photo(message)
+        arr_message = await self.get_answer(message)
+        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+        return video_info
+
+    async def record_comment_and_content(self, info_media: tuple, info_order: list):
+        comment = await self.add_element(info_media[1], info_order[0])
+        content = await self.add_element(info_media[0], info_order[1])
+        return comment, content
 
     async def get_answer(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
@@ -1872,56 +1831,58 @@ class DispatcherMessage(Dispatcher):
         arr_messages.append(str(answer.message_id))
         return arr_messages
 
-    async def change_comment_and_content(self, user_id: int, new_comment: str, current_comment: str, new_content: str,
-                                         current_content: str):
-        if current_comment == '' and current_content == '':
-            await self.execute.record_order_comment_and_content(user_id, new_comment, new_content)
-        elif current_comment == '' and current_content != '':
-            arr_text_from_user = self.get_arr_message_user(current_content)
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_content)
-            new_string_content = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_comment_and_content(user_id, new_comment, new_string_content)
-        elif current_comment != '' and current_content == '':
-            arr_text_from_user = self.get_arr_message_user(current_comment)
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_comment)
-            new_string_comment = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_comment_and_content(user_id, new_string_comment, new_content)
+    async def add_element(self, new_element: str, current_element: str):
+        if new_element is None:
+            total_element = current_element
         else:
-            arr_text_from_user_content = self.get_arr_message_user(current_content)
-            new_arr_message_from_user_content = self.add_message_user(arr_text_from_user_content, new_content)
-            new_string_content = self.get_arr_messages_user_for_record(new_arr_message_from_user_content)
-            arr_text_from_user = self.get_arr_message_user(current_comment)
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_comment)
-            new_string_comment = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_comment_and_content(user_id, new_string_comment, new_string_content)
-        return True
+            if current_element == '':
+                total_element = new_element
+            else:
+                arr_text_from_user = self.get_arr_message_user(current_element)
+                new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_element)
+                new_string_comment = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+                total_element = new_string_comment
+        return total_element
 
-    async def change_content(self, user_id: int, new_content: str, current_content: str):
-        if current_content == '':
-            await self.execute.record_order_content(user_id, new_content)
+    async def change_comment(self, user_id: int, new_comment: str, current_comment: str):
+        if current_comment == '':
+            await self.execute.record_order_comment(user_id, new_comment)
         else:
-            arr_text_from_user = self.get_arr_message_user(current_content)
-            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_content)
-            new_string_message = self.get_arr_messages_user_for_record(new_arr_message_from_user)
-            await self.execute.record_order_content(user_id, new_string_message)
-        return True
+            arr_text_from_user = self.get_arr_message_user(current_comment)
+            new_arr_message_from_user = self.add_message_user(arr_text_from_user, new_comment)
+            new_string_comment = self.get_arr_messages_user_for_record(new_arr_message_from_user)
+            await self.execute.record_order_comment(user_id, new_string_comment)
 
     async def change_head_message_by_media(self, user_id: int):
-        arr_messages = await self.execute.get_arr_messages(user_id)
-        head_message = arr_messages[0]
-        info_order = await self.execute.get_info_order(user_id)
-        amount_content = len(info_order[9].split('///'))
-        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Показать вложения 🗃️ ({str(amount_content)})',
-                            'post': 'Отправить заказ 📫'}
-        if info_order[8] == '':
-            await self.bot.edit_head_keyboard(user_id, head_message,
-                                              self.build_keyboard(head_menu_button, 2))
-        else:
-            arr_messages = info_order[8].split('///')
-            string_messages = '\n'.join(arr_messages)
-            change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
-            await self.bot.edit_head_message_by_basket(change_text_head, user_id, head_message,
-                                                       self.build_keyboard(head_menu_button, 2))
+        try:
+            arr_messages = await self.execute.get_arr_messages(user_id)
+            head_message = arr_messages[0]
+            info_order = await self.execute.get_info_order(user_id)
+            if info_order[9] == '':
+                amount_content = 0
+            else:
+                amount_content = len(info_order[9].split('///'))
+            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                                'post': 'Отправить заказ 📫'}
+            if info_order[8] == '':
+                await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2))
+            else:
+                arr_messages = info_order[8].split('///')
+                string_messages = '\n'.join(arr_messages)
+                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
+                await self.bot.edit_head_message_by_basket(change_text_head, user_id, head_message,
+                                                           self.build_keyboard(head_menu_button, 2))
+        except TelegramBadRequest:
+            arr_messages = await self.execute.get_arr_messages(user_id)
+            head_message = arr_messages[0]
+            info_order = await self.execute.get_info_order(user_id)
+            if info_order[9] == '':
+                amount_content = 0
+            else:
+                amount_content = len(info_order[9].split('///'))
+            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                                'post': 'Отправить заказ 📫'}
+            await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2))
 
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
@@ -2162,10 +2123,7 @@ class DispatcherMessage(Dispatcher):
 
     @staticmethod
     def add_message_user(arr_messages: list, message: str):
-        if message is None:
-            pass
-        else:
-            arr_messages.append(message)
+        arr_messages.append(message)
         return arr_messages
 
     @staticmethod
@@ -2236,33 +2194,32 @@ class TimerClean:
 class QueuesMedia:
     def __init__(self, parent):
         self.parent = parent
-        self.task = None
         self.queues = []
+        self.info_media = None
 
     async def start(self, user_id: int, new_media: asyncio.Task):
         if len(self.queues) == 0:
             self.queues.append(new_media)
+            start_info = await self.parent.execute.get_info_order(user_id)
+            self.info_media = [start_info[8], start_info[9]]
             await self.start_task(user_id)
         else:
             self.queues.append(new_media)
 
     async def start_task(self, user_id: int):
-        self.task = self.queues[0]
-        state_task = await self.task
-        await self.delete_task_queues(user_id, state_task)
+        info = await self.queues[0]
+        update_info = await self.parent.record_comment_and_content(info, self.info_media)
+        self.info_media = update_info
+        await self.delete_task_queues(user_id)
 
-    async def delete_task_queues(self, user_id: int, finish_task: bool):
-        if finish_task:
-            new_queues = self.queues
-            new_queues.remove(self.task)
-            self.task = None
-            self.queues = new_queues
+    async def delete_task_queues(self, user_id: int):
+        self.queues.remove(self.queues[0])
         await self.restart_queues(user_id)
 
     async def restart_queues(self, user_id: int):
-        print(f'Количество задач: {len(self.queues)}')
         if len(self.queues) != 0:
-            await asyncio.sleep(1)
             await self.start_task(user_id)
         else:
+            await self.parent.execute.record_order_comment_and_content(user_id, self.info_media[0], self.info_media[1])
+            self.info_media = None
             await self.parent.change_head_message_by_media(user_id)

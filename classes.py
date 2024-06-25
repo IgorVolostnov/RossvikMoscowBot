@@ -498,10 +498,14 @@ class DispatcherMessage(Dispatcher):
                 elif current == 'delivery':
                     await self.return_delivery(callback)
                     await self.timer.start(callback.from_user.id)
+            elif current in self.kind_pickup or current in self.kind_delivery:
+                await self.return_head_message_by_media(callback)
+                await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'new_attachments'))
         async def send_attachments(callback: CallbackQuery):
-            await self.show_new_attachments(callback.from_user.id)
+            await self.show_new_attachments(callback)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
     async def checking_bot(self, message: Message):
@@ -1779,11 +1783,6 @@ class DispatcherMessage(Dispatcher):
         await self.execute.record_order_kind_transport_company(call_back.from_user.id,
                                                                self.kind_delivery[call_back.data])
 
-    async def show_new_attachments(self, id_user: int):
-        content = await self.execute.get_new_content_user(id_user)
-        arr_content = content[0].split('///')
-        print(arr_content)
-
     async def record_message_comment_user(self, message: Message):
         order_info = await self.execute.get_info_order(message.from_user.id)
         await self.change_comment(message.from_user.id, message.text, order_info[8])
@@ -1826,9 +1825,9 @@ class DispatcherMessage(Dispatcher):
     async def get_answer(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
         arr_messages.append(str(message.message_id))
-        change_text = f"Сообщение получено"
-        answer = await self.answer_text(message, change_text)
-        arr_messages.append(str(answer.message_id))
+        # change_text = f"Сообщение получено"
+        # answer = await self.answer_text(message, change_text)
+        # arr_messages.append(str(answer.message_id))
         return arr_messages
 
     async def add_element(self, new_element: str, current_element: str):
@@ -1883,6 +1882,53 @@ class DispatcherMessage(Dispatcher):
             head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                                 'post': 'Отправить заказ 📫'}
             await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2))
+
+    async def return_head_message_by_media(self, call_back: CallbackQuery):
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        if info_order[9] == '':
+            amount_content = 0
+        else:
+            amount_content = len(info_order[9].split('///'))
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                            'post': 'Отправить заказ 📫'}
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
+        answer = await self.answer_message(call_back.message, change_text_head,
+                                           self.build_keyboard(head_menu_button, 2))
+        await self.delete_messages(call_back.from_user.id)
+        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+
+    async def show_new_attachments(self, call_back: CallbackQuery):
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        if info_order[9] == '':
+            pass
+        else:
+            arr_attachments = info_order[9].split('///')
+            i = 0
+            arr = []
+            arr_message = []
+            for media in arr_attachments:
+                if i == 10:
+                    arr_media_message = await self.send_media(call_back.message, arr)
+                    for item in arr_media_message:
+                        arr_message.append(str(item.message_id))
+                    i = 0
+                    arr = [media]
+                    i += 1
+                else:
+                    arr.append(media)
+                    i += 1
+            arr_media_message = await self.send_media(call_back.message, arr)
+            for item in arr_media_message:
+                arr_message.append(str(item.message_id))
+            menu_button = {'back': '◀ 👈 Назад'}
+            text = 'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
+            answer_return = await self.answer_message(call_back.message, self.format_text(text),
+                                                      self.build_keyboard(menu_button, 1))
+            arr_message.append(str(answer_return.message_id))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
 
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
@@ -2036,6 +2082,13 @@ class DispatcherMessage(Dispatcher):
                                                  parse_mode=ParseMode.HTML, reply_markup=keyboard)
         else:
             return await self.answer_message(message, text, keyboard)
+
+    async def send_media(self, message: Message, media: list):
+        media_group = MediaGroupBuilder(caption='Вложенные файлы для отправки вместе с заказом:')
+        for item in media:
+            file_input = FSInputFile(item)
+            media_group.add_document(media=file_input, parse_mode=ParseMode.HTML)
+        return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
 
     async def create_keyboard_edit_caption(self, call_back: CallbackQuery, list_category: list, id_category: str):
         menu_button = {'back': '◀ 👈 Назад'}

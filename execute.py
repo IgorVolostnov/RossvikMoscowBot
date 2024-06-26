@@ -696,18 +696,17 @@ class Execute:
             row_table = await cursor.fetchall()
             return row_table
 
-    async def get_new_content_user(self, user_id: int):
+    async def get_content_order_user(self, order_id: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_get_new_content_user(user_id)
+                return await self.execute_get_content_order_user(order_id)
         except Exception as e:
-            await send_message('Ошибка запроса в методе get_new_content_user', os.getenv('EMAIL'), str(e))
+            await send_message('Ошибка запроса в методе get_content_order_user', os.getenv('EMAIL'), str(e))
 
-    async def execute_get_new_content_user(self, user_id: int):
+    async def execute_get_content_order_user(self, order_id: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_contact_user = f"SELECT Content FROM ORDER_USER " \
-                            f"WHERE ID_USER = {self.quote(user_id)} " \
-                            f"AND Status = 'New' "
+                            f"WHERE Id_order = {self.quote(order_id)} "
             await cursor.execute(sql_contact_user)
             row_table = await cursor.fetchone()
             if row_table is None:

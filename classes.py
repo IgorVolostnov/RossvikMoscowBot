@@ -498,13 +498,25 @@ class DispatcherMessage(Dispatcher):
                 elif current == 'delivery':
                     await self.return_delivery(callback)
                     await self.timer.start(callback.from_user.id)
-            elif current in self.kind_pickup or current in self.kind_delivery:
-                await self.return_head_message_by_media(callback)
+            elif current in self.kind_pickup:
+                await self.record_answer_pickup(callback, current)
+                await self.timer.start(callback.from_user.id)
+            elif current in self.kind_delivery:
+                await self.record_answer_delivery(callback, current)
+                await self.timer.start(callback.from_user.id)
+            elif 'nested' in current:
+                await self.show_nested(callback)
                 await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'new_attachments'))
         async def send_attachments(callback: CallbackQuery):
             await self.show_new_attachments(callback)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('nested')))
+        async def send_attachments(callback: CallbackQuery):
+            await self.show_nested(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
@@ -1579,7 +1591,10 @@ class DispatcherMessage(Dispatcher):
         list_user_admin = await self.execute.get_user_admin
         menu_button = {'attachments': 'Показать вложения', 'take_order': '💬 Взять заказ в обработку'}
         info_delivery_address_from_user = await self.execute.get_delivery_address(call_back.from_user.id)
-        comment = '\n'.join(info_delivery_address_from_user[2].split('///'))
+        if info_delivery_address_from_user[2] == '':
+            comment = 'Частное лицо'
+        else:
+            comment = '\n'.join(info_delivery_address_from_user[2].split('///'))
         list_messages_admins = []
         for user in list_user_admin:
             answer = await self.bot.send_message_order(int(user[0]),
@@ -1689,9 +1704,12 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(call_back.from_user.id, answer.message_id)
             await self.execute.record_order_type_delivery(call_back.from_user.id, 'Доставка 📦')
 
-    async def record_answer_pickup(self, call_back: CallbackQuery):
+    async def record_answer_pickup(self, call_back: CallbackQuery, kind_pickup: str = None):
         whitespace = '\n'
-        arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_pickup[call_back.data])
+        if kind_pickup:
+            arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_pickup[kind_pickup])
+        else:
+            arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_pickup[call_back.data])
         head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
         if len(arr_contact) == 0:
             text_format = self.format_text(f"ООО «Алькар»{whitespace}ИНН 9715341213 КПП 771501001{whitespace}"
@@ -1725,18 +1743,38 @@ class DispatcherMessage(Dispatcher):
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
             arr_answers = []
             for contact in arr_contact:
+                if contact[2] == '':
+                    amount_content = 0
+                else:
+                    amount_content = len(contact[2].split('///'))
                 menu_contact = {f'choice_contact{contact[0]}': 'Выбрать эти реквизиты ✅',
-                                f'delete_record{contact[0]}': 'Удалить запись 🗑️'}
-                comment = '\n'.join(contact[1].split('///'))
-                answer_contact = await self.send_file(answer, contact[2], comment,
-                                                      self.build_keyboard(menu_contact, 1))
+                                f'delete_record{contact[0]}': 'Удалить запись 🗑️',
+                                f'nested{contact[0]}': f'Вложения 🗃️ ({str(amount_content)})',
+                                'back': '◀ 👈 Назад'}
+                if contact[1] == '':
+                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text("Частное лицо")}'
+                else:
+                    text = '\n'.join(contact[1].split('///'))
+                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text(text)}'
+                answer_contact = await self.answer_message_by_basket(answer, comment,
+                                                                     self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-        await self.execute.record_order_kind_transport_company(call_back.from_user.id, self.kind_pickup[call_back.data])
+        if kind_pickup:
+            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
+                                                                   self.kind_pickup[kind_pickup])
+        else:
+            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
+                                                                   self.kind_pickup[call_back.data])
 
-    async def record_answer_delivery(self, call_back: CallbackQuery):
+    async def record_answer_delivery(self, call_back: CallbackQuery, kind_delivery: str = None):
         whitespace = '\n'
-        arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_delivery[call_back.data])
+        if kind_delivery:
+            arr_contact = await self.execute.get_contact_user(call_back.from_user.id,
+                                                              self.kind_delivery[kind_delivery])
+        else:
+            arr_contact = await self.execute.get_contact_user(call_back.from_user.id,
+                                                              self.kind_delivery[call_back.data])
         head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
         if len(arr_contact) == 0:
             text_format = self.format_text(f"ООО «Алькар»{whitespace}ИНН 9715341213 КПП 771501001{whitespace}"
@@ -1773,15 +1811,29 @@ class DispatcherMessage(Dispatcher):
                 await self.delete_messages(call_back.from_user.id, answer.message_id)
             arr_answers = []
             for contact in arr_contact:
+                if contact[2] == '':
+                    amount_content = 0
+                else:
+                    amount_content = len(contact[2].split('///'))
                 menu_contact = {f'choice_contact{contact[0]}': 'Выбрать эти реквизиты ✅',
-                                f'delete_record{contact[0]}': 'Удалить запись 🗑️'}
-                comment = '\n'.join(contact[1].split('///'))
-                answer_contact = await self.send_file(answer, contact[2], comment,
-                                                      self.build_keyboard(menu_contact, 1))
+                                f'delete_record{contact[0]}': 'Удалить запись 🗑️',
+                                f'nested{contact[0]}': f'Вложения 🗃️ ({str(amount_content)})',
+                                'back': '◀ 👈 Назад'}
+                if contact[1] == '':
+                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text("Частное лицо")}'
+                else:
+                    text = '\n'.join(contact[1].split('///'))
+                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text(text)}'
+                answer_contact = await self.answer_message_by_basket(answer, comment,
+                                                                     self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-        await self.execute.record_order_kind_transport_company(call_back.from_user.id,
-                                                               self.kind_delivery[call_back.data])
+        if kind_delivery:
+            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
+                                                                   self.kind_delivery[kind_delivery])
+        else:
+            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
+                                                                   self.kind_delivery[call_back.data])
 
     async def record_message_comment_user(self, message: Message):
         order_info = await self.execute.get_info_order(message.from_user.id)
@@ -1825,9 +1877,6 @@ class DispatcherMessage(Dispatcher):
     async def get_answer(self, message: Message):
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
         arr_messages.append(str(message.message_id))
-        # change_text = f"Сообщение получено"
-        # answer = await self.answer_text(message, change_text)
-        # arr_messages.append(str(answer.message_id))
         return arr_messages
 
     async def add_element(self, new_element: str, current_element: str):
@@ -1894,8 +1943,8 @@ class DispatcherMessage(Dispatcher):
         arr_messages = info_order[8].split('///')
         string_messages = '\n'.join(arr_messages)
         change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
-        answer = await self.answer_message(call_back.message, change_text_head,
-                                           self.build_keyboard(head_menu_button, 2))
+        answer = await self.answer_message_by_basket(call_back.message, change_text_head,
+                                                     self.build_keyboard(head_menu_button, 2))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
@@ -1905,6 +1954,38 @@ class DispatcherMessage(Dispatcher):
             pass
         else:
             arr_attachments = info_order[9].split('///')
+            i = 0
+            arr = []
+            arr_message = []
+            for media in arr_attachments:
+                if i == 10:
+                    arr_media_message = await self.send_media(call_back.message, arr)
+                    for item in arr_media_message:
+                        arr_message.append(str(item.message_id))
+                    i = 0
+                    arr = [media]
+                    i += 1
+                else:
+                    arr.append(media)
+                    i += 1
+            arr_media_message = await self.send_media(call_back.message, arr)
+            for item in arr_media_message:
+                arr_message.append(str(item.message_id))
+            menu_button = {'back': '◀ 👈 Назад'}
+            text = 'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
+            answer_return = await self.answer_message(call_back.message, self.format_text(text),
+                                                      self.build_keyboard(menu_button, 1))
+            arr_message.append(str(answer_return.message_id))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
+
+    async def show_nested(self, call_back: CallbackQuery):
+        number_order = call_back.data.split('nested')[1]
+        content = await self.execute.get_content_order_user(number_order)
+        if content[0] == '':
+            pass
+        else:
+            arr_attachments = content[0].split('///')
             i = 0
             arr = []
             arr_message = []

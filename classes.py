@@ -505,7 +505,7 @@ class DispatcherMessage(Dispatcher):
                 await self.record_answer_delivery(callback, current)
                 await self.timer.start(callback.from_user.id)
             elif 'nested' in current:
-                await self.show_nested(callback)
+                await self.show_nested(callback, current)
                 await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'new_attachments'))
@@ -515,7 +515,7 @@ class DispatcherMessage(Dispatcher):
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('nested')))
-        async def send_attachments(callback: CallbackQuery):
+        async def send_nested(callback: CallbackQuery):
             await self.show_nested(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
@@ -1333,7 +1333,6 @@ class DispatcherMessage(Dispatcher):
         return basket_dict
 
     async def search(self, text_for_search: list):
-        print(text_for_search)
         total_search = set()
         i = 1
         for item in text_for_search:
@@ -1344,7 +1343,6 @@ class DispatcherMessage(Dispatcher):
                     self.translit_rus_for_search(re.sub('\W+', '', item[0]).upper()))
                 union_variant = search_variant.union(search_variant_translit_rus)
                 for variant in item:
-                    print(variant)
                     search_result_by_name = await self.execute.search_in_base_name(variant)
                     search_result_by_name_translit_rus = await self.execute.search_in_base_name(
                         self.translit_rus_for_search(variant))
@@ -1359,7 +1357,6 @@ class DispatcherMessage(Dispatcher):
                     self.translit_rus_for_search(re.sub('\W+', '', item[0]).upper()))
                 union_variant = search_variant.union(search_variant_translit_rus)
                 for variant in item:
-                    print(variant)
                     search_result_by_name = await self.execute.search_in_base_name(variant)
                     search_result_by_name_translit_rus = await self.execute.search_in_base_name(
                         self.translit_rus_for_search(variant))
@@ -1979,8 +1976,11 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(call_back.from_user.id)
             await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
 
-    async def show_nested(self, call_back: CallbackQuery):
-        number_order = call_back.data.split('nested')[1]
+    async def show_nested(self, call_back: CallbackQuery, current: str = None):
+        if current:
+            number_order = current.split('nested')[1]
+        else:
+            number_order = call_back.data.split('nested')[1]
         content = await self.execute.get_content_order_user(number_order)
         if content[0] == '':
             pass

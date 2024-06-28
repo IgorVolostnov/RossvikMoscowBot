@@ -664,6 +664,30 @@ class Execute:
             else:
                 return row_table
 
+    async def get_amount_order(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_amount_order(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_amount_order', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_amount_order(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_info_order = f"SELECT * FROM ORDER_USER " \
+                            f"WHERE ID_USER = {self.quote(user_id)} AND Status != 'New' "
+            await cursor.execute(sql_info_order)
+            row_table = await cursor.fetchall()
+            new_order = []
+            for item in row_table:
+                if item[2] == 'Posted':
+                    new_order.append(item)
+                print(item)
+            if row_table is None:
+                amount_new_order = 0
+            else:
+                amount_new_order = len(new_order)
+            return amount_new_order
+
     async def get_delivery_address(self, user_id: int):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:

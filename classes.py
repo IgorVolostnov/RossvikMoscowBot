@@ -442,7 +442,27 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'delete_record'))
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'new_attachments'))
+        async def send_attachments(callback: CallbackQuery):
+            await self.show_new_attachments(callback)
+            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('nested')))
+        async def send_nested(callback: CallbackQuery):
+            check = await self.show_nested(callback)
+            if check:
+                await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('choice_contact')))
+        async def send_choice_contact(callback: CallbackQuery):
+            check = await self.choice_comment_user(callback)
+            if check:
+                await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('delete_record')))
         async def send_delete_contact(callback: CallbackQuery):
             await self.delete_record_user(callback)
             await self.timer.start(callback.from_user.id)
@@ -510,26 +530,6 @@ class DispatcherMessage(Dispatcher):
             elif 'nested' in current:
                 await self.show_nested(callback, current)
                 await self.timer.start(callback.from_user.id)
-
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'new_attachments'))
-        async def send_attachments(callback: CallbackQuery):
-            await self.show_new_attachments(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
-            await self.timer.start(callback.from_user.id)
-
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('nested')))
-        async def send_nested(callback: CallbackQuery):
-            check = await self.show_nested(callback)
-            if check:
-                await self.execute.add_element_history(callback.from_user.id, callback.data)
-            await self.timer.start(callback.from_user.id)
-
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('choice_contact')))
-        async def send_choice_contact(callback: CallbackQuery):
-            check = await self.choice_comment_user(callback)
-            if check:
-                await self.execute.add_element_history(callback.from_user.id, callback.data)
-            await self.timer.start(callback.from_user.id)
 
     async def checking_bot(self, message: Message):
         if message.from_user.is_bot:
@@ -2083,19 +2083,12 @@ class DispatcherMessage(Dispatcher):
         head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                             'post': 'Отправить заказ 📫'}
         await self.bot.edit_head_message_by_basket(text_head, call_back.message.chat.id, int(head_message),
-                                         self.build_keyboard(head_menu_button, 2))
+                                                   self.build_keyboard(head_menu_button, 2))
         await self.execute.record_order_comment_and_content(call_back.from_user.id, info_for_record[0],
                                                             info_for_record[1])
         await self.delete_messages(call_back.from_user.id, head_message)
 
     async def delete_record_user(self, call_back: CallbackQuery):
-        arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-        head_message = arr_messages[0]
-        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
-        arr_history = await self.execute.get_arr_history(call_back.from_user.id)
-        change_contact = await self.delete_contact(call_back.from_user.id, arr_history[-2], arr_history[-1],
-                                                   call_back.message.text)
-        await self.execute.record_contact(call_back.from_user.id, change_contact)
         await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
 
     async def save_order(self, call_back: CallbackQuery, basket: dict):

@@ -646,6 +646,22 @@ class Execute:
             await cursor.execute(sql_delete)
             await self.conn.commit()
 
+    async def get_info_order_by_number(self, user_id: int, order_id: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_info_order_by_number(user_id, order_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_info_order_by_number', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_info_order_by_number(self, user_id: int, order_id: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_info_order = f"SELECT Content, Comment FROM ORDER_USER " \
+                               f"WHERE ID_USER = {self.quote(user_id)} " \
+                               f"AND Id_order = {self.quote(order_id)} "
+            await cursor.execute(sql_info_order)
+            row_table = await cursor.fetchone()
+            return tuple(row_table)
+
     async def get_info_order(self, user_id: int):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
@@ -737,6 +753,21 @@ class Execute:
                 return None
             else:
                 return row_table
+
+    async def get_comment_content_order_user(self, user_id: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_comment_content_order_user(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_comment_content_order_user', os.getenv('EMAIL'), str(e))
+
+    async def execute_get_comment_content_order_user(self, user_id: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_arr_order = f"SELECT Comment, Content FROM ORDER_USER " \
+                            f"WHERE ID_USER = {self.quote(user_id)} AND Status = 'New' "
+            await cursor.execute(sql_arr_order)
+            row_table = await cursor.fetchone()
+            return list(row_table)
 
     @staticmethod
     def quote(request):

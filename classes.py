@@ -442,13 +442,8 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_contact'))
-        async def send_choice_contact(callback: CallbackQuery):
-            await self.choice_comment_user(callback)
-            await self.timer.start(callback.from_user.id)
-
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'delete_record'))
-        async def send_choice_contact(callback: CallbackQuery):
+        async def send_delete_contact(callback: CallbackQuery):
             await self.delete_record_user(callback)
             await self.timer.start(callback.from_user.id)
 
@@ -499,10 +494,18 @@ class DispatcherMessage(Dispatcher):
                     await self.return_delivery(callback)
                     await self.timer.start(callback.from_user.id)
             elif current in self.kind_pickup:
-                await self.record_answer_pickup(callback, current)
+                info_order = await self.execute.get_info_order(callback.from_user.id)
+                if info_order[8] == '' and info_order[9] == '':
+                    await self.record_answer_pickup(callback, current)
+                else:
+                    await self.return_pickup_delivery_by_media(callback, info_order)
                 await self.timer.start(callback.from_user.id)
             elif current in self.kind_delivery:
-                await self.record_answer_delivery(callback, current)
+                info_order = await self.execute.get_info_order(callback.from_user.id)
+                if info_order[8] == '' and info_order[9] == '':
+                    await self.record_answer_delivery(callback, current)
+                else:
+                    await self.return_pickup_delivery_by_media(callback, info_order)
                 await self.timer.start(callback.from_user.id)
             elif 'nested' in current:
                 await self.show_nested(callback, current)
@@ -516,8 +519,16 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('nested')))
         async def send_nested(callback: CallbackQuery):
-            await self.show_nested(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            check = await self.show_nested(callback)
+            if check:
+                await self.execute.add_element_history(callback.from_user.id, callback.data)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('choice_contact')))
+        async def send_choice_contact(callback: CallbackQuery):
+            check = await self.choice_comment_user(callback)
+            if check:
+                await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
 
     async def checking_bot(self, message: Message):
@@ -859,11 +870,17 @@ class DispatcherMessage(Dispatcher):
         if call_back.message.caption:
             text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+            try:
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+            except TelegramBadRequest:
+                pass
         else:
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
-            await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+            try:
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+            except TelegramBadRequest:
+                pass
 
     async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -884,12 +901,18 @@ class DispatcherMessage(Dispatcher):
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                try:
+                    await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                except TelegramBadRequest:
+                    pass
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                try:
+                    await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                except TelegramBadRequest:
+                    pass
         else:
             pass
 
@@ -912,12 +935,18 @@ class DispatcherMessage(Dispatcher):
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                try:
+                    await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                except TelegramBadRequest:
+                    pass
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                try:
+                    await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                except TelegramBadRequest:
+                    pass
         else:
             pass
 
@@ -940,12 +969,18 @@ class DispatcherMessage(Dispatcher):
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                try:
+                    await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                except TelegramBadRequest:
+                    pass
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
-                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                try:
+                    await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                except TelegramBadRequest:
+                    pass
         else:
             pass
 
@@ -1910,13 +1945,13 @@ class DispatcherMessage(Dispatcher):
             head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                                 'post': 'Отправить заказ 📫'}
             if info_order[8] == '':
-                await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2))
+                change_text_head = f"{self.format_text('Нет сообщений для отправки вместе с заказом')}"
             else:
                 arr_messages = info_order[8].split('///')
                 string_messages = '\n'.join(arr_messages)
                 change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
-                await self.bot.edit_head_message_by_basket(change_text_head, user_id, head_message,
-                                                           self.build_keyboard(head_menu_button, 2))
+            await self.bot.edit_head_message_by_basket(change_text_head, user_id, head_message,
+                                                       self.build_keyboard(head_menu_button, 2))
         except TelegramBadRequest:
             arr_messages = await self.execute.get_arr_messages(user_id)
             head_message = arr_messages[0]
@@ -1941,6 +1976,21 @@ class DispatcherMessage(Dispatcher):
         string_messages = '\n'.join(arr_messages)
         change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
         answer = await self.answer_message_by_basket(call_back.message, change_text_head,
+                                                     self.build_keyboard(head_menu_button, 2))
+        await self.delete_messages(call_back.from_user.id)
+        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+
+    async def return_pickup_delivery_by_media(self, call_back: CallbackQuery, info: list):
+        amount_content = len(info[9].split('///'))
+        if info[8] == '':
+            text_head = f"{self.format_text('Нет сообщений для отправки вместе с заказом')}"
+        else:
+            arr_messages = info[8].split('///')
+            string_messages = '\n'.join(arr_messages)
+            text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                            'post': 'Отправить заказ 📫'}
+        answer = await self.answer_message_by_basket(call_back.message, text_head,
                                                      self.build_keyboard(head_menu_button, 2))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
@@ -1983,7 +2033,7 @@ class DispatcherMessage(Dispatcher):
             number_order = call_back.data.split('nested')[1]
         content = await self.execute.get_content_order_user(number_order)
         if content[0] == '':
-            pass
+            check_amount = False
         else:
             arr_attachments = content[0].split('///')
             i = 0
@@ -2010,18 +2060,38 @@ class DispatcherMessage(Dispatcher):
             arr_message.append(str(answer_return.message_id))
             await self.delete_messages(call_back.from_user.id)
             await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
+            check_amount = True
+        return check_amount
 
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         head_message = arr_messages[0]
-        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
-        await self.execute.record_delivery(call_back.from_user.id, call_back.message.text)
-        change_text_head = f"Сообщение для отправки вместе с заказом:\n{call_back.message.text}"
-        await self.bot.edit_head_message(change_text_head, call_back.message.chat.id, int(head_message),
+        number_order = call_back.data.split('choice_contact')[1]
+        info_choice_order = await self.execute.get_info_order_by_number(call_back.from_user.id, number_order)
+        info_current_order = await self.execute.get_comment_content_order_user(call_back.from_user.id)
+        info_for_record = await self.record_comment_and_content(info_choice_order, info_current_order)
+        if info_for_record[1] == '':
+            amount_content = '0'
+        else:
+            amount_content = len(info_for_record[1].split('///'))
+        if info_for_record[0] == '':
+            text_head = f"{self.format_text('Нет сообщений для отправки вместе с заказом')}"
+        else:
+            arr_messages = info_for_record[0].split('///')
+            string_messages = '\n'.join(arr_messages)
+            text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                            'post': 'Отправить заказ 📫'}
+        await self.bot.edit_head_message_by_basket(text_head, call_back.message.chat.id, int(head_message),
                                          self.build_keyboard(head_menu_button, 2))
+        await self.execute.record_order_comment_and_content(call_back.from_user.id, info_for_record[0],
+                                                            info_for_record[1])
         await self.delete_messages(call_back.from_user.id, head_message)
 
     async def delete_record_user(self, call_back: CallbackQuery):
+        arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+        head_message = arr_messages[0]
+        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
         arr_history = await self.execute.get_arr_history(call_back.from_user.id)
         change_contact = await self.delete_contact(call_back.from_user.id, arr_history[-2], arr_history[-1],
                                                    call_back.message.text)

@@ -694,6 +694,9 @@ class Execute:
             await cursor.execute(sql_info_order)
             row_table = await cursor.fetchall()
             new_order = []
+            for item in row_table:
+                if item[2] == 'Posted':
+                    new_order.append(item)
             if row_table is None:
                 amount_new_order = 0
             else:

@@ -81,14 +81,14 @@ class BotMessage(Bot):
                                         parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
-        photo_to_read = os.path.join(os.path.dirname(__file__), 'Catalog.png')
+        photo_to_read = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.getenv('CATALOG_PNG'))
         return await self.send_photo(chat_id=message_chat_id, photo=FSInputFile(photo_to_read), caption=text,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def save_audio(self, message: Message):
         id_file = re.sub('\W+', '', str(datetime.datetime.now()))
         name_file = f"audio_{id_file}"
-        filepath = f"{os.path.dirname(__file__)}\\audio\\{name_file}.mp3"
+        filepath = os.path.join(os.path.split(os.path.dirname(__file__))[0], f'data/document/{name_file}.mp3')
         file_id = message.audio.file_id
         caption = message.caption
         file = await self.get_file(file_id)
@@ -98,7 +98,7 @@ class BotMessage(Bot):
     async def save_document(self, message: Message):
         id_file = re.sub('\W+', '', str(datetime.datetime.now()))
         name_file = f"{id_file}_{message.document.file_name}"
-        filepath = f"{os.path.dirname(__file__)}\\document\\{name_file}"
+        filepath = os.path.join(os.path.split(os.path.dirname(__file__))[0], f'data/document/{name_file}')
         file_id = message.document.file_id
         caption = message.caption
         file = await self.get_file(file_id)
@@ -108,7 +108,7 @@ class BotMessage(Bot):
     async def save_voice(self, message: Message):
         id_file = re.sub('\W+', '', str(datetime.datetime.now()))
         name_file = f"voice_{id_file}"
-        filepath = f"{os.path.dirname(__file__)}\\voice\\{name_file}.ogg"
+        filepath = os.path.join(os.path.split(os.path.dirname(__file__))[0], f'data/document/{name_file}.ogg')
         file_id = message.voice.file_id
         caption = message.caption
         file = await self.get_file(file_id)
@@ -118,7 +118,7 @@ class BotMessage(Bot):
     async def save_photo(self, message: Message):
         id_file = re.sub('\W+', '', str(datetime.datetime.now()))
         name_file = f"photo_{id_file}"
-        filepath = f"{os.path.dirname(__file__)}\\photo\\{name_file}.jpg"
+        filepath = os.path.join(os.path.split(os.path.dirname(__file__))[0], f'data/document/{name_file}.jpg')
         file_id = message.photo[-1].file_id
         caption = message.caption
         file = await self.get_file(file_id)
@@ -128,7 +128,7 @@ class BotMessage(Bot):
     async def save_video(self, message: Message):
         id_file = re.sub('\W+', '', str(datetime.datetime.now()))
         name_file = f"video_{id_file}"
-        filepath = f"{os.path.dirname(__file__)}\\video\\{name_file}.mp4"
+        filepath = os.path.join(os.path.split(os.path.dirname(__file__))[0], f'data/document/{name_file}.mp4')
         file_id = message.video.file_id
         caption = message.caption
         file = await self.get_file(file_id)
@@ -295,10 +295,6 @@ class DispatcherMessage(Dispatcher):
             await self.catalog(callback)
             await self.execute.add_element_history(callback.from_user.id, callback.data)
             await self.timer.start(callback.from_user.id)
-
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'answer_order'))
-        async def answer_order_user(callback: CallbackQuery):
-            print('answer')
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_hide_dealer)))
         async def remove_dealer_price(callback: CallbackQuery):
@@ -2118,57 +2114,12 @@ class DispatcherMessage(Dispatcher):
         for col, value in dims.items():
             active_list.column_dimensions[col].width = value
         number_order = re.sub('\W+', '', str(datetime.datetime.now()))
-        filepath = f"{os.path.dirname(__file__)}\\basket\\Заказ покупателя {call_back.message.from_user.id}№" \
-                   f"{number_order}.xlsx"
+        filepath = os.path.join(os.path.split(os.path.dirname(__file__))[0], f'data/basket/Заказ покупателя '
+                                                                             f'{call_back.message.from_user.id} №'
+                                                                             f'{number_order}.xlsx')
         new_book.save(filepath)
         new_book.close()
         return number_order, filepath
-
-    @staticmethod
-    def add_order(arr_order: str, new_order: str):
-        list_order = arr_order.split()
-        list_order.append(new_order)
-        return ' '.join(list_order)
-
-    @staticmethod
-    def get_dict_content_delivery(arr_contact: str):
-        dict_content = {'audio': {}, 'document': {}, 'photo': {}, 'sticker': {}, 'video': {}, 'video_note': {},
-                        'voice': {}, 'location': {}, 'contact': {}}
-        dict_type_content = {0: 'audio', 1: 'document', 2: 'photo', 3: 'sticker', 4: 'video', 5: 'video_note',
-                             6: 'voice', 7: 'location', 8: 'contact'}
-        arr_type_content = arr_contact.split('/////')
-        for i in range(9):
-            for item in arr_type_content[i].split('///'):
-                content = item.split('_____')
-                dict_content[dict_type_content[i]][content[0]] = content[1]
-        return dict_content
-
-    @staticmethod
-    def assembling_content_delivery_dict(content_dict: dict):
-        arr_content = []
-        arr_type_content = []
-        for item in content_dict.values():
-            for key_c, item_c in item.items():
-                content = f"{key_c}_____{item_c}"
-                arr_content.append(content)
-            if len(arr_content) == 1:
-                arr_type_content.append(arr_content[0])
-            else:
-                arr_type_content.append("///".join(arr_content))
-            arr_content = []
-        string_record = "/////".join(arr_type_content)
-        return string_record
-
-    @staticmethod
-    def check_contact(arr_contact: list, contact: str):
-        check = True
-        for item in arr_contact:
-            if item == contact:
-                check = False
-                break
-            else:
-                check = True
-        return check
 
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)

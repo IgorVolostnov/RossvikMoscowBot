@@ -7,12 +7,12 @@ from operator import itemgetter
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.split(os.path.dirname(__file__))[0], 'data/.env'))
 
 
 class Execute:
     def __init__(self):
-        self.connect_string = os.path.join(os.path.dirname(__file__), os.getenv('CONNECTION'))
+        self.connect_string = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.getenv('CONNECTION'))
         self.conn = None
 
     @property

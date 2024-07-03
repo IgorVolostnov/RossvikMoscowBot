@@ -7,7 +7,7 @@ import os
 
 
 logging.basicConfig(level=logging.INFO)
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.split(os.path.dirname(__file__))[0], 'data/.env'))
 
 
 async def send_mail(subject_letter: str, to_mail: str, message_text: str):

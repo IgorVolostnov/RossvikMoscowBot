@@ -1285,6 +1285,8 @@ class DispatcherMessage(Dispatcher):
                 return f'Корзина_Стр.{str(new_number)}'
         except TelegramBadRequest:
             pass
+        except IndexError:
+            pass
 
     async def plus_amount_basket(self, call_back: CallbackQuery, number_page: str):
         try:
@@ -1327,7 +1329,8 @@ class DispatcherMessage(Dispatcher):
                 await self.bot.edit_head_message_by_basket(head_text + self.format_text(number_page_basket),
                                                            call_back.message.chat.id, arr_messages[0],
                                                            self.build_keyboard(pages, 3, head_menu_button))
-                return number_page
+                check = True
+            return number_page
         except TelegramBadRequest:
             pass
 

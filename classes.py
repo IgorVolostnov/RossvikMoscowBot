@@ -81,7 +81,7 @@ class BotMessage(Bot):
                                         parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
-        photo_to_read = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.getenv('CATALOG_PNG'))
+        photo_to_read = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.environ["CATALOG_PNG"])
         return await self.send_photo(chat_id=message_chat_id, photo=FSInputFile(photo_to_read), caption=text,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
@@ -1527,8 +1527,8 @@ class DispatcherMessage(Dispatcher):
         try:
             result = ""
             voice_path = await self.bot.save_voice(message)
-            key_id = os.getenv('KeyId')
-            key_secret = os.getenv('KeySecret')
+            key_id = os.environ["KeyId"]
+            key_secret = os.environ["KeySecret"]
             headers = {"keyId": key_id, "keySecret": key_secret}
             create_url = "https://api.speechflow.io/asr/file/v1/create?lang=ru"
             query_url = "https://api.speechflow.io/asr/file/v1/query?taskId="

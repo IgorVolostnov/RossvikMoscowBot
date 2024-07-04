@@ -147,6 +147,7 @@ class DispatcherMessage(Dispatcher):
         Dispatcher.__init__(self, **kw)
         self.timer = TimerClean(self, 82800)
         self.queues = QueuesMedia(self)
+        self.queues_message = QueuesMessage()
         self.bot = parent
         self.data = DATA()
         self.execute = self.data.execute
@@ -174,56 +175,37 @@ class DispatcherMessage(Dispatcher):
 
         @self.message(Command("help"))
         async def cmd_help(message: Message):
-            await self.checking_bot(message)
-            if await self.execute.start_message(message):
-                await self.execute.restart_catalog(message, '/start')
-            else:
-                await self.execute.start_record_new_user(message)
-                self.arr_auth_user[message.from_user.id] = None
-            await self.help_message(message)
-            await self.execute.add_element_history(message.from_user.id, 'help')
+            task = asyncio.create_task(self.task_command_help(message))
+            task.set_name(f'{message.from_user.id}_task_command_help')
+            await self.queues_message.start(task)
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("start"))
         async def cmd_start(message: Message):
-            await self.checking_bot(message)
-            first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
-            answer = await self.answer_message(message, "Выберете, что Вас интересует",
-                                               self.build_keyboard(first_keyboard, 1))
-            if await self.execute.start_message(message):
-                await self.execute.restart_catalog(message, '/start')
-                await self.execute.add_element_message(message.from_user.id, message.message_id)
-            else:
-                await self.execute.start_record_new_user(message)
-                self.arr_auth_user[message.from_user.id] = None
-            await self.delete_messages(message.from_user.id)
-            await self.execute.add_element_message(message.from_user.id, answer.message_id)
+            task = asyncio.create_task(self.task_command_start(message))
+            task.set_name(f'{message.from_user.id}_task_command_start')
+            await self.queues_message.start(task)
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("catalog"))
         async def cmd_catalog(message: Message):
-            await self.checking_bot(message)
-            menu_button = {'back': '◀ 👈 Назад'}
-            answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                               self.build_keyboard(self.data.get_prices, 1, menu_button))
-            await self.execute.add_element_message(message.from_user.id, message.message_id)
-            await self.delete_messages(message.from_user.id)
-            await self.execute.add_element_message(message.from_user.id, answer.message_id)
-            await self.execute.restart_catalog(message, '/start catalog')
+            task = asyncio.create_task(self.task_command_catalog(message))
+            task.set_name(f'{message.from_user.id}_task_command_catalog')
+            await self.queues_message.start(task)
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("news"))
         async def cmd_news(message: Message):
-            await self.checking_bot(message)
-            await self.show_link(message)
-            await self.execute.add_element_history(message.from_user.id, 'news')
+            task = asyncio.create_task(self.task_command_link(message))
+            task.set_name(f'{message.from_user.id}_task_command_link')
+            await self.queues_message.start(task)
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("basket"))
         async def cmd_basket(message: Message):
-            await self.checking_bot(message)
-            await self.show_basket_by_command(message, message.from_user.id)
-            await self.execute.add_element_history(message.from_user.id, 'Корзина_Стр.1')
+            task = asyncio.create_task(self.task_command_basket(message))
+            task.set_name(f'{message.from_user.id}_task_command_basket')
+            await self.queues_message.start(task)
             await self.timer.start(message.from_user.id)
 
         @self.message(Command("order"))
@@ -241,14 +223,15 @@ class DispatcherMessage(Dispatcher):
             if current_history in self.kind_pickup or current_history in self.kind_delivery:
                 if message.content_type == "text":
                     try:
-                        await self.record_message_comment_user(message)
-                        await self.change_head_message_by_media(message.from_user.id)
-                        arr_message = await self.get_answer(message)
-                        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+                        task = asyncio.create_task(self.task_content_type_text(message))
+                        task.set_name(f'{message.from_user.id}_task_content_type_text')
+                        await self.queues_message.start(task)
                         await self.timer.start(message.from_user.id)
                     except IndexError:
-                        await self.checking_bot(message)
-                        await self.send_search_result(message)
+                        task = asyncio.create_task(self.task_send_search_result(message))
+                        task.set_name(f'{message.from_user.id}_task_send_search_result')
+                        await self.queues_message.start(task)
+                        await self.timer.start(message.from_user.id)
                 elif message.content_type == "audio":
                     task = asyncio.create_task(self.get_audio(message))
                     await self.queues.start(message.from_user.id, task)
@@ -285,8 +268,10 @@ class DispatcherMessage(Dispatcher):
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
             else:
                 if message.content_type == "text" or message.content_type == "voice":
-                    await self.checking_bot(message)
-                    await self.send_search_result(message)
+                    task = asyncio.create_task(self.task_send_search_result(message))
+                    task.set_name(f'{message.from_user.id}_task_send_search_result')
+                    await self.queues_message.start(task)
+                    await self.timer.start(message.from_user.id)
                 else:
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
 
@@ -531,6 +516,17 @@ class DispatcherMessage(Dispatcher):
         if message.from_user.is_bot:
             await self.bot.restrict_chat_member(message.chat.id, message.from_user.id, ChatPermissions())
 
+    async def task_command_help(self, message: Message):
+        await self.checking_bot(message)
+        if await self.execute.start_message(message):
+            await self.execute.restart_catalog(message, '/start')
+        else:
+            await self.execute.start_record_new_user(message)
+            self.arr_auth_user[message.from_user.id] = None
+        await self.help_message(message)
+        await self.execute.add_element_history(message.from_user.id, 'help')
+        return True
+
     async def help_message(self, message: Message):
         whitespace = '\n'
         first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
@@ -589,6 +585,21 @@ class DispatcherMessage(Dispatcher):
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
+    async def task_command_start(self, message: Message):
+        await self.checking_bot(message)
+        first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
+        answer = await self.answer_message(message, "Выберете, что Вас интересует",
+                                           self.build_keyboard(first_keyboard, 1))
+        if await self.execute.start_message(message):
+            await self.execute.restart_catalog(message, '/start')
+            await self.execute.add_element_message(message.from_user.id, message.message_id)
+        else:
+            await self.execute.start_record_new_user(message)
+            self.arr_auth_user[message.from_user.id] = None
+        await self.delete_messages(message.from_user.id)
+        await self.execute.add_element_message(message.from_user.id, answer.message_id)
+        return True
+
     async def return_start(self, call_back: CallbackQuery):
         first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
         answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует",
@@ -601,12 +612,29 @@ class DispatcherMessage(Dispatcher):
         answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1))
         await self.execute.add_element_message(user_id, answer.message_id)
 
+    async def task_command_catalog(self, message: Message):
+        await self.checking_bot(message)
+        menu_button = {'back': '◀ 👈 Назад'}
+        answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
+                                           self.build_keyboard(self.data.get_prices, 1, menu_button))
+        await self.execute.add_element_message(message.from_user.id, message.message_id)
+        await self.delete_messages(message.from_user.id)
+        await self.execute.add_element_message(message.from_user.id, answer.message_id)
+        await self.execute.restart_catalog(message, '/start catalog')
+        return True
+
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
                                            self.build_keyboard(self.data.get_prices, 1, menu_button))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+
+    async def task_command_link(self, message: Message):
+        await self.checking_bot(message)
+        await self.show_link(message)
+        await self.execute.add_element_history(message.from_user.id, 'news')
+        return True
 
     async def show_link(self, message: Message):
         link_keyboard = {'https://t.me/rossvik_moscow': 'Канал @ROSSVIK_MOSCOW 📣💬',
@@ -1110,6 +1138,12 @@ class DispatcherMessage(Dispatcher):
             amount = None
         return amount
 
+    async def task_command_basket(self, message: Message):
+        await self.checking_bot(message)
+        await self.show_basket_by_command(message, message.from_user.id)
+        await self.execute.add_element_history(message.from_user.id, 'Корзина_Стр.1')
+        return True
+
     async def show_basket(self, call_back: CallbackQuery, number_page: str):
         if call_back.message.text and '№' in call_back.message.text and \
                 self.pages_basket[number_page] == call_back.message.text.split('№')[1]:
@@ -1400,6 +1434,11 @@ class DispatcherMessage(Dispatcher):
                 i += 1
         return self.assembling_search(list(total_search))
 
+    async def task_send_search_result(self, message: Message):
+        await self.checking_bot(message)
+        result = await self.send_search_result(message)
+        return result
+
     async def send_search_result(self, message: Message):
         if message.content_type == "voice":
             text_for_search = await self.translit_voice(message)
@@ -1412,14 +1451,14 @@ class DispatcherMessage(Dispatcher):
         if len(result_search['Поиск_Стр.1']) == 0:
             await self.find_nothing(id_user, message)
             if 'search' in current_history:
-                await self.timer.start(id_user)
+                return True
             elif 'Поиск' in current_history:
                 await self.execute.delete_element_history(id_user, 1)
-                await self.timer.start(id_user)
+                return True
             else:
                 await self.execute.add_element_history(id_user,
                                                        f'search___{self.change_record_search(change_result)}')
-                await self.timer.start(id_user)
+                return True
         else:
             await self.show_result_search(id_user, message, result_search)
             if 'search' in current_history:
@@ -1427,18 +1466,18 @@ class DispatcherMessage(Dispatcher):
                 await self.execute.add_element_history(id_user,
                                                        f"search___{self.change_record_search(change_result)} "
                                                        f"Поиск_Стр.1")
-                await self.timer.start(id_user)
+                return True
             elif 'Поиск' in current_history:
                 await self.execute.delete_element_history(id_user, 2)
                 await self.execute.add_element_history(id_user,
                                                        f"search___{self.change_record_search(change_result)} "
                                                        f"Поиск_Стр.1")
-                await self.timer.start(id_user)
+                return True
             else:
                 await self.execute.add_element_history(id_user,
                                                        f"search___{self.change_record_search(change_result)} "
                                                        f"Поиск_Стр.1")
-                await self.timer.start(id_user)
+                return True
 
     async def find_nothing(self, id_user: int, message: Message):
         await self.execute.add_element_message(id_user, message.message_id)
@@ -1865,6 +1904,13 @@ class DispatcherMessage(Dispatcher):
         else:
             await self.execute.record_order_kind_transport_company(call_back.from_user.id,
                                                                    self.kind_delivery[call_back.data])
+
+    async def task_content_type_text(self, message: Message):
+        await self.record_message_comment_user(message)
+        await self.change_head_message_by_media(message.from_user.id)
+        arr_message = await self.get_answer(message)
+        await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
+        return True
 
     async def record_message_comment_user(self, message: Message):
         order_info = await self.execute.get_info_order(message.from_user.id)
@@ -2374,3 +2420,43 @@ class QueuesMedia:
             await self.parent.execute.record_order_comment_and_content(user_id, self.info_media[0], self.info_media[1])
             self.info_media = None
             await self.parent.change_head_message_by_media(user_id)
+
+
+class QueuesMessage:
+    def __init__(self):
+        self.queues = []
+        self.dict_name_task = {}
+        self.queue_busy = False
+
+    async def start(self, new_task: asyncio.Task):
+        print(new_task.get_name())
+        if new_task.get_name() in self.dict_name_task.keys():
+            new_task.cancel()
+        else:
+            if len(self.queues) == 0:
+                self.dict_name_task[new_task.get_name()] = new_task
+                self.queues.append(new_task)
+                await self.start_task()
+            else:
+                self.dict_name_task[new_task.get_name()] = new_task
+                self.queues.append(new_task)
+
+    async def start_task(self):
+        self.queue_busy = await self.queues[0]
+        if self.queue_busy:
+            print(self.dict_name_task)
+            await self.delete_task_queues()
+        else:
+            print('Задача не выполнилась')
+
+    async def delete_task_queues(self):
+        self.dict_name_task.pop(self.queues[0].get_name())
+        self.queues.remove(self.queues[0])
+        print(self.dict_name_task)
+        await self.restart_queues()
+
+    async def restart_queues(self):
+        if len(self.queues) == 0:
+            self.queue_busy = False
+        else:
+            await self.start_task()

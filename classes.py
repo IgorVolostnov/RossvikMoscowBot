@@ -277,116 +277,135 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'catalog'))
         async def send_catalog_message(callback: CallbackQuery):
-            await self.catalog(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_catalog(callback))
+            task.set_name(f'{callback.from_user.id}_task_catalog')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_hide_dealer)))
         async def remove_dealer_price(callback: CallbackQuery):
-            await self.remove_price(callback)
+            task = asyncio.create_task(self.remove_price(callback))
+            task.set_name(f'{callback.from_user.id}_remove_price')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_show_dealer)))
         async def show_dealer_price(callback: CallbackQuery):
-            await self.show_price(callback)
+            task = asyncio.create_task(self.show_price(callback))
+            task.set_name(f'{callback.from_user.id}_show_price')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.category)))
         async def send_next_category(callback: CallbackQuery):
-            if await self.next_category(callback):
-                await self.execute.add_element_history(callback.from_user.id, callback.data)
-                await self.timer.start(callback.from_user.id)
-            else:
-                await self.execute.add_element_history(callback.from_user.id, f"{callback.data} Стр.1")
-                await self.timer.start(callback.from_user.id)
+            task = asyncio.create_task(self.task_next_category(callback))
+            task.set_name(f'{callback.from_user.id}_task_next_category')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages)))
         async def send_next_page(callback: CallbackQuery):
-            if await self.next_page(callback):
-                await self.execute.add_element_history(callback.from_user.id, callback.data)
-                await self.timer.start(callback.from_user.id)
+            task = asyncio.create_task(self.task_next_page(callback))
+            task.set_name(f'{callback.from_user.id}_task_next_page')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages_search)))
         async def send_next_page_search(callback: CallbackQuery):
-            if await self.next_page_search(callback):
-                await self.execute.add_element_history(callback.from_user.id, callback.data)
-                await self.timer.start(callback.from_user.id)
+            task = asyncio.create_task(self.task_next_page_search(callback))
+            task.set_name(f'{callback.from_user.id}_task_next_page_search')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.nomenclatures)))
         async def send_description(callback: CallbackQuery):
-            await self.description(callback, callback.data)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_description(callback))
+            task.set_name(f'{callback.from_user.id}_task_description')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_add)))
         async def send_add(callback: CallbackQuery):
-            await self.add_nomenclature(callback)
+            task = asyncio.create_task(self.add_nomenclature(callback))
+            task.set_name(f'{callback.from_user.id}_add_nomenclature')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_back_add)))
         async def send_back_add(callback: CallbackQuery):
-            await self.back_add_nomenclature(callback)
+            task = asyncio.create_task(self.back_add_nomenclature(callback))
+            task.set_name(f'{callback.from_user.id}_back_add_nomenclature')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_button_calculater)))
         async def send_change_amount(callback: CallbackQuery):
-            await self.change_amount(callback)
+            task = asyncio.create_task(self.change_amount(callback))
+            task.set_name(f'{callback.from_user.id}_change_amount')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_minus)))
         async def send_change_minus(callback: CallbackQuery):
-            await self.minus_amount(callback)
+            task = asyncio.create_task(self.minus_amount(callback))
+            task.set_name(f'{callback.from_user.id}_minus_amount')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_plus)))
         async def send_change_plus(callback: CallbackQuery):
-            await self.plus_amount(callback)
+            task = asyncio.create_task(self.plus_amount(callback))
+            task.set_name(f'{callback.from_user.id}_plus_amount')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_delete)))
         async def send_change_delete(callback: CallbackQuery):
-            await self.delete_amount(callback)
+            task = asyncio.create_task(self.delete_amount(callback))
+            task.set_name(f'{callback.from_user.id}_delete_amount')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.dict_done)))
         async def send_done_basket(callback: CallbackQuery):
-            await self.add_to_basket(callback)
+            task = asyncio.create_task(self.add_to_basket(callback))
+            task.set_name(f'{callback.from_user.id}_add_to_basket')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'basket'))
         async def send_show_basket(callback: CallbackQuery):
-            await self.show_basket(callback, 'Корзина_Стр.1')
-            await self.execute.add_element_history(callback.from_user.id, 'Корзина_Стр.1')
+            task = asyncio.create_task(self.task_show_basket(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_basket')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.pages_basket)))
         async def send_next_page_basket(callback: CallbackQuery):
-            await self.show_basket(callback, callback.data)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_next_page_basket(callback))
+            task.set_name(f'{callback.from_user.id}_task_next_page_basket')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_basket_minus)))
         async def send_basket_minus(callback: CallbackQuery):
-            current_page_basket = await self.execute.get_element_history(callback.from_user.id, -1)
-            new_page_basket = await self.minus_amount_basket(callback, current_page_basket)
-            if new_page_basket != current_page_basket:
-                await self.execute.delete_element_history(callback.from_user.id, 1)
-                await self.execute.add_element_history(callback.from_user.id, new_page_basket)
+            task = asyncio.create_task(self.task_basket_minus(callback))
+            task.set_name(f'{callback.from_user.id}_task_basket_minus')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.button_basket_plus)))
         async def send_basket_plus(callback: CallbackQuery):
-            current_page_basket = await self.execute.get_element_history(callback.from_user.id, -1)
-            new_page_basket = await self.plus_amount_basket(callback, current_page_basket)
-            if new_page_basket != current_page_basket:
-                await self.execute.delete_element_history(callback.from_user.id, 1)
-                await self.execute.add_element_history(callback.from_user.id, new_page_basket)
+            task = asyncio.create_task(self.task_basket_plus(callback))
+            task.set_name(f'{callback.from_user.id}_task_basket_plus')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'clean'))
         async def send_clean_basket(callback: CallbackQuery):
-            await self.execute.clean_basket(callback.from_user.id)
-            await self.clean_basket_message(callback)
+            task = asyncio.create_task(self.task_clean_basket(callback))
+            task.set_name(f'{callback.from_user.id}_task_clean_basket')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
@@ -623,6 +642,11 @@ class DispatcherMessage(Dispatcher):
         await self.execute.restart_catalog(message, '/start catalog')
         return True
 
+    async def task_catalog(self, call_back: CallbackQuery):
+        await self.catalog(call_back)
+        await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
@@ -653,6 +677,13 @@ class DispatcherMessage(Dispatcher):
                                            self.build_keyboard(link_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+
+    async def task_next_category(self, call_back: CallbackQuery):
+        if await self.next_category(call_back):
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        else:
+            await self.execute.add_element_history(call_back.from_user.id, f"{call_back.data} Стр.1")
+        return True
 
     async def next_category(self, call_back: CallbackQuery):
         current_category = await self.execute.current_category(call_back.data)
@@ -696,6 +727,11 @@ class DispatcherMessage(Dispatcher):
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
 
+    async def task_description(self, call_back: CallbackQuery):
+        await self.description(call_back, call_back.data)
+        await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
     async def description(self, call_back: CallbackQuery, id_nomenclature: str):
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
@@ -728,6 +764,7 @@ class DispatcherMessage(Dispatcher):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(new_text, call_back.message.chat.id, arr_messages[0])
         await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_show))
+        return True
 
     async def show_price(self, call_back: CallbackQuery):
         id_nomenclature = call_back.data.split('show_dealer_price')[0]
@@ -739,6 +776,7 @@ class DispatcherMessage(Dispatcher):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(current_description[1], call_back.message.chat.id, arr_messages[0])
         await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_hide))
+        return True
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         whitespace = '\n'
@@ -773,6 +811,11 @@ class DispatcherMessage(Dispatcher):
         if re.sub('\W+', '', description_text) == "":
             description_text = "Нет подробной информации"
         return arr_description[6], info_nomenclature, description_text, dict_hide
+
+    async def task_next_page(self, call_back: CallbackQuery):
+        if await self.next_page(call_back):
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
 
     async def next_page(self, call_back: CallbackQuery):
         if self.pages[call_back.data] == call_back.message.caption.split('№')[1]:
@@ -853,6 +896,7 @@ class DispatcherMessage(Dispatcher):
             await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
         else:
             await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+        return True
 
     async def back_add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -875,6 +919,7 @@ class DispatcherMessage(Dispatcher):
             await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 2))
         else:
             await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+        return True
 
     async def change_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -896,15 +941,17 @@ class DispatcherMessage(Dispatcher):
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
             try:
                 await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                return True
             except TelegramBadRequest:
-                pass
+                return True
         else:
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                    f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                return True
             except TelegramBadRequest:
-                pass
+                return True
 
     async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -927,18 +974,20 @@ class DispatcherMessage(Dispatcher):
                        f"{self.format_price(float(sum_nomenclature))}"
                 try:
                     await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                    return True
                 except TelegramBadRequest:
-                    pass
+                    return True
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
                 try:
                     await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                    return True
                 except TelegramBadRequest:
-                    pass
+                    return True
         else:
-            pass
+            return True
 
     async def plus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -961,18 +1010,20 @@ class DispatcherMessage(Dispatcher):
                        f"{self.format_price(float(sum_nomenclature))}"
                 try:
                     await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                    return True
                 except TelegramBadRequest:
-                    pass
+                    return True
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
                 try:
                     await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                    return True
                 except TelegramBadRequest:
-                    pass
+                    return True
         else:
-            pass
+            return True
 
     async def delete_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -995,18 +1046,20 @@ class DispatcherMessage(Dispatcher):
                        f"{self.format_price(float(sum_nomenclature))}"
                 try:
                     await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
+                    return True
                 except TelegramBadRequest:
-                    pass
+                    return True
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
                        f"{amount} шт. х {self.format_price(float(price))} = " \
                        f"{self.format_price(float(sum_nomenclature))}"
                 try:
                     await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
+                    return True
                 except TelegramBadRequest:
-                    pass
+                    return True
         else:
-            pass
+            return True
 
     async def add_to_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -1047,8 +1100,9 @@ class DispatcherMessage(Dispatcher):
                 await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 2))
             else:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+            return True
         else:
-            pass
+            return True
 
     async def check_amount(self, text_message: str, id_call_back: str, amount_in_base: str):
         whitespace = '\n'
@@ -1144,6 +1198,16 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_element_history(message.from_user.id, 'Корзина_Стр.1')
         return True
 
+    async def task_show_basket(self, call_back: CallbackQuery):
+        await self.show_basket(call_back, 'Корзина_Стр.1')
+        await self.execute.add_element_history(call_back.from_user.id, 'Корзина_Стр.1')
+        return True
+
+    async def task_next_page_basket(self, call_back: CallbackQuery):
+        await self.show_basket(call_back, call_back.data)
+        await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
     async def show_basket(self, call_back: CallbackQuery, number_page: str):
         if call_back.message.text and '№' in call_back.message.text and \
                 self.pages_basket[number_page] == call_back.message.text.split('№')[1]:
@@ -1227,12 +1291,25 @@ class DispatcherMessage(Dispatcher):
                 arr_answers.append(str(answer.message_id))
             await self.execute.add_arr_messages(id_user, arr_answers)
 
+    async def task_clean_basket(self, call_back: CallbackQuery):
+        await self.execute.clean_basket(call_back.from_user.id)
+        await self.clean_basket_message(call_back)
+        return True
+
     async def clean_basket_message(self, call_back: CallbackQuery):
         text = 'Ваша корзина пуста 😭😔💔'
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
         await self.delete_history_basket(call_back.from_user.id, 'Корзина')
+
+    async def task_basket_minus(self, call_back: CallbackQuery):
+        current_page_basket = await self.execute.get_element_history(call_back.from_user.id, -1)
+        new_page_basket = await self.minus_amount_basket(call_back, current_page_basket)
+        if new_page_basket != current_page_basket:
+            await self.execute.delete_element_history(call_back.from_user.id, 1)
+            await self.execute.add_element_history(call_back.from_user.id, new_page_basket)
+        return True
 
     async def minus_amount_basket(self, call_back: CallbackQuery, number_page: str):
         try:
@@ -1321,6 +1398,14 @@ class DispatcherMessage(Dispatcher):
             pass
         except IndexError:
             pass
+
+    async def task_basket_plus(self, call_back: CallbackQuery):
+        current_page_basket = await self.execute.get_element_history(call_back.from_user.id, -1)
+        new_page_basket = await self.plus_amount_basket(call_back, current_page_basket)
+        if new_page_basket != current_page_basket:
+            await self.execute.delete_element_history(call_back.from_user.id, 1)
+            await self.execute.add_element_history(call_back.from_user.id, new_page_basket)
+        return True
 
     async def plus_amount_basket(self, call_back: CallbackQuery, number_page: str):
         try:
@@ -1506,6 +1591,11 @@ class DispatcherMessage(Dispatcher):
             answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
         await self.execute.add_arr_messages(id_user, arr_answers)
+
+    async def task_next_page_search(self, call_back: CallbackQuery):
+        if await self.next_page_search(call_back):
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
 
     async def next_page_search(self, call_back: CallbackQuery):
         if self.pages_search[call_back.data] == call_back.message.text.split('№')[1]:

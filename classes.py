@@ -410,126 +410,122 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'post'))
         async def post_order(callback: CallbackQuery):
-            await self.post_admin(callback)
-            await self.delete_history_delivery(callback.from_user.id)
+            task = asyncio.create_task(self.task_post_admin(callback))
+            task.set_name(f'{callback.from_user.id}_task_post_admin')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'choice_delivery'))
         async def send_choice_delivery(callback: CallbackQuery):
-            await self.delete_messages(callback.from_user.id, callback.message.message_id)
-            await self.choice_delivery_user(callback)
-            await self.execute.add_element_history(callback.from_user.id, 'choice_delivery')
+            task = asyncio.create_task(self.task_choice_delivery_user(callback))
+            task.set_name(f'{callback.from_user.id}_task_choice_delivery_user')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.choice_delivery)))
         async def send_pickup_delivery(callback: CallbackQuery):
-            if callback.data == 'pickup':
-                await self.pickup(callback)
-            elif callback.data == 'delivery':
-                await self.delivery(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_pickup_or_delivery(callback))
+            task.set_name(f'{callback.from_user.id}_task_pickup_or_delivery')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_pickup)))
         async def send_kind_pickup(callback: CallbackQuery):
-            await self.record_answer_pickup(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_record_answer_pickup(callback))
+            task.set_name(f'{callback.from_user.id}_task_record_answer_pickup')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.in_(self.kind_delivery)))
         async def send_kind_delivery(callback: CallbackQuery):
-            await self.record_answer_delivery(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_record_answer_delivery(callback))
+            task.set_name(f'{callback.from_user.id}_task_record_answer_delivery')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'new_attachments'))
         async def send_attachments(callback: CallbackQuery):
-            await self.show_new_attachments(callback)
-            await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_show_new_attachments(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_new_attachments')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('nested')))
         async def send_nested(callback: CallbackQuery):
-            check = await self.show_nested(callback)
-            if check:
-                await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_show_nested(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_nested')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('choice_contact')))
         async def send_choice_contact(callback: CallbackQuery):
-            check = await self.choice_comment_user(callback)
-            if check:
-                await self.execute.add_element_history(callback.from_user.id, callback.data)
+            task = asyncio.create_task(self.task_choice_comment_user(callback))
+            task.set_name(f'{callback.from_user.id}_task_choice_comment_user')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('delete_record')))
         async def send_delete_contact(callback: CallbackQuery):
-            await self.delete_record_user(callback)
+            task = asyncio.create_task(self.delete_record_user(callback))
+            task.set_name(f'{callback.from_user.id}_delete_record_user')
+            await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
-            current = await self.execute.delete_element_history(callback.from_user.id, 1)
-            if 'search' in current:
-                current = await self.execute.delete_element_history(callback.from_user.id, 1)
-            if current == '/start':
-                await self.return_start(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'catalog':
-                await self.catalog(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'help':
-                await self.return_help_message(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'news':
-                await self.return_show_link(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.category:
-                await self.return_category(callback, current)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.pages:
-                await self.return_page(callback, current)
-                await self.execute.add_element_history(callback.from_user.id, current)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.nomenclatures:
-                await self.description(callback, current)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.pages_search:
-                previous_history = await self.execute.delete_element_history(callback.from_user.id, 1)
-                result_search = await self.search(self.get_text_for_search(previous_history.split('___')[1]))
-                await self.return_page_search(callback, result_search, current)
-                await self.execute.add_element_history(callback.from_user.id, current)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.pages_basket:
-                await self.show_basket(callback, current)
-                await self.timer.start(callback.from_user.id)
-            elif current == 'choice_delivery':
-                await self.choice_delivery_user(callback)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.choice_delivery:
-                if current == 'pickup':
-                    await self.return_pickup(callback)
-                    await self.timer.start(callback.from_user.id)
-                elif current == 'delivery':
-                    await self.return_delivery(callback)
-                    await self.timer.start(callback.from_user.id)
-            elif current in self.kind_pickup:
-                info_order = await self.execute.get_info_order(callback.from_user.id)
-                if info_order[8] == '' and info_order[9] == '':
-                    await self.record_answer_pickup(callback, current)
-                else:
-                    await self.return_pickup_delivery_by_media(callback, info_order)
-                await self.timer.start(callback.from_user.id)
-            elif current in self.kind_delivery:
-                info_order = await self.execute.get_info_order(callback.from_user.id)
-                if info_order[8] == '' and info_order[9] == '':
-                    await self.record_answer_delivery(callback, current)
-                else:
-                    await self.return_pickup_delivery_by_media(callback, info_order)
-                await self.timer.start(callback.from_user.id)
-            elif 'nested' in current:
-                await self.show_nested(callback, current)
-                await self.timer.start(callback.from_user.id)
+            task = asyncio.create_task(self.task_back(callback))
+            task.set_name(f'{callback.from_user.id}_task_back')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+    async def task_back(self, call_back: CallbackQuery):
+        current = await self.execute.delete_element_history(call_back.from_user.id, 1)
+        if 'search' in current:
+            current = await self.execute.delete_element_history(call_back.from_user.id, 1)
+        if current == '/start':
+            await self.return_start(call_back)
+        elif current == 'catalog':
+            await self.catalog(call_back)
+        elif current == 'help':
+            await self.return_help_message(call_back)
+        elif current == 'news':
+            await self.return_show_link(call_back)
+        elif current in self.category:
+            await self.return_category(call_back, current)
+        elif current in self.pages:
+            await self.return_page(call_back, current)
+            await self.execute.add_element_history(call_back.from_user.id, current)
+        elif current in self.nomenclatures:
+            await self.description(call_back, current)
+        elif current in self.pages_search:
+            previous_history = await self.execute.delete_element_history(call_back.from_user.id, 1)
+            result_search = await self.search(self.get_text_for_search(previous_history.split('___')[1]))
+            await self.return_page_search(call_back, result_search, current)
+            await self.execute.add_element_history(call_back.from_user.id, current)
+        elif current in self.pages_basket:
+            await self.show_basket(call_back, current)
+        elif current == 'choice_delivery':
+            await self.choice_delivery_user(call_back)
+        elif current in self.choice_delivery:
+            if current == 'pickup':
+                await self.return_pickup(call_back)
+            elif current == 'delivery':
+                await self.return_delivery(call_back)
+        elif current in self.kind_pickup:
+            info_order = await self.execute.get_info_order(call_back.from_user.id)
+            if info_order[8] == '' and info_order[9] == '':
+                await self.record_answer_pickup(call_back, current)
+            else:
+                await self.return_pickup_delivery_by_media(call_back, info_order)
+        elif current in self.kind_delivery:
+            info_order = await self.execute.get_info_order(call_back.from_user.id)
+            if info_order[8] == '' and info_order[9] == '':
+                await self.record_answer_delivery(call_back, current)
+            else:
+                await self.return_pickup_delivery_by_media(call_back, info_order)
+        elif 'nested' in current:
+            await self.show_nested(call_back, current)
+        return True
 
     async def checking_bot(self, message: Message):
         if message.from_user.is_bot:
@@ -1746,6 +1742,11 @@ class DispatcherMessage(Dispatcher):
             arr_result.append(value.split('///'))
         return arr_result
 
+    async def task_post_admin(self, call_back: CallbackQuery):
+        await self.post_admin(call_back)
+        await self.delete_history_delivery(call_back.from_user.id)
+        return True
+
     async def post_admin(self, call_back: CallbackQuery):
         info_order = await self.record_data_order_by_xlsx(call_back)
         list_user_admin = await self.execute.get_user_admin
@@ -1788,6 +1789,12 @@ class DispatcherMessage(Dispatcher):
         await self.execute.record_order_xlsx(call_back.from_user.id, number_order, order_path)
         return number_order, order_path
 
+    async def task_choice_delivery_user(self, call_back: CallbackQuery):
+        await self.delete_messages(call_back.from_user.id, call_back.message.message_id)
+        await self.choice_delivery_user(call_back)
+        await self.execute.add_element_history(call_back.from_user.id, 'choice_delivery')
+        return True
+
     async def choice_delivery_user(self, call_back: CallbackQuery):
         head_menu_button = {'pickup': 'Самовывоз 🖐🏻', 'delivery': 'Доставка 📦', 'back': '◀ 👈 Назад'}
         head_text = f"Выберете вариант получения товара:"
@@ -1799,6 +1806,14 @@ class DispatcherMessage(Dispatcher):
             answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
             await self.execute.delete_new_order(call_back.from_user.id)
+
+    async def task_pickup_or_delivery(self, call_back: CallbackQuery):
+        if call_back.data == 'pickup':
+            await self.pickup(call_back)
+        elif call_back.data == 'delivery':
+            await self.delivery(call_back)
+        await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
 
     async def pickup(self, call_back: CallbackQuery):
         head_menu_button = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
@@ -1864,6 +1879,11 @@ class DispatcherMessage(Dispatcher):
             await self.delete_messages(call_back.from_user.id, answer.message_id)
             await self.execute.record_order_type_delivery(call_back.from_user.id, 'Доставка 📦')
 
+    async def task_record_answer_pickup(self, call_back: CallbackQuery):
+        await self.record_answer_pickup(call_back)
+        await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
     async def record_answer_pickup(self, call_back: CallbackQuery, kind_pickup: str = None):
         whitespace = '\n'
         if kind_pickup:
@@ -1926,6 +1946,11 @@ class DispatcherMessage(Dispatcher):
         else:
             await self.execute.record_order_kind_transport_company(call_back.from_user.id,
                                                                    self.kind_pickup[call_back.data])
+
+    async def task_record_answer_delivery(self, call_back: CallbackQuery):
+        await self.record_answer_delivery(call_back)
+        await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
 
     async def record_answer_delivery(self, call_back: CallbackQuery, kind_delivery: str = None):
         whitespace = '\n'
@@ -2130,6 +2155,11 @@ class DispatcherMessage(Dispatcher):
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
+    async def task_show_new_attachments(self, call_back: CallbackQuery):
+        await self.show_new_attachments(call_back)
+        await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
     async def show_new_attachments(self, call_back: CallbackQuery):
         info_order = await self.execute.get_info_order(call_back.from_user.id)
         if info_order[9] == '':
@@ -2160,6 +2190,12 @@ class DispatcherMessage(Dispatcher):
             arr_message.append(str(answer_return.message_id))
             await self.delete_messages(call_back.from_user.id)
             await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
+
+    async def task_show_nested(self, call_back: CallbackQuery):
+        check = await self.show_nested(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
 
     async def show_nested(self, call_back: CallbackQuery, current: str = None):
         if current:
@@ -2198,6 +2234,12 @@ class DispatcherMessage(Dispatcher):
             check_amount = True
         return check_amount
 
+    async def task_choice_comment_user(self, call_back: CallbackQuery):
+        check = await self.choice_comment_user(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         head_message = arr_messages[0]
@@ -2225,6 +2267,7 @@ class DispatcherMessage(Dispatcher):
 
     async def delete_record_user(self, call_back: CallbackQuery):
         await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
+        return True
 
     async def save_order(self, call_back: CallbackQuery, basket: dict):
         new_book = openpyxl.Workbook()
@@ -2519,7 +2562,6 @@ class QueuesMessage:
         self.queue_busy = False
 
     async def start(self, new_task: asyncio.Task):
-        print(new_task.get_name())
         if new_task.get_name() in self.dict_name_task.keys():
             new_task.cancel()
         else:
@@ -2534,7 +2576,6 @@ class QueuesMessage:
     async def start_task(self):
         self.queue_busy = await self.queues[0]
         if self.queue_busy:
-            print(self.dict_name_task)
             await self.delete_task_queues()
         else:
             print('Задача не выполнилась')
@@ -2542,7 +2583,6 @@ class QueuesMessage:
     async def delete_task_queues(self):
         self.dict_name_task.pop(self.queues[0].get_name())
         self.queues.remove(self.queues[0])
-        print(self.dict_name_task)
         await self.restart_queues()
 
     async def restart_queues(self):

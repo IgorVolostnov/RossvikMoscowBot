@@ -698,14 +698,14 @@ class DispatcherMessage(Dispatcher):
     async def return_category(self, call_back: CallbackQuery, current_history):
         current_category = await self.execute.current_category(current_history)
         if current_category:
-            await self.create_keyboard_push_photo(call_back, current_category, current_history)
+            await self.create_keyboard_push_photo(call_back, current_category, current_history, "CATALOG_PNG")
         else:
             new_current = await self.execute.delete_element_history(call_back.from_user.id, 1)
             if new_current == 'catalog':
                 await self.catalog(call_back)
             else:
                 current_category = await self.execute.current_category(new_current)
-                await self.create_keyboard_push_photo(call_back, current_category, new_current)
+                await self.create_keyboard_push_photo(call_back, current_category, new_current, "CATALOG_PNG")
 
     async def list_nomenclature(self, call_back: CallbackQuery):
         number_page = '\n' + 'Страница №1'
@@ -1240,7 +1240,8 @@ class DispatcherMessage(Dispatcher):
                                'choice_delivery': 'Оформить заказ 📧📦📲'}
                 if call_back.message.caption:
                     if "Сейчас в Вашу корзину добавлены товары на общую сумму " in call_back.message.caption:
-                        heading = await self.edit_caption_by_basket(call_back.message, text + self.format_text(number_page),
+                        heading = await self.edit_caption_by_basket(call_back.message,
+                                                                    text + self.format_text(number_page),
                                                                     self.build_keyboard(pages, 3, menu_button))
                         await self.delete_messages(call_back.from_user.id, heading.message_id)
                         arr_answers = []
@@ -1370,7 +1371,9 @@ class DispatcherMessage(Dispatcher):
                     head_text = 'Ваша корзина пуста 😭😔💔'
                     head_menu_button = {'back': '◀ 👈 Назад'}
                     arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                    await self.bot.edit_head_caption_by_basket(head_text, call_back.message.chat.id, arr_messages[0],
+                    await self.bot.edit_head_caption_by_basket(self.format_text(head_text),
+                                                               call_back.message.chat.id,
+                                                               arr_messages[0],
                                                                self.build_keyboard(head_menu_button, 1))
                     return number_page
                 else:
@@ -1577,8 +1580,8 @@ class DispatcherMessage(Dispatcher):
     async def find_nothing(self, id_user: int, message: Message):
         await self.execute.add_element_message(id_user, message.message_id)
         menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.answer_message(message, "Сожалеем, но ничего не найдено.",
-                                           self.build_keyboard(menu_button, 1))
+        answer = await self.bot.push_photo(message.chat.id, self.format_text("Сожалеем, но ничего не найдено."),
+                                           self.build_keyboard(menu_button, 1), "SEARCH_PNG")
         await self.delete_messages(id_user)
         await self.execute.add_element_message(id_user, answer.message_id)
 
@@ -1588,8 +1591,8 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in result_search.keys():
             pages[page] = page
-        heading = await self.answer_message(message, self.format_text(f"Результаты поиска:{number_page}"),
-                                            self.build_keyboard(pages, 3))
+        heading = await self.bot.push_photo(message.chat.id, self.format_text(f"Результаты поиска:{number_page}"),
+                                            self.build_keyboard(pages, 3), "SEARCH_PNG")
         await self.delete_messages(id_user)
         arr_answers = [str(heading.message_id)]
         for key, value in result_search['Поиск_Стр.1'].items():
@@ -1608,7 +1611,7 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def next_page_search(self, call_back: CallbackQuery):
-        if self.pages_search[call_back.data] == call_back.message.text.split('№')[1]:
+        if self.pages_search[call_back.data] == call_back.message.caption.split('№')[1]:
             return False
         else:
             previous_history = await self.execute.delete_element_history(call_back.from_user.id, 1)
@@ -1617,17 +1620,27 @@ class DispatcherMessage(Dispatcher):
             for page in result_search.keys():
                 pages[page] = page
             if call_back.message.caption:
-                heading = await self.edit_caption(call_back.message,
-                                                  f"{call_back.message.text.split('№')[0]}"
-                                                  f"№{self.pages_search[call_back.data]}",
-                                                  self.build_keyboard(pages, 3))
+                if "Результаты поиска:" in call_back.message.caption:
+                    heading = await self.edit_caption_by_basket(call_back.message,
+                                                                f"{call_back.message.caption.split('№')[0]}"
+                                                                f"№{self.pages_search[call_back.data]}",
+                                                                self.build_keyboard(pages, 3))
+                    await self.delete_messages(call_back.from_user.id, heading.message_id)
+                    arr_answers = []
+                else:
+                    heading = await self.bot.push_photo(call_back.message.chat.id,
+                                                        f"{call_back.message.caption.split('№')[0]}"
+                                                        f"№{self.pages_search[call_back.data]}",
+                                                        self.build_keyboard(pages, 3), "SEARCH_PNG")
+                    await self.delete_messages(call_back.from_user.id)
+                    arr_answers = [str(heading.message_id)]
             else:
-                heading = await self.edit_message(call_back.message,
-                                                  f"{call_back.message.text.split('№')[0]}"
-                                                  f"№{self.pages_search[call_back.data]}",
-                                                  self.build_keyboard(pages, 3))
-            await self.delete_messages(call_back.from_user.id, heading.message_id)
-            arr_answers = []
+                heading = await self.bot.push_photo(call_back.message.chat.id,
+                                                    f"{call_back.message.caption.split('№')[0]}"
+                                                    f"№{self.pages_search[call_back.data]}",
+                                                    self.build_keyboard(pages, 3), "SEARCH_PNG")
+                await self.delete_messages(call_back.from_user.id)
+                arr_answers = [str(heading.message_id)]
             for key, value in result_search[call_back.data].items():
                 menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
                 if value[1]:
@@ -1645,16 +1658,24 @@ class DispatcherMessage(Dispatcher):
         for page in result_search.keys():
             pages[page] = page
         if call_back.message.caption:
-            heading = await self.edit_caption(call_back.message,
-                                              self.format_text(f"Результаты поиска:{number_page}"),
-                                              self.build_keyboard(pages, 3))
+            if "Результаты поиска:" in call_back.message.caption:
+                heading = await self.edit_caption_by_basket(call_back.message,
+                                                            self.format_text(f"Результаты поиска:{number_page}"),
+                                                            self.build_keyboard(pages, 3))
+                await self.delete_messages(call_back.from_user.id, heading.message_id)
+                arr_answers = []
+            else:
+                heading = await self.bot.push_photo(call_back.message.chat.id,
+                                                    self.format_text(f"Результаты поиска:{number_page}"),
+                                                    self.build_keyboard(pages, 3), "SEARCH_PNG")
+                await self.delete_messages(call_back.from_user.id)
+                arr_answers = [str(heading.message_id)]
         else:
-            heading = await self.edit_message(call_back.message,
-                                              self.format_text(f"Результаты поиска:{number_page}"),
-                                              self.build_keyboard(pages, 3))
-        await self.delete_messages(call_back.from_user.id, heading.message_id)
-        await asyncio.sleep(0.5)
-        arr_answers = []
+            heading = await self.bot.push_photo(call_back.message.chat.id,
+                                                self.format_text(f"Результаты поиска:{number_page}"),
+                                                self.build_keyboard(pages, 3), "SEARCH_PNG")
+            await self.delete_messages(call_back.from_user.id)
+            arr_answers = [str(heading.message_id)]
         for key, value in result_search[current_page].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
             if value[1]:
@@ -2392,13 +2413,15 @@ class DispatcherMessage(Dispatcher):
                                        self.build_keyboard(self.assembling_category_dict(list_category), 1,
                                                            menu_button))
 
-    async def create_keyboard_push_photo(self, call_back: CallbackQuery, list_category: list, id_category: str):
+    async def create_keyboard_push_photo(self, call_back: CallbackQuery, list_category: list, id_category: str,
+                                         name_logo: str):
         menu_button = {'back': '◀ 👈 Назад'}
         text = await self.execute.text_category(id_category)
         answer = await self.bot.push_photo(call_back.message.chat.id,
                                            self.format_text(text),
                                            self.build_keyboard(self.assembling_category_dict(list_category),
-                                                               1, menu_button))
+                                                               1, menu_button),
+                                           name_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 

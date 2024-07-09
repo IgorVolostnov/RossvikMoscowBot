@@ -59,6 +59,11 @@ class BotMessage(Bot):
         return await self.edit_message_text(text=text_message, chat_id=chat_message,
                                             message_id=id_message, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def edit_head_caption_by_basket(self, text_message: str, chat_message: int, id_message: int,
+                                          keyboard: InlineKeyboardMarkup):
+        return await self.edit_message_caption(caption=text_message, chat_id=chat_message,
+                                               message_id=id_message, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
     async def edit_head_keyboard(self, chat_message: int, id_message: int, keyboard: InlineKeyboardMarkup):
         return await self.edit_message_reply_markup(chat_id=chat_message, message_id=id_message, reply_markup=keyboard)
 
@@ -80,8 +85,8 @@ class BotMessage(Bot):
                                         caption=f"От клиента {user} получен новый заказ №{number_order}! {contact}",
                                         parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
-    async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup):
-        photo_to_read = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.environ["CATALOG_PNG"])
+    async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup, name_photo: str):
+        photo_to_read = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.environ[name_photo])
         return await self.send_photo(chat_id=message_chat_id, photo=FSInputFile(photo_to_read), caption=text,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
@@ -630,8 +635,8 @@ class DispatcherMessage(Dispatcher):
     async def task_command_catalog(self, message: Message):
         await self.checking_bot(message)
         menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                           self.build_keyboard(self.data.get_prices, 1, menu_button))
+        answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров 📖"),
+                                           self.build_keyboard(self.data.get_prices, 1, menu_button), "CATALOG_PNG")
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
@@ -645,8 +650,8 @@ class DispatcherMessage(Dispatcher):
 
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров ROSSVIK 📖"),
-                                           self.build_keyboard(self.data.get_prices, 1, menu_button))
+        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров 📖"),
+                                           self.build_keyboard(self.data.get_prices, 1, menu_button), "CATALOG_PNG")
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
@@ -848,7 +853,7 @@ class DispatcherMessage(Dispatcher):
         for page in current_nomenclature.keys():
             pages[page] = page
         heading = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text + number_page),
-                                            self.build_keyboard(pages, 5))
+                                            self.build_keyboard(pages, 5), "CATALOG_PNG")
         await self.delete_messages(call_back.from_user.id)
         await asyncio.sleep(0.5)
         arr_answers = [str(heading.message_id)]
@@ -1086,16 +1091,17 @@ class DispatcherMessage(Dispatcher):
             basket = await self.data.get_basket(call_back.from_user.id)
             current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
             if current_history in self.dict_add:
-                menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
-                               'basket': basket['basket']}
+                menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️'}
                 await self.execute.delete_element_history(call_back.from_user.id, 1)
             else:
                 menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                                f'{id_nomenclature}add': 'Добавить ✅🗑️'}
             if call_back.message.caption:
-                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 2))
+                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 2,
+                                                                                     {'basket': basket['basket']}))
             else:
-                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2))
+                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2,
+                                                                                     {'basket': basket['basket']}))
             return True
         else:
             return True
@@ -1219,8 +1225,10 @@ class DispatcherMessage(Dispatcher):
             if current_basket_dict is None:
                 text = 'Ваша корзина пуста 😭😔💔'
                 menu_button = {'back': '◀ 👈 Назад'}
-                answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+                answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text),
+                                                   self.build_keyboard(menu_button, 1), "BASKET_PNG")
+                await self.delete_messages(call_back.from_user.id)
+                await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
             else:
                 pages = {}
                 for page in current_basket_dict.keys():
@@ -1231,16 +1239,22 @@ class DispatcherMessage(Dispatcher):
                 menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                'choice_delivery': 'Оформить заказ 📧📦📲'}
                 if call_back.message.caption:
-                    heading = await self.answer_message_by_basket(call_back.message,
-                                                                  text + self.format_text(number_page),
-                                                                  self.build_keyboard(pages, 3, menu_button))
+                    if "Сейчас в Вашу корзину добавлены товары на общую сумму " in call_back.message.caption:
+                        heading = await self.edit_caption_by_basket(call_back.message, text + self.format_text(number_page),
+                                                                    self.build_keyboard(pages, 3, menu_button))
+                        await self.delete_messages(call_back.from_user.id, heading.message_id)
+                        arr_answers = []
+                    else:
+                        heading = await self.bot.push_photo(call_back.message.chat.id,
+                                                            text + self.format_text(number_page),
+                                                            self.build_keyboard(pages, 3, menu_button), "BASKET_PNG")
+                        await self.delete_messages(call_back.from_user.id)
+                        arr_answers = [str(heading.message_id)]
+                else:
+                    heading = await self.bot.push_photo(call_back.message.chat.id, text + self.format_text(number_page),
+                                                        self.build_keyboard(pages, 3, menu_button), "BASKET_PNG")
                     await self.delete_messages(call_back.from_user.id)
                     arr_answers = [str(heading.message_id)]
-                else:
-                    heading = await self.edit_message_by_basket(call_back.message, text + self.format_text(number_page),
-                                                                self.build_keyboard(pages, 3, menu_button))
-                    await self.delete_messages(call_back.from_user.id, heading.message_id)
-                    arr_answers = []
                 if f'Корзина_Стр.{number}' not in current_basket_dict.keys():
                     number = '1'
                 for key, item in current_basket_dict[f'Корзина_Стр.{number}'].items():
@@ -1259,7 +1273,8 @@ class DispatcherMessage(Dispatcher):
         if current_basket_dict is None:
             text = 'Ваша корзина пуста 😭😔💔'
             menu_button = {'back': '◀ 👈 Назад'}
-            answer = await self.answer_message(message, text, self.build_keyboard(menu_button, 1))
+            answer = await self.bot.push_photo(message.chat.id, self.format_text(text),
+                                               self.build_keyboard(menu_button, 1), "BASKET_PNG")
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
@@ -1272,8 +1287,8 @@ class DispatcherMessage(Dispatcher):
                    f"{self.format_text(self.format_price(float(sum_basket)))}:"
             menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                            'choice_delivery': 'Оформить заказ 📧📦📲'}
-            heading = await self.answer_message_by_basket(message, text + self.format_text(number_page),
-                                                          self.build_keyboard(pages, 5, menu_button))
+            heading = await self.bot.push_photo(message.chat.id, text + self.format_text(number_page),
+                                                self.build_keyboard(pages, 3, menu_button), "BASKET_PNG")
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, heading.message_id)
@@ -1295,7 +1310,7 @@ class DispatcherMessage(Dispatcher):
     async def clean_basket_message(self, call_back: CallbackQuery):
         text = 'Ваша корзина пуста 😭😔💔'
         menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
+        answer = await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 1))
         await self.delete_messages(call_back.from_user.id, answer.message_id)
         await self.delete_history_basket(call_back.from_user.id, 'Корзина')
 
@@ -1342,7 +1357,7 @@ class DispatcherMessage(Dispatcher):
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                await self.bot.edit_head_message_by_basket(head_text + self.format_text(number_page_basket),
+                await self.bot.edit_head_caption_by_basket(head_text + self.format_text(number_page_basket),
                                                            call_back.message.chat.id, arr_messages[0],
                                                            self.build_keyboard(pages, 3, head_menu_button))
                 return number_page
@@ -1355,8 +1370,8 @@ class DispatcherMessage(Dispatcher):
                     head_text = 'Ваша корзина пуста 😭😔💔'
                     head_menu_button = {'back': '◀ 👈 Назад'}
                     arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                    await self.bot.edit_head_message(head_text, call_back.message.chat.id, arr_messages[0],
-                                                     self.build_keyboard(head_menu_button, 1))
+                    await self.bot.edit_head_caption_by_basket(head_text, call_back.message.chat.id, arr_messages[0],
+                                                               self.build_keyboard(head_menu_button, 1))
                     return number_page
                 else:
                     await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
@@ -1374,7 +1389,7 @@ class DispatcherMessage(Dispatcher):
                     else:
                         new_number = number
                     number_page_basket = f'{whitespace}Страница №{str(new_number)}'
-                    heading = await self.bot.edit_head_message_by_basket(head_text +
+                    heading = await self.bot.edit_head_caption_by_basket(head_text +
                                                                          self.format_text(number_page_basket),
                                                                          call_back.message.chat.id, arr_messages[0],
                                                                          self.build_keyboard(pages, 3,
@@ -1441,10 +1456,9 @@ class DispatcherMessage(Dispatcher):
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                await self.bot.edit_head_message_by_basket(head_text + self.format_text(number_page_basket),
+                await self.bot.edit_head_caption_by_basket(head_text + self.format_text(number_page_basket),
                                                            call_back.message.chat.id, arr_messages[0],
                                                            self.build_keyboard(pages, 3, head_menu_button))
-                check = True
             return number_page
         except TelegramBadRequest:
             pass
@@ -2324,6 +2338,10 @@ class DispatcherMessage(Dispatcher):
     async def edit_caption(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.edit_caption(caption=self.format_text(text), parse_mode=ParseMode.HTML,
                                           reply_markup=keyboard)
+
+    @staticmethod
+    async def edit_caption_by_basket(message: Message, text: str, keyboard: InlineKeyboardMarkup):
+        return await message.edit_caption(caption=text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def answer_photo(self, message: Message, photo: str, caption: str, keyboard: InlineKeyboardMarkup):
         try:

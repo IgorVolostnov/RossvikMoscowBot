@@ -550,28 +550,32 @@ class DispatcherMessage(Dispatcher):
     async def help_message(self, message: Message):
         whitespace = '\n'
         first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
-        answer = await self.answer_message(message, f"Вы можете воспользоваться быстрой навигацией,"
-                                                    f"отправляя следующие команды:{whitespace}{whitespace}"
-                                                    f"/start - главное меню{whitespace}"
-                                                    f"/catalog - каталог товара{whitespace}"
-                                                    f"/news - новости{whitespace}"
-                                                    f"/basket - корзина{whitespace}"
-                                                    f"/order - история заказов{whitespace}{whitespace}"
-                                                    f"Поиск товара:{whitespace}{whitespace}"
-                                                    f"При отправке боту сообщения происходит поиск товара в каталоге "
-                                                    f"по содержимому сообщения, разделенному пробелами. Можно "
-                                                    f"указывать не только слова, но и символы, которые содержатся, "
-                                                    f"например, в наименовании товара.{whitespace}Чтобы понять, "
-                                                    f"как это работает, попробуйте отправить боту "
-                                                    f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
-                                                    f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: Все данные, полученные в "
-                                                    f"процессе взаимодействия между Ботом и Пользователем: фото, "
-                                                    f"видео, текстовая информация, а также любые отправленные "
-                                                    f"документы, которые содержат конфиденциальную информацию не "
-                                                    f"подлежат использованию, копированию, распространению, "
-                                                    f"а также осуществлению любых других действий "
-                                                    f"на основе этой информации.",
-                                           self.build_keyboard(first_keyboard, 1))
+        answer = await self.bot.push_photo(message.chat.id,
+                                           self.format_text(f"Вы можете воспользоваться быстрой навигацией,"
+                                                            f"отправляя следующие команды:{whitespace}{whitespace}"
+                                                            f"/start - главное меню{whitespace}"
+                                                            f"/catalog - каталог товара{whitespace}"
+                                                            f"/news - новости{whitespace}"
+                                                            f"/basket - корзина{whitespace}"
+                                                            f"/order - история заказов{whitespace}{whitespace}"
+                                                            f"Поиск товара:{whitespace}{whitespace}"
+                                                            f"При отправке боту сообщения происходит "
+                                                            f"поиск товара в каталоге "
+                                                            f"по содержимому сообщения, разделенному пробелами. Можно "
+                                                            f"указывать не только слова, но и символы, "
+                                                            f"которые содержатся, например, в наименовании товара."
+                                                            f"{whitespace}Чтобы понять, "
+                                                            f"как это работает, попробуйте отправить боту "
+                                                            f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
+                                                            f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: "
+                                                            f"Все данные, полученные в процессе взаимодействия между "
+                                                            f"Ботом и Пользователем: фото, видео, текстовая "
+                                                            f"информация, а также любые отправленные документы, "
+                                                            f"которые содержат конфиденциальную информацию не "
+                                                            f"подлежат использованию, копированию, распространению, "
+                                                            f"а также осуществлению любых других действий "
+                                                            f"на основе этой информации."),
+                                           self.build_keyboard(first_keyboard, 1), "HELP_PNG")
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
@@ -579,36 +583,39 @@ class DispatcherMessage(Dispatcher):
     async def return_help_message(self, call_back: CallbackQuery):
         whitespace = '\n'
         first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
-        answer = await self.answer_message(call_back.message,
-                                           f"Вы можете воспользоваться быстрой навигацией,"
-                                           f"отправляя следующие команды:{whitespace}{whitespace}"
-                                           f"/start - главное меню{whitespace}"
-                                           f"/catalog - каталог товара{whitespace}"
-                                           f"/news - новости{whitespace}"
-                                           f"/basket - корзина{whitespace}"
-                                           f"/order - история заказов{whitespace}{whitespace}"
-                                           f"Поиск товара:{whitespace}{whitespace}"
-                                           f"При отправке боту сообщения происходит поиск товара в каталоге "
-                                           f"по содержимому сообщения, разделенному пробелами. Можно "
-                                           f"указывать не только слова, но и символы, которые содержатся, "
-                                           f"например, в наименовании товара.{whitespace}Чтобы понять, "
-                                           f"как это работает, попробуйте отправить боту "
-                                           f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
-                                           f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: Все данные, полученные в "
-                                           f"процессе взаимодействия между Ботом и Пользователем: фото, "
-                                           f"видео, текстовая информация, а также любые отправленные "
-                                           f"документы, которые содержат конфиденциальную информацию не "
-                                           f"подлежат использованию, копированию, распространению, "
-                                           f"а также осуществлению любых других действий "
-                                           f"на основе этой информации.",
-                                           self.build_keyboard(first_keyboard, 1))
+        answer = await self.bot.push_photo(call_back.message.chat.id,
+                                           self.format_text(f"Вы можете воспользоваться быстрой навигацией,"
+                                                            f"отправляя следующие команды:{whitespace}{whitespace}"
+                                                            f"/start - главное меню{whitespace}"
+                                                            f"/catalog - каталог товара{whitespace}"
+                                                            f"/news - новости{whitespace}"
+                                                            f"/basket - корзина{whitespace}"
+                                                            f"/order - история заказов{whitespace}{whitespace}"
+                                                            f"Поиск товара:{whitespace}{whitespace}"
+                                                            f"При отправке боту сообщения происходит "
+                                                            f"поиск товара в каталоге "
+                                                            f"по содержимому сообщения, разделенному пробелами. Можно "
+                                                            f"указывать не только слова, но и символы, "
+                                                            f"которые содержатся, например, в наименовании товара."
+                                                            f"{whitespace}Чтобы понять, "
+                                                            f"как это работает, попробуйте отправить боту "
+                                                            f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
+                                                            f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: "
+                                                            f"Все данные, полученные в процессе взаимодействия между "
+                                                            f"Ботом и Пользователем: фото, видео, текстовая "
+                                                            f"информация, а также любые отправленные документы, "
+                                                            f"которые содержат конфиденциальную информацию не "
+                                                            f"подлежат использованию, копированию, распространению, "
+                                                            f"а также осуществлению любых других действий "
+                                                            f"на основе этой информации."),
+                                           self.build_keyboard(first_keyboard, 1), "HELP_PNG")
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def task_command_start(self, message: Message):
         await self.checking_bot(message)
         first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
-        answer = await self.answer_message(message, "Выберете, что Вас интересует",
+        answer = await self.answer_message(message, "Выберете, что Вас интересует⤵⤵⤵",
                                            self.build_keyboard(first_keyboard, 1))
         if await self.execute.start_message(message):
             await self.execute.restart_catalog(message, '/start')
@@ -622,7 +629,7 @@ class DispatcherMessage(Dispatcher):
 
     async def return_start(self, call_back: CallbackQuery):
         first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
-        answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует",
+        answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует⤵⤵⤵",
                                            self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
@@ -1777,53 +1784,6 @@ class DispatcherMessage(Dispatcher):
             arr_result.append(value.split('///'))
         return arr_result
 
-    async def task_post_admin(self, call_back: CallbackQuery):
-        await self.post_admin(call_back)
-        await self.delete_history_delivery(call_back.from_user.id)
-        return True
-
-    async def post_admin(self, call_back: CallbackQuery):
-        info_order = await self.record_data_order_by_xlsx(call_back)
-        list_user_admin = await self.execute.get_user_admin
-        menu_button = {'attachments': 'Показать вложения', 'take_order': '💬 Взять заказ в обработку'}
-        info_delivery_address_from_user = await self.execute.get_delivery_address(call_back.from_user.id)
-        if info_delivery_address_from_user[2] == '':
-            comment = 'Частное лицо'
-        else:
-            comment = '\n'.join(info_delivery_address_from_user[2].split('///'))
-        list_messages_admins = []
-        for user in list_user_admin:
-            answer = await self.bot.send_message_order(int(user[0]),
-                                                       f'{call_back.from_user.id} '
-                                                       f'{call_back.from_user.first_name} '
-                                                       f'{call_back.from_user.last_name} '
-                                                       f'{call_back.from_user.username} ',
-                                                       info_order[1],
-                                                       f"\n{info_delivery_address_from_user[0]}\n"
-                                                       f"{info_delivery_address_from_user[1]}\n"
-                                                       f"{comment}",
-                                                       info_order[0],
-                                                       self.build_keyboard(menu_button, 1))
-            list_messages_admins.append(str(answer.message_id))
-        await self.execute.record_order_answer_admin(call_back.from_user.id,
-                                                     info_order[0],
-                                                     ' '.join(list_messages_admins))
-        await self.execute.clean_basket(call_back.from_user.id)
-        text = 'Мы получили заказ, в ближайшее время пришлем Вам счет для оплаты или свяжемся с Вами, ' \
-               'если у нас появятся вопросы 😎👌🔥'
-        menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
-        await self.delete_messages(call_back.from_user.id, answer.message_id)
-        await self.delete_history_basket(call_back.from_user.id, 'Корзина')
-
-    async def record_data_order_by_xlsx(self, call_back: CallbackQuery):
-        current_basket_dict = await self.execute.current_basket_for_xlsx(call_back.from_user.id)
-        order = await self.save_order(call_back, current_basket_dict)
-        number_order = order[0]
-        order_path = order[1]
-        await self.execute.record_order_xlsx(call_back.from_user.id, number_order, order_path)
-        return number_order, order_path
-
     async def task_choice_delivery_user(self, call_back: CallbackQuery):
         await self.delete_messages(call_back.from_user.id, call_back.message.message_id)
         await self.choice_delivery_user(call_back)
@@ -2219,7 +2179,8 @@ class DispatcherMessage(Dispatcher):
             for item in arr_media_message:
                 arr_message.append(str(item.message_id))
             menu_button = {'back': '◀ 👈 Назад'}
-            text = 'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
+            text = 'Вложенные файлы.\n' \
+                   'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
             answer_return = await self.answer_message(call_back.message, self.format_text(text),
                                                       self.build_keyboard(menu_button, 1))
             arr_message.append(str(answer_return.message_id))
@@ -2260,7 +2221,8 @@ class DispatcherMessage(Dispatcher):
             for item in arr_media_message:
                 arr_message.append(str(item.message_id))
             menu_button = {'back': '◀ 👈 Назад'}
-            text = 'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
+            text = 'Вложенные файлы.\n' \
+                   'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
             answer_return = await self.answer_message(call_back.message, self.format_text(text),
                                                       self.build_keyboard(menu_button, 1))
             arr_message.append(str(answer_return.message_id))
@@ -2303,6 +2265,53 @@ class DispatcherMessage(Dispatcher):
     async def delete_record_user(self, call_back: CallbackQuery):
         await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
         return True
+
+    async def task_post_admin(self, call_back: CallbackQuery):
+        await self.post_admin(call_back)
+        await self.delete_history_delivery(call_back.from_user.id)
+        return True
+
+    async def post_admin(self, call_back: CallbackQuery):
+        info_order = await self.record_data_order_by_xlsx(call_back)
+        list_user_admin = await self.execute.get_user_admin
+        menu_button = {'attachments': 'Показать вложения', 'take_order': '💬 Взять заказ в обработку'}
+        info_delivery_address_from_user = await self.execute.get_delivery_address(call_back.from_user.id)
+        if info_delivery_address_from_user[2] == '':
+            comment = 'Частное лицо'
+        else:
+            comment = '\n'.join(info_delivery_address_from_user[2].split('///'))
+        list_messages_admins = []
+        for user in list_user_admin:
+            answer = await self.bot.send_message_order(int(user[0]),
+                                                       f'{call_back.from_user.id} '
+                                                       f'{call_back.from_user.first_name} '
+                                                       f'{call_back.from_user.last_name} '
+                                                       f'{call_back.from_user.username} ',
+                                                       info_order[1],
+                                                       f"\n{info_delivery_address_from_user[0]}\n"
+                                                       f"{info_delivery_address_from_user[1]}\n"
+                                                       f"{comment}",
+                                                       info_order[0],
+                                                       self.build_keyboard(menu_button, 1))
+            list_messages_admins.append(str(answer.message_id))
+        await self.execute.record_order_answer_admin(call_back.from_user.id,
+                                                     info_order[0],
+                                                     ' '.join(list_messages_admins))
+        await self.execute.clean_basket(call_back.from_user.id)
+        text = 'Мы получили заказ, в ближайшее время пришлем Вам счет для оплаты или свяжемся с Вами, ' \
+               'если у нас появятся вопросы 😎👌🔥'
+        menu_button = {'back': '◀ 👈 Назад'}
+        answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1))
+        await self.delete_messages(call_back.from_user.id, answer.message_id)
+        await self.delete_history_basket(call_back.from_user.id, 'Корзина')
+
+    async def record_data_order_by_xlsx(self, call_back: CallbackQuery):
+        current_basket_dict = await self.execute.current_basket_for_xlsx(call_back.from_user.id)
+        order = await self.save_order(call_back, current_basket_dict)
+        number_order = order[0]
+        order_path = order[1]
+        await self.execute.record_order_xlsx(call_back.from_user.id, number_order, order_path)
+        return number_order, order_path
 
     async def save_order(self, call_back: CallbackQuery, basket: dict):
         new_book = openpyxl.Workbook()
@@ -2399,16 +2408,21 @@ class DispatcherMessage(Dispatcher):
         else:
             return await self.answer_message(message, text, keyboard)
 
-    async def send_media(self, message: Message, media: list, server: bool = True):
-        media_group = MediaGroupBuilder(caption='Вложенные файлы для отправки вместе с заказом:')
+    async def send_media(self, message: Message, media: list, server: bool = False):
+        media_group = MediaGroupBuilder()
         for item in media:
             if server:
                 if 'C:\\Python 3.11\\Мои проекты\\' in item:
-                    path_file = item.split('C:\\Python 3.11\\Мои проекты\\')[1]
+                    path_file = os.path.join(os.path.split(os.path.dirname(__file__))[0],
+                                             item.split('C:\\Python 3.11\\Мои проекты\\')[1])
                 else:
                     path_file = item
             else:
-                path_file = item
+                if 'C:\\Python 3.11\\Мои проекты\\' in item:
+                    path_file = item
+                else:
+                    path_reverse = "\\".join(item.split("/"))
+                    path_file = 'C:\\Python 3.11\\Мои проекты' + path_reverse
             file_input = FSInputFile(path_file)
             media_group.add_document(media=file_input, parse_mode=ParseMode.HTML)
         return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())

@@ -2399,10 +2399,17 @@ class DispatcherMessage(Dispatcher):
         else:
             return await self.answer_message(message, text, keyboard)
 
-    async def send_media(self, message: Message, media: list):
+    async def send_media(self, message: Message, media: list, server: bool = True):
         media_group = MediaGroupBuilder(caption='Вложенные файлы для отправки вместе с заказом:')
         for item in media:
-            file_input = FSInputFile(item)
+            if server:
+                if 'C:\\Python 3.11\\Мои проекты\\' in item:
+                    path_file = item.split('C:\\Python 3.11\\Мои проекты\\')[1]
+                else:
+                    path_file = item
+            else:
+                path_file = item
+            file_input = FSInputFile(path_file)
             media_group.add_document(media=file_input, parse_mode=ParseMode.HTML)
         return await self.bot.send_media_group(chat_id=message.chat.id, media=media_group.build())
 

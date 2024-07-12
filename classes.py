@@ -39,6 +39,16 @@ class BotTelegram:
 class BotMessage(Bot):
     def __init__(self, token, **kw):
         Bot.__init__(self, token, **kw)
+        self.catalog_logo = FSInputFile(os.path.join(os.path.split(os.path.dirname(__file__))[0],
+                                                     os.environ["CATALOG_PNG"]))
+        self.basket_logo = FSInputFile(os.path.join(os.path.split(os.path.dirname(__file__))[0],
+                                                    os.environ["BASKET_PNG"]))
+        self.order_logo = FSInputFile(os.path.join(os.path.split(os.path.dirname(__file__))[0],
+                                                   os.environ["ORDER_PNG"]))
+        self.search_logo = FSInputFile(os.path.join(os.path.split(os.path.dirname(__file__))[0],
+                                                    os.environ["SEARCH_PNG"]))
+        self.help_logo = FSInputFile(os.path.join(os.path.split(os.path.dirname(__file__))[0],
+                                                  os.environ["HELP_PNG"]))
 
     async def delete_messages_chat(self, chat_id: int, list_message: list):
         try:
@@ -85,9 +95,9 @@ class BotMessage(Bot):
                                         caption=f"От клиента {user} получен новый заказ №{number_order}! {contact}",
                                         parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
-    async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup, name_photo: str):
-        photo_to_read = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.environ[name_photo])
-        return await self.send_photo(chat_id=message_chat_id, photo=FSInputFile(photo_to_read), caption=text,
+    async def push_photo(self, message_chat_id: int, text: str, keyboard: InlineKeyboardMarkup,
+                         name_photo: FSInputFile):
+        return await self.send_photo(chat_id=message_chat_id, photo=name_photo, caption=text,
                                      parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def save_audio(self, message: Message):
@@ -476,6 +486,13 @@ class DispatcherMessage(Dispatcher):
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'fill_details'))
+        async def send_fill_details(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_fill_details(callback))
+            task.set_name(f'{callback.from_user.id}_task_fill_details')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             task = asyncio.create_task(self.task_back(callback))
@@ -513,23 +530,17 @@ class DispatcherMessage(Dispatcher):
             await self.choice_delivery_user(call_back)
         elif current in self.choice_delivery:
             if current == 'pickup':
-                await self.return_pickup(call_back)
+                await self.pickup(call_back)
             elif current == 'delivery':
-                await self.return_delivery(call_back)
+                await self.delivery(call_back)
         elif current in self.kind_pickup:
-            info_order = await self.execute.get_info_order(call_back.from_user.id)
-            if info_order[8] == '' and info_order[9] == '':
-                await self.record_answer_pickup(call_back, current)
-            else:
-                await self.return_pickup_delivery_by_media(call_back, info_order)
+            await self.record_answer_pickup(call_back, current)
         elif current in self.kind_delivery:
-            info_order = await self.execute.get_info_order(call_back.from_user.id)
-            if info_order[8] == '' and info_order[9] == '':
-                await self.record_answer_delivery(call_back, current)
-            else:
-                await self.return_pickup_delivery_by_media(call_back, info_order)
+            await self.record_answer_delivery(call_back, current)
         elif 'nested' in current:
             await self.show_nested(call_back, current)
+        elif current == 'fill_details':
+            await self.fill_details(call_back)
         return True
 
     async def checking_bot(self, message: Message):
@@ -575,7 +586,7 @@ class DispatcherMessage(Dispatcher):
                                                             f"подлежат использованию, копированию, распространению, "
                                                             f"а также осуществлению любых других действий "
                                                             f"на основе этой информации."),
-                                           self.build_keyboard(first_keyboard, 1), "HELP_PNG")
+                                           self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
@@ -608,14 +619,14 @@ class DispatcherMessage(Dispatcher):
                                                             f"подлежат использованию, копированию, распространению, "
                                                             f"а также осуществлению любых других действий "
                                                             f"на основе этой информации."),
-                                           self.build_keyboard(first_keyboard, 1), "HELP_PNG")
+                                           self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def task_command_start(self, message: Message):
         await self.checking_bot(message)
         first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
-        answer = await self.answer_message(message, "Выберете, что Вас интересует⤵⤵⤵",
+        answer = await self.answer_message(message, "Выберете, что Вас интересует ⤵ ⤵ ⤵",
                                            self.build_keyboard(first_keyboard, 1))
         if await self.execute.start_message(message):
             await self.execute.restart_catalog(message, '/start')
@@ -629,7 +640,7 @@ class DispatcherMessage(Dispatcher):
 
     async def return_start(self, call_back: CallbackQuery):
         first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
-        answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует⤵⤵⤵",
+        answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует ⤵ ⤵ ⤵",
                                            self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
@@ -643,7 +654,8 @@ class DispatcherMessage(Dispatcher):
         await self.checking_bot(message)
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров 📖"),
-                                           self.build_keyboard(self.data.get_prices, 1, menu_button), "CATALOG_PNG")
+                                           self.build_keyboard(self.data.get_prices, 1, menu_button),
+                                           self.bot.catalog_logo)
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
@@ -658,7 +670,8 @@ class DispatcherMessage(Dispatcher):
     async def catalog(self, call_back: CallbackQuery):
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров 📖"),
-                                           self.build_keyboard(self.data.get_prices, 1, menu_button), "CATALOG_PNG")
+                                           self.build_keyboard(self.data.get_prices, 1, menu_button),
+                                           self.bot.catalog_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
@@ -705,14 +718,14 @@ class DispatcherMessage(Dispatcher):
     async def return_category(self, call_back: CallbackQuery, current_history):
         current_category = await self.execute.current_category(current_history)
         if current_category:
-            await self.create_keyboard_push_photo(call_back, current_category, current_history, "CATALOG_PNG")
+            await self.create_keyboard_push_photo(call_back, current_category, current_history, self.bot.catalog_logo)
         else:
             new_current = await self.execute.delete_element_history(call_back.from_user.id, 1)
             if new_current == 'catalog':
                 await self.catalog(call_back)
             else:
                 current_category = await self.execute.current_category(new_current)
-                await self.create_keyboard_push_photo(call_back, current_category, new_current, "CATALOG_PNG")
+                await self.create_keyboard_push_photo(call_back, current_category, new_current, self.bot.catalog_logo)
 
     async def list_nomenclature(self, call_back: CallbackQuery):
         number_page = '\n' + 'Страница №1'
@@ -860,7 +873,7 @@ class DispatcherMessage(Dispatcher):
         for page in current_nomenclature.keys():
             pages[page] = page
         heading = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text + number_page),
-                                            self.build_keyboard(pages, 5), "CATALOG_PNG")
+                                            self.build_keyboard(pages, 5), self.bot.catalog_logo)
         await self.delete_messages(call_back.from_user.id)
         await asyncio.sleep(0.5)
         arr_answers = [str(heading.message_id)]
@@ -1233,7 +1246,7 @@ class DispatcherMessage(Dispatcher):
                 text = 'Ваша корзина пуста 😭😔💔'
                 menu_button = {'back': '◀ 👈 Назад'}
                 answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text),
-                                                   self.build_keyboard(menu_button, 1), "BASKET_PNG")
+                                                   self.build_keyboard(menu_button, 1), self.bot.basket_logo)
                 await self.delete_messages(call_back.from_user.id)
                 await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
             else:
@@ -1255,12 +1268,14 @@ class DispatcherMessage(Dispatcher):
                     else:
                         heading = await self.bot.push_photo(call_back.message.chat.id,
                                                             text + self.format_text(number_page),
-                                                            self.build_keyboard(pages, 3, menu_button), "BASKET_PNG")
+                                                            self.build_keyboard(pages, 3, menu_button),
+                                                            self.bot.basket_logo)
                         await self.delete_messages(call_back.from_user.id)
                         arr_answers = [str(heading.message_id)]
                 else:
                     heading = await self.bot.push_photo(call_back.message.chat.id, text + self.format_text(number_page),
-                                                        self.build_keyboard(pages, 3, menu_button), "BASKET_PNG")
+                                                        self.build_keyboard(pages, 3, menu_button),
+                                                        self.bot.basket_logo)
                     await self.delete_messages(call_back.from_user.id)
                     arr_answers = [str(heading.message_id)]
                 if f'Корзина_Стр.{number}' not in current_basket_dict.keys():
@@ -1282,7 +1297,7 @@ class DispatcherMessage(Dispatcher):
             text = 'Ваша корзина пуста 😭😔💔'
             menu_button = {'back': '◀ 👈 Назад'}
             answer = await self.bot.push_photo(message.chat.id, self.format_text(text),
-                                               self.build_keyboard(menu_button, 1), "BASKET_PNG")
+                                               self.build_keyboard(menu_button, 1), self.bot.basket_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
@@ -1296,7 +1311,7 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                            'choice_delivery': 'Оформить заказ 📧📦📲'}
             heading = await self.bot.push_photo(message.chat.id, text + self.format_text(number_page),
-                                                self.build_keyboard(pages, 3, menu_button), "BASKET_PNG")
+                                                self.build_keyboard(pages, 3, menu_button), self.bot.basket_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, heading.message_id)
@@ -1588,7 +1603,7 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_element_message(id_user, message.message_id)
         menu_button = {'back': '◀ 👈 Назад'}
         answer = await self.bot.push_photo(message.chat.id, self.format_text("Сожалеем, но ничего не найдено."),
-                                           self.build_keyboard(menu_button, 1), "SEARCH_PNG")
+                                           self.build_keyboard(menu_button, 1), self.bot.search_logo)
         await self.delete_messages(id_user)
         await self.execute.add_element_message(id_user, answer.message_id)
 
@@ -1599,7 +1614,7 @@ class DispatcherMessage(Dispatcher):
         for page in result_search.keys():
             pages[page] = page
         heading = await self.bot.push_photo(message.chat.id, self.format_text(f"Результаты поиска:{number_page}"),
-                                            self.build_keyboard(pages, 3), "SEARCH_PNG")
+                                            self.build_keyboard(pages, 3), self.bot.search_logo)
         await self.delete_messages(id_user)
         arr_answers = [str(heading.message_id)]
         for key, value in result_search['Поиск_Стр.1'].items():
@@ -1638,14 +1653,14 @@ class DispatcherMessage(Dispatcher):
                     heading = await self.bot.push_photo(call_back.message.chat.id,
                                                         f"{call_back.message.caption.split('№')[0]}"
                                                         f"№{self.pages_search[call_back.data]}",
-                                                        self.build_keyboard(pages, 3), "SEARCH_PNG")
+                                                        self.build_keyboard(pages, 3), self.bot.search_logo)
                     await self.delete_messages(call_back.from_user.id)
                     arr_answers = [str(heading.message_id)]
             else:
                 heading = await self.bot.push_photo(call_back.message.chat.id,
                                                     f"{call_back.message.caption.split('№')[0]}"
                                                     f"№{self.pages_search[call_back.data]}",
-                                                    self.build_keyboard(pages, 3), "SEARCH_PNG")
+                                                    self.build_keyboard(pages, 3), self.bot.search_logo)
                 await self.delete_messages(call_back.from_user.id)
                 arr_answers = [str(heading.message_id)]
             for key, value in result_search[call_back.data].items():
@@ -1674,13 +1689,13 @@ class DispatcherMessage(Dispatcher):
             else:
                 heading = await self.bot.push_photo(call_back.message.chat.id,
                                                     self.format_text(f"Результаты поиска:{number_page}"),
-                                                    self.build_keyboard(pages, 3), "SEARCH_PNG")
+                                                    self.build_keyboard(pages, 3), self.bot.search_logo)
                 await self.delete_messages(call_back.from_user.id)
                 arr_answers = [str(heading.message_id)]
         else:
             heading = await self.bot.push_photo(call_back.message.chat.id,
                                                 self.format_text(f"Результаты поиска:{number_page}"),
-                                                self.build_keyboard(pages, 3), "SEARCH_PNG")
+                                                self.build_keyboard(pages, 3), self.bot.search_logo)
             await self.delete_messages(call_back.from_user.id)
             arr_answers = [str(heading.message_id)]
         for key, value in result_search[current_page].items():
@@ -1811,6 +1826,7 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def pickup(self, call_back: CallbackQuery):
+        await self.execute.delete_new_order(call_back.from_user.id)
         head_menu_button = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
                             'record_answer_storage': 'Мытищи, 1-ая Новая, 57 (Склад)',
                             'back': '◀ 👈 Назад'}
@@ -1822,23 +1838,10 @@ class DispatcherMessage(Dispatcher):
         else:
             answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
-            await self.execute.record_new_order(call_back.from_user.id, 'Самовывоз 🖐🏻')
-
-    async def return_pickup(self, call_back: CallbackQuery):
-        head_menu_button = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
-                            'record_answer_storage': 'Мытищи, 1-ая Новая, 57 (Склад)',
-                            'back': '◀ 👈 Назад'}
-        head_text = f"Выберете откуда будете забирать товар:"
-        if call_back.message.caption:
-            answer = await self.answer_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
-            await self.delete_messages(call_back.from_user.id)
-            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-        else:
-            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
-            await self.delete_messages(call_back.from_user.id, answer.message_id)
-            await self.execute.record_order_type_delivery(call_back.from_user.id, 'Самовывоз 🖐🏻')
+        await self.execute.record_new_order(call_back.from_user.id, 'Самовывоз 🖐🏻')
 
     async def delivery(self, call_back: CallbackQuery):
+        await self.execute.delete_new_order(call_back.from_user.id)
         head_menu_button = {'record_answer_moscow': 'В пределах МКАД',
                             'record_answer_pek': 'ТК ПЭК',
                             'record_answer_dl': 'ТК Деловые Линии',
@@ -1854,25 +1857,7 @@ class DispatcherMessage(Dispatcher):
         else:
             answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
-            await self.execute.record_new_order(call_back.from_user.id, 'Доставка 📦')
-
-    async def return_delivery(self, call_back: CallbackQuery):
-        head_menu_button = {'record_answer_moscow': 'В пределах МКАД',
-                            'record_answer_pek': 'ТК ПЭК',
-                            'record_answer_dl': 'ТК Деловые Линии',
-                            'record_answer_mt': 'ТК Мейджик Транс',
-                            'record_answer_cdek': 'ТК СДЭК',
-                            'back': '◀ 👈 Назад'}
-        head_text = f"Выберете какой транспортной компанией доставить товар, " \
-                    f"либо можем доставить товар своими силами в пределах МКАД:"
-        if call_back.message.caption:
-            answer = await self.answer_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
-            await self.delete_messages(call_back.from_user.id)
-            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-        else:
-            answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 1))
-            await self.delete_messages(call_back.from_user.id, answer.message_id)
-            await self.execute.record_order_type_delivery(call_back.from_user.id, 'Доставка 📦')
+        await self.execute.record_new_order(call_back.from_user.id, 'Доставка 📦')
 
     async def task_record_answer_pickup(self, call_back: CallbackQuery):
         await self.record_answer_pickup(call_back)
@@ -1881,66 +1866,67 @@ class DispatcherMessage(Dispatcher):
 
     async def record_answer_pickup(self, call_back: CallbackQuery, kind_pickup: str = None):
         whitespace = '\n'
-        if kind_pickup:
-            arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_pickup[kind_pickup])
+        if kind_pickup is None:
+            kind_pickup = call_back.data
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        if info_order[9] == '':
+            amount_content = 0
         else:
-            arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_pickup[call_back.data])
-        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
-        if len(arr_contact) == 0:
-            text_format = self.format_text(f"ООО «Алькар»{whitespace}ИНН 9715341213 КПП 771501001{whitespace}"
-                                           f"Юридический, фактический и почтовый адрес: 127562, город Москва, улица "
-                                           f"Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}Тел. +7 (495) 215-000-3, "
-                                           f"8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}"
-                                           f"Приеду во вторник!")
-            head_text = f"{call_back.from_user.first_name} {call_back.from_user.last_name} у нас нет контактных " \
-                        f"данных по Вашей учетной записи. Мы можем выставить счет на Частное лицо или отправьте нам " \
-                        f"сообщение с Вашими реквизитами, например:{whitespace}{text_format}"
-            if call_back.message.caption:
-                answer = await self.answer_message_by_basket(call_back.message, head_text,
-                                                             self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id)
-                await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-            else:
-                answer = await self.edit_message(call_back.message, head_text, self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+            amount_content = len(info_order[9].split('///'))
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                            'post': 'Отправить заказ 📫'}
+        button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
+        message_text = 'Заполните реквизиты для отправки заказа!'
+        head_text = f"{self.format_text(message_text)}{whitespace}" \
+                    f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                    f"TK или пункт самовывоза: {self.format_text(self.kind_pickup[kind_pickup])}{whitespace}" \
+                    f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                    f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                    f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                    f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                    f"Комментарий: {self.format_text(string_messages)}"
+        if call_back.message.caption:
+            answer = await self.answer_message_by_basket(call_back.message, head_text,
+                                                         self.build_keyboard(head_menu_button, 2,
+                                                                             button_fill_details))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
         else:
-            head_text = f"Мы сохранили информацию, которую Вы нам отправляли при предыдущих заказах.{whitespace}" \
-                        f"Можете выбрать из списка ниже либо отправить нам новые реквизиты и комментарии одним или " \
-                        f"несколькими сообщениями."
-            if call_back.message.caption:
-                answer = await self.answer_message_by_basket(call_back.message, head_text,
-                                                             self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id)
-                await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-            else:
-                answer = await self.edit_message_by_basket(call_back.message, head_text,
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+            answer = await self.edit_message_by_basket(call_back.message, head_text,
+                                                       self.build_keyboard(head_menu_button, 2,
+                                                                           button_fill_details))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
+        arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_pickup[kind_pickup])
+        if len(arr_contact) != 0:
             arr_answers = []
             for contact in arr_contact:
-                if contact[2] == '':
+                if contact[4] == '':
                     amount_content = 0
                 else:
-                    amount_content = len(contact[2].split('///'))
+                    amount_content = len(contact[4].split('///'))
+                arr_messages = contact[3].split('///')
+                string_messages = '\n'.join(arr_messages)
                 menu_contact = {f'choice_contact{contact[0]}': 'Выбрать эти реквизиты ✅',
                                 f'delete_record{contact[0]}': 'Удалить запись 🗑️',
                                 f'nested{contact[0]}': f'Вложения 🗃️ ({str(amount_content)})',
                                 'back': '◀ 👈 Назад'}
-                if contact[1] == '':
-                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text("Частное лицо")}'
-                else:
-                    text = '\n'.join(contact[1].split('///'))
-                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text(text)}'
-                answer_contact = await self.answer_message_by_basket(answer, comment,
+                text_contact = f"Способ доставки: {self.format_text(contact[1])}{whitespace}" \
+                               f"TK или пункт самовывоза: {self.format_text(contact[2])}" \
+                               f"{whitespace}" \
+                               f"ИНН: {self.format_text(contact[5])}{whitespace}" \
+                               f"ФИО или наименование компании: {self.format_text(contact[6])}" \
+                               f"{whitespace}" \
+                               f"E-mail: {self.format_text(contact[7])}{whitespace}" \
+                               f"Телефон: {self.format_text(contact[8])}{whitespace}" \
+                               f"Комментарий: {self.format_text(string_messages)}"
+                answer_contact = await self.answer_message_by_basket(answer, text_contact,
                                                                      self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-        if kind_pickup:
-            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
-                                                                   self.kind_pickup[kind_pickup])
-        else:
-            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
-                                                                   self.kind_pickup[call_back.data])
+        await self.execute.record_order_kind_transport_company(call_back.from_user.id,
+                                                               self.kind_pickup[kind_pickup])
 
     async def task_record_answer_delivery(self, call_back: CallbackQuery):
         await self.record_answer_delivery(call_back)
@@ -1949,71 +1935,67 @@ class DispatcherMessage(Dispatcher):
 
     async def record_answer_delivery(self, call_back: CallbackQuery, kind_delivery: str = None):
         whitespace = '\n'
-        if kind_delivery:
-            arr_contact = await self.execute.get_contact_user(call_back.from_user.id,
-                                                              self.kind_delivery[kind_delivery])
+        if kind_delivery is None:
+            kind_delivery = call_back.data
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        if info_order[9] == '':
+            amount_content = 0
         else:
-            arr_contact = await self.execute.get_contact_user(call_back.from_user.id,
-                                                              self.kind_delivery[call_back.data])
-        head_menu_button = {'back': '◀ 👈 Назад', 'post': 'Отправить заказ 📫'}
-        if len(arr_contact) == 0:
-            text_format = self.format_text(f"ООО «Алькар»{whitespace}ИНН 9715341213 КПП 771501001{whitespace}"
-                                           f"Юридический, фактический и почтовый адрес:127562, город Москва, улица "
-                                           f"Хачатуряна, дом 8, корпус 3, комн. 15{whitespace}Тел. +7 (495) 215-000-3, "
-                                           f"8 (800) 333-22-60{whitespace}Почта info@rossvik.moscow{whitespace}Адрес "
-                                           f"доставки: Мытищи, 1-ая Новая, 57{whitespace}Режим работы: 9:00 - 20:00")
-            head_text = f"{call_back.from_user.first_name} {call_back.from_user.last_name} у нас нет контактных " \
-                        f"данных по Вашей учетной записи. Мы можем выставить счет на Частное лицо или отправьте нам " \
-                        f"сообщение с Вашими реквизитами, например:{whitespace}{text_format}"
-            if call_back.message.caption:
-                answer = await self.answer_message_by_basket(call_back.message, head_text,
-                                                             self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id)
-                await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-            else:
-                answer = await self.edit_message_by_basket(call_back.message, head_text,
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+            amount_content = len(info_order[9].split('///'))
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                            'post': 'Отправить заказ 📫'}
+        button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
+        message_text = 'Заполните реквизиты для отправки заказа!'
+        head_text = f"{self.format_text(message_text)}{whitespace}" \
+                    f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                    f"TK или пункт самовывоза: {self.format_text(self.kind_delivery[kind_delivery])}{whitespace}" \
+                    f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                    f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                    f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                    f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                    f"Комментарий: {self.format_text(string_messages)}"
+        if call_back.message.caption:
+            answer = await self.answer_message_by_basket(call_back.message, head_text,
+                                                         self.build_keyboard(head_menu_button, 2,
+                                                                             button_fill_details))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
         else:
-            text_format = self.format_text(f"Шиномонтаж на Красной площади{whitespace}Адрес: Москва, ул Тверская, "
-                                           f"д 10{whitespace}Режим работы: 9:00 - 20:00")
-            head_text = f"Мы сохранили информацию, которую Вы нам отправляли при предыдущих заказах.{whitespace}" \
-                        f"Можете выбрать из списка ниже или отправить нам новые реквизиты и комментарии одним или " \
-                        f"несколькими сообщениями.{whitespace}Например:{whitespace}{text_format}"
-            if call_back.message.caption:
-                answer = await self.answer_message_by_basket(call_back.message, head_text,
-                                                             self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id)
-                await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-            else:
-                answer = await self.edit_message_by_basket(call_back.message, head_text,
-                                                           self.build_keyboard(head_menu_button, 2))
-                await self.delete_messages(call_back.from_user.id, answer.message_id)
+            answer = await self.edit_message_by_basket(call_back.message, head_text,
+                                                       self.build_keyboard(head_menu_button, 2,
+                                                                           button_fill_details))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
+        arr_contact = await self.execute.get_contact_user(call_back.from_user.id, self.kind_delivery[kind_delivery])
+        if len(arr_contact) != 0:
             arr_answers = []
             for contact in arr_contact:
-                if contact[2] == '':
+                if contact[4] == '':
                     amount_content = 0
                 else:
-                    amount_content = len(contact[2].split('///'))
+                    amount_content = len(contact[4].split('///'))
+                arr_messages = contact[3].split('///')
+                string_messages = '\n'.join(arr_messages)
                 menu_contact = {f'choice_contact{contact[0]}': 'Выбрать эти реквизиты ✅',
                                 f'delete_record{contact[0]}': 'Удалить запись 🗑️',
                                 f'nested{contact[0]}': f'Вложения 🗃️ ({str(amount_content)})',
                                 'back': '◀ 👈 Назад'}
-                if contact[1] == '':
-                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text("Частное лицо")}'
-                else:
-                    text = '\n'.join(contact[1].split('///'))
-                    comment = f'Сообщение для отправки вместе с заказом:\n{self.format_text(text)}'
-                answer_contact = await self.answer_message_by_basket(answer, comment,
+                text_contact = f"Способ доставки: {self.format_text(contact[1])}{whitespace}" \
+                               f"TK или пункт самовывоза: {self.format_text(contact[2])}" \
+                               f"{whitespace}" \
+                               f"ИНН: {self.format_text(contact[5])}{whitespace}" \
+                               f"ФИО или наименование компании: {self.format_text(contact[6])}" \
+                               f"{whitespace}" \
+                               f"E-mail: {self.format_text(contact[7])}{whitespace}" \
+                               f"Телефон: {self.format_text(contact[8])}{whitespace}" \
+                               f"Комментарий: {self.format_text(string_messages)}"
+                answer_contact = await self.answer_message_by_basket(answer, text_contact,
                                                                      self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
             await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
-        if kind_delivery:
-            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
-                                                                   self.kind_delivery[kind_delivery])
-        else:
-            await self.execute.record_order_kind_transport_company(call_back.from_user.id,
-                                                                   self.kind_delivery[call_back.data])
+        await self.execute.record_order_kind_transport_company(call_back.from_user.id,
+                                                               self.kind_delivery[kind_delivery])
 
     async def task_content_type_text(self, message: Message):
         await self.record_message_comment_user(message)
@@ -2090,6 +2072,7 @@ class DispatcherMessage(Dispatcher):
 
     async def change_head_message_by_media(self, user_id: int):
         try:
+            whitespace = '\n'
             arr_messages = await self.execute.get_arr_messages(user_id)
             head_message = arr_messages[0]
             info_order = await self.execute.get_info_order(user_id)
@@ -2097,16 +2080,20 @@ class DispatcherMessage(Dispatcher):
                 amount_content = 0
             else:
                 amount_content = len(info_order[9].split('///'))
+            arr_messages = info_order[8].split('///')
+            string_messages = '\n'.join(arr_messages)
             head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                                 'post': 'Отправить заказ 📫'}
-            if info_order[8] == '':
-                change_text_head = f"{self.format_text('Нет сообщений для отправки вместе с заказом')}"
-            else:
-                arr_messages = info_order[8].split('///')
-                string_messages = '\n'.join(arr_messages)
-                change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
+            button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
+            change_text_head = f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                               f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                               f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                               f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                               f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                               f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                               f"Комментарий: {self.format_text(string_messages)}"
             await self.bot.edit_head_message_by_basket(change_text_head, user_id, head_message,
-                                                       self.build_keyboard(head_menu_button, 2))
+                                                       self.build_keyboard(head_menu_button, 2, button_fill_details))
         except TelegramBadRequest:
             arr_messages = await self.execute.get_arr_messages(user_id)
             head_message = arr_messages[0]
@@ -2117,38 +2104,9 @@ class DispatcherMessage(Dispatcher):
                 amount_content = len(info_order[9].split('///'))
             head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                                 'post': 'Отправить заказ 📫'}
-            await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2))
-
-    async def return_head_message_by_media(self, call_back: CallbackQuery):
-        info_order = await self.execute.get_info_order(call_back.from_user.id)
-        if info_order[9] == '':
-            amount_content = 0
-        else:
-            amount_content = len(info_order[9].split('///'))
-        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
-                            'post': 'Отправить заказ 📫'}
-        arr_messages = info_order[8].split('///')
-        string_messages = '\n'.join(arr_messages)
-        change_text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
-        answer = await self.answer_message_by_basket(call_back.message, change_text_head,
-                                                     self.build_keyboard(head_menu_button, 2))
-        await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-
-    async def return_pickup_delivery_by_media(self, call_back: CallbackQuery, info: list):
-        amount_content = len(info[9].split('///'))
-        if info[8] == '':
-            text_head = f"{self.format_text('Нет сообщений для отправки вместе с заказом')}"
-        else:
-            arr_messages = info[8].split('///')
-            string_messages = '\n'.join(arr_messages)
-            text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
-        head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
-                            'post': 'Отправить заказ 📫'}
-        answer = await self.answer_message_by_basket(call_back.message, text_head,
-                                                     self.build_keyboard(head_menu_button, 2))
-        await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+            button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
+            await self.bot.edit_head_keyboard(user_id, head_message, self.build_keyboard(head_menu_button, 2,
+                                                                                         button_fill_details))
 
     async def task_show_new_attachments(self, call_back: CallbackQuery):
         await self.show_new_attachments(call_back)
@@ -2233,9 +2191,7 @@ class DispatcherMessage(Dispatcher):
 
     async def task_choice_comment_user(self, call_back: CallbackQuery):
         check = await self.choice_comment_user(call_back)
-        if check:
-            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
-        return True
+        return check
 
     async def choice_comment_user(self, call_back: CallbackQuery):
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
@@ -2256,14 +2212,38 @@ class DispatcherMessage(Dispatcher):
             text_head = f"Сообщение для отправки вместе с заказом:\n{self.format_text(string_messages)}"
         head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                             'post': 'Отправить заказ 📫'}
+        button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
         await self.bot.edit_head_message_by_basket(text_head, call_back.message.chat.id, int(head_message),
-                                                   self.build_keyboard(head_menu_button, 2))
+                                                   self.build_keyboard(head_menu_button, 2, button_fill_details))
         await self.execute.record_order_comment_and_content(call_back.from_user.id, info_for_record[0],
                                                             info_for_record[1])
         await self.delete_messages(call_back.from_user.id, head_message)
+        return True
 
     async def delete_record_user(self, call_back: CallbackQuery):
         await self.delete_messages(call_back.from_user.id, call_back.message.message_id, True)
+        return True
+
+    async def task_fill_details(self, call_back: CallbackQuery):
+        check = await self.fill_details(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
+    async def fill_details(self, call_back: CallbackQuery):
+        menu_button = {'private_person': 'Частное лицо 👱 👩',
+                       'individual_entrepreneur': f'Индивидуальный предприниматель 👨‍💼 👩‍💼',
+                       'limited_liability_company': 'ООО, ОАО, ЗАО 🏭'}
+        back_button = {'back': '◀ 👈 Назад'}
+        text = 'Выберите организационно-правовую форму:'
+        if call_back.message.caption:
+            answer = await self.answer_message(call_back.message, text, self.build_keyboard(menu_button, 1,
+                                                                                            back_button))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+        else:
+            answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1, back_button))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
         return True
 
     async def task_post_admin(self, call_back: CallbackQuery):
@@ -2435,7 +2415,7 @@ class DispatcherMessage(Dispatcher):
                                                            menu_button))
 
     async def create_keyboard_push_photo(self, call_back: CallbackQuery, list_category: list, id_category: str,
-                                         name_logo: str):
+                                         name_logo: FSInputFile):
         menu_button = {'back': '◀ 👈 Назад'}
         text = await self.execute.text_category(id_category)
         answer = await self.bot.push_photo(call_back.message.chat.id,

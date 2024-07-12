@@ -520,7 +520,8 @@ class Execute:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"INSERT INTO [ORDER_USER] " \
                          f"([Id_user], [Id_order], [Status], [Messages_by_admin], [Order_XLS], [Score], " \
-                         f"[Type_delivery], [Kind_transport_company], [Comment], [Content]) " \
+                         f"[Type_delivery], [Kind_transport_company], [Comment], [Content], [INN_company], " \
+                         f"[Name_company], [Email_company], [Telephone_company]) " \
                          f"VALUES ('{id_user}', " \
                          f"'', " \
                          f"'New', " \
@@ -528,6 +529,10 @@ class Execute:
                          f"'', " \
                          f"'', " \
                          f"'{type_delivery}', " \
+                         f"'', " \
+                         f"'', " \
+                         f"'', " \
+                         f"'', " \
                          f"'', " \
                          f"'', " \
                          f"'') "
@@ -547,7 +552,11 @@ class Execute:
                          f"Type_delivery = '{type_delivery}'," \
                          f"Kind_transport_company = ''," \
                          f"Comment = ''," \
-                         f"Content = '' " \
+                         f"Content = '', " \
+                         f"INN_company = '', " \
+                         f"Name_company = '', " \
+                         f"Email_company = '', " \
+                         f"Telephone_company = '' " \
                          f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
             await cursor.execute(sql_record)
             await self.conn.commit()
@@ -563,9 +572,7 @@ class Execute:
     async def execute_record_order_kind_transport_company(self, id_user: int, kind_transport_company: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE ORDER_USER SET " \
-                         f"Kind_transport_company = '{kind_transport_company}'," \
-                         f"Comment = ''," \
-                         f"Content = '' " \
+                         f"Kind_transport_company = '{kind_transport_company}' " \
                          f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
             await cursor.execute(sql_record)
             await self.conn.commit()
@@ -727,10 +734,11 @@ class Execute:
 
     async def execute_get_contact_user(self, user_id: int, kind_transport_company: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_contact_user = f"SELECT Id_order, Comment, Content FROM ORDER_USER " \
-                            f"WHERE ID_USER = {self.quote(user_id)} " \
-                            f"AND Kind_transport_company = {self.quote(kind_transport_company)} " \
-                            f"AND Status != 'New' "
+            sql_contact_user = f"SELECT Id_order, Type_delivery, Kind_transport_company, Comment, Content, " \
+                               f"INN_company, Name_company, Email_company, Telephone_company FROM ORDER_USER " \
+                               f"WHERE ID_USER = {self.quote(user_id)} " \
+                               f"AND Kind_transport_company = {self.quote(kind_transport_company)} " \
+                               f"AND Status != 'New' "
             await cursor.execute(sql_contact_user)
             row_table = await cursor.fetchall()
             return row_table

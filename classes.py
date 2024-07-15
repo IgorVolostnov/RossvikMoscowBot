@@ -281,6 +281,17 @@ class DispatcherMessage(Dispatcher):
                     print("contact")
                 else:
                     await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            elif current_history == 'private_person':
+                task = asyncio.create_task(self.task_record_name(message))
+                task.set_name(f'{message.from_user.id}_task_record_name')
+                await self.queues_message.start(task)
+                await self.timer.start(message.from_user.id)
+            elif current_history == 'individual_entrepreneur':
+                print('Индивидуальный предприниматель')
+                await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            elif current_history == 'limited_liability_company':
+                print('ООО')
+                await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
             else:
                 if message.content_type == "text" or message.content_type == "voice":
                     task = asyncio.create_task(self.task_send_search_result(message))
@@ -493,6 +504,20 @@ class DispatcherMessage(Dispatcher):
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'private_person'))
+        async def send_private_person(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_private_person(callback))
+            task.set_name(f'{callback.from_user.id}_private_person')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'individual_entrepreneur'))
+        async def send_individual_entrepreneur(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_individual_entrepreneur(callback))
+            task.set_name(f'{callback.from_user.id}_individual_entrepreneur')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             task = asyncio.create_task(self.task_back(callback))
@@ -541,6 +566,10 @@ class DispatcherMessage(Dispatcher):
             await self.show_nested(call_back, current)
         elif current == 'fill_details':
             await self.fill_details(call_back)
+        elif current == 'private_person':
+            await self.private_person(call_back)
+        elif current == 'record_name':
+            await self.record_name(call_back.message)
         return True
 
     async def checking_bot(self, message: Message):
@@ -2243,6 +2272,112 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
         else:
             answer = await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 1, back_button))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
+        await self.execute.record_order_inn_company(call_back.from_user.id, '')
+        return True
+
+    async def task_private_person(self, call_back: CallbackQuery):
+        check = await self.private_person(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
+    async def private_person(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        await self.execute.record_order_name_company(call_back.from_user.id, '')
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        back_button = {'back': '◀ 👈 Назад'}
+        text = 'Отправьте сообщение с ФИО физического лица, который будет указан как покупатель (получатель).'
+        change_text_head = f"{self.format_text(text)}{whitespace}" \
+                           f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                           f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                           f"ИНН: {self.format_text('Частное лицо')}{whitespace}" \
+                           f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                           f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                           f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                           f"Комментарий: {self.format_text(string_messages)}"
+        if call_back.message.caption:
+            answer = await self.answer_message_by_basket(call_back.message, change_text_head,
+                                                         self.build_keyboard(back_button, 1))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+        else:
+            answer = await self.edit_message_by_basket(call_back.message, change_text_head,
+                                                       self.build_keyboard(back_button, 1))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
+        await self.execute.record_order_inn_company(call_back.from_user.id, 'Частное лицо')
+        return True
+
+    async def task_record_name(self, message: Message):
+        check = await self.record_name(message)
+        if check:
+            await self.execute.add_element_history(message.from_user.id, 'record_name')
+        return True
+
+    async def record_name(self, message: Message):
+        whitespace = '\n'
+        info_order = await self.execute.get_info_order(message.from_user.id)
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        back_button = {'back': '◀ 👈 Назад'}
+        name_company = await self.check_text(message.text)
+        text = 'Отправьте сообщение с E-mail, он нужен нам, чтобы мы могли связаться с Вами в случае необходимости.'
+        change_text_head = f"{self.format_text(text)}{whitespace}" \
+                           f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                           f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                           f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                           f"ФИО или наименование компании: {self.format_text(name_company)}{whitespace}" \
+                           f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                           f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                           f"Комментарий: {self.format_text(string_messages)}"
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        await self.bot.edit_head_message_by_basket(change_text_head, message.from_user.id, head_message,
+                                                   self.build_keyboard(back_button, 1))
+        await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+        await self.execute.record_order_name_company(message.from_user.id, name_company)
+        return True
+
+    @staticmethod
+    async def check_text(string_text: str):
+        arr_text = string_text.split(' ')
+        new_arr_text = []
+        for item in arr_text:
+            new_item = re.sub('\W+', '', item)
+            if new_item != '':
+                new_arr_text.append(new_item)
+        new_string = ' '.join(new_arr_text)
+        return new_string
+
+    async def task_individual_entrepreneur(self, call_back: CallbackQuery):
+        check = await self.individual_entrepreneur(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
+    async def individual_entrepreneur(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        back_button = {'back': '◀ 👈 Назад'}
+        text = 'Отправьте сообщение с номером ИНН.'
+        change_text_head = f"{self.format_text(text)}{whitespace}" \
+                           f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                           f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                           f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                           f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                           f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                           f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                           f"Комментарий: {self.format_text(string_messages)}"
+        if call_back.message.caption:
+            answer = await self.answer_message_by_basket(call_back.message, change_text_head, self.build_keyboard(back_button, 1))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+        else:
+            answer = await self.edit_message_by_basket(call_back.message, change_text_head, self.build_keyboard(back_button, 1))
             await self.delete_messages(call_back.from_user.id, answer.message_id)
         return True
 

@@ -577,6 +577,38 @@ class Execute:
             await cursor.execute(sql_record)
             await self.conn.commit()
 
+    async def record_order_inn_company(self, id_user: int, inn_company: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_inn_company(id_user, inn_company)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_inn_company', os.environ["EMAIL"],
+                               str(e))
+
+    async def execute_record_order_inn_company(self, id_user: int, inn_company: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE ORDER_USER SET " \
+                         f"INN_company = '{inn_company}' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def record_order_name_company(self, id_user: int, name_company: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_record_order_name_company(id_user, name_company)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_order_name_company', os.environ["EMAIL"],
+                               str(e))
+
+    async def execute_record_order_name_company(self, id_user: int, name_company: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE ORDER_USER SET " \
+                         f"Name_company = '{name_company}' " \
+                         f"WHERE Id_user = {self.quote(id_user)} AND Status =  'New' "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
     async def record_order_comment_and_content(self, id_user: int, comment: str, content: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:

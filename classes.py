@@ -5,6 +5,7 @@ import os
 import datetime
 import openpyxl
 import requests
+import phonenumbers
 from data import DATA
 from aiogram import F
 from aiogram import Bot, Dispatcher
@@ -18,6 +19,7 @@ from operator import itemgetter
 from openpyxl.styles import GradientFill
 from number_parser import parse
 from nltk.stem import SnowballStemmer
+from validate_email import validate_email
 
 logging.basicConfig(level=logging.INFO)
 snowball = SnowballStemmer(language="russian")
@@ -286,6 +288,16 @@ class DispatcherMessage(Dispatcher):
                 task.set_name(f'{message.from_user.id}_task_record_name')
                 await self.queues_message.start(task)
                 await self.timer.start(message.from_user.id)
+            elif current_history == 'forward_email':
+                task = asyncio.create_task(self.task_record_email(message))
+                task.set_name(f'{message.from_user.id}_task_record_email')
+                await self.queues_message.start(task)
+                await self.timer.start(message.from_user.id)
+            elif current_history == 'forward_telephone':
+                task = asyncio.create_task(self.task_record_telephone(message))
+                task.set_name(f'{message.from_user.id}task_record_telephone')
+                await self.queues_message.start(task)
+                await self.timer.start(message.from_user.id)
             elif current_history == 'individual_entrepreneur':
                 print('Индивидуальный предприниматель')
                 await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
@@ -507,7 +519,28 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'private_person'))
         async def send_private_person(callback: CallbackQuery):
             task = asyncio.create_task(self.task_private_person(callback))
-            task.set_name(f'{callback.from_user.id}_private_person')
+            task.set_name(f'{callback.from_user.id}_task_private_person')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'forward_email'))
+        async def send_forward_email(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_forward_email(callback))
+            task.set_name(f'{callback.from_user.id}_task_forward_email')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'forward_telephone'))
+        async def send_forward_telephone(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_forward_telephone(callback))
+            task.set_name(f'{callback.from_user.id}_task_forward_telephone')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'forward_done'))
+        async def send_forward_done(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_forward_done(callback))
+            task.set_name(f'{callback.from_user.id}_task_forward_done')
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
@@ -568,8 +601,10 @@ class DispatcherMessage(Dispatcher):
             await self.fill_details(call_back)
         elif current == 'private_person':
             await self.private_person(call_back)
-        elif current == 'record_name':
-            await self.record_name(call_back.message)
+        elif current == 'forward_email':
+            await self.forward_email(call_back)
+        elif current == 'forward_telephone':
+            await self.forward_telephone(call_back)
         return True
 
     async def checking_bot(self, message: Message):
@@ -2288,7 +2323,7 @@ class DispatcherMessage(Dispatcher):
         info_order = await self.execute.get_info_order(call_back.from_user.id)
         arr_messages = info_order[8].split('///')
         string_messages = '\n'.join(arr_messages)
-        back_button = {'back': '◀ 👈 Назад'}
+        back_button = {'forward_email': 'Заполнить E-mail @ 📬', 'back': '◀ 👈 Назад'}
         text = 'Отправьте сообщение с ФИО физического лица, который будет указан как покупатель (получатель).'
         change_text_head = f"{self.format_text(text)}{whitespace}" \
                            f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
@@ -2298,32 +2333,24 @@ class DispatcherMessage(Dispatcher):
                            f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
                            f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
                            f"Комментарий: {self.format_text(string_messages)}"
-        if call_back.message.caption:
-            answer = await self.answer_message_by_basket(call_back.message, change_text_head,
-                                                         self.build_keyboard(back_button, 1))
-            await self.delete_messages(call_back.from_user.id)
-            await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
-        else:
-            answer = await self.edit_message_by_basket(call_back.message, change_text_head,
-                                                       self.build_keyboard(back_button, 1))
-            await self.delete_messages(call_back.from_user.id, answer.message_id)
+        answer = await self.edit_message_by_basket(call_back.message, change_text_head,
+                                                   self.build_keyboard(back_button, 1))
+        await self.delete_messages(call_back.from_user.id, answer.message_id)
         await self.execute.record_order_inn_company(call_back.from_user.id, 'Частное лицо')
         return True
 
     async def task_record_name(self, message: Message):
         check = await self.record_name(message)
-        if check:
-            await self.execute.add_element_history(message.from_user.id, 'record_name')
-        return True
+        return check
 
     async def record_name(self, message: Message):
         whitespace = '\n'
         info_order = await self.execute.get_info_order(message.from_user.id)
         arr_messages = info_order[8].split('///')
         string_messages = '\n'.join(arr_messages)
-        back_button = {'back': '◀ 👈 Назад'}
+        back_button = {'forward_email': 'Заполнить E-mail @ 📬', 'back': '◀ 👈 Назад'}
         name_company = await self.check_text(message.text)
-        text = 'Отправьте сообщение с E-mail, он нужен нам, чтобы мы могли связаться с Вами в случае необходимости.'
+        text = 'Отправьте сообщение с ФИО физического лица, который будет указан как покупатель (получатель).'
         change_text_head = f"{self.format_text(text)}{whitespace}" \
                            f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
                            f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
@@ -2334,11 +2361,173 @@ class DispatcherMessage(Dispatcher):
                            f"Комментарий: {self.format_text(string_messages)}"
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
         head_message = arr_messages[0]
-        await self.bot.edit_head_message_by_basket(change_text_head, message.from_user.id, head_message,
-                                                   self.build_keyboard(back_button, 1))
-        await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
-        await self.execute.record_order_name_company(message.from_user.id, name_company)
+        try:
+            await self.bot.edit_head_message_by_basket(change_text_head, message.from_user.id, head_message,
+                                                       self.build_keyboard(back_button, 1))
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            await self.execute.record_order_name_company(message.from_user.id, name_company)
+            return True
+        except TelegramBadRequest:
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            await self.execute.record_order_name_company(message.from_user.id, name_company)
+            return True
+
+    async def task_forward_email(self, call_back: CallbackQuery):
+        check = await self.forward_email(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
         return True
+
+    async def forward_email(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        await self.execute.record_order_email_company(call_back.from_user.id, '')
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        back_button = {'forward_telephone': 'Заполнить телефон 📞 📲', 'back': '◀ 👈 Назад'}
+        text = 'Отправьте сообщение с E-mail, он нужен нам, чтобы мы могли связаться с Вами в случае необходимости.'
+        change_text_head = f"{self.format_text(text)}{whitespace}" \
+                           f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                           f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                           f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                           f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                           f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                           f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                           f"Комментарий: {self.format_text(string_messages)}"
+        answer = await self.edit_message_by_basket(call_back.message, change_text_head,
+                                                   self.build_keyboard(back_button, 1))
+        await self.delete_messages(call_back.from_user.id, answer.message_id)
+        return True
+
+    async def task_record_email(self, message: Message):
+        check = await self.record_email(message)
+        return check
+
+    async def record_email(self, message: Message):
+        whitespace = '\n'
+        info_order = await self.execute.get_info_order(message.from_user.id)
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        back_button = {'forward_telephone': 'Заполнить телефон 📞 📲', 'back': '◀ 👈 Назад'}
+        email_company = await self.check_email(message.text)
+        text = 'Отправьте сообщение с E-mail, он нужен нам, чтобы мы могли связаться с Вами в случае необходимости.'
+        change_text_head = f"{self.format_text(text)}{whitespace}" \
+                           f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                           f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                           f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                           f"ФИО или наименование компании: {self.format_text(info_order[10])}{whitespace}" \
+                           f"E-mail: {self.format_text(email_company)}{whitespace}" \
+                           f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                           f"Комментарий: {self.format_text(string_messages)}"
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        try:
+            await self.bot.edit_head_message_by_basket(change_text_head, message.from_user.id, head_message,
+                                                       self.build_keyboard(back_button, 1))
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            await self.execute.record_order_email_company(message.from_user.id, email_company)
+            return True
+        except TelegramBadRequest:
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            await self.execute.record_order_email_company(message.from_user.id, email_company)
+            return True
+
+    async def task_forward_telephone(self, call_back: CallbackQuery):
+        check = await self.forward_telephone(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
+    async def forward_telephone(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        await self.execute.record_order_telephone_company(call_back.from_user.id, '')
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        if validate_email(info_order[12], check_mx=True):
+            arr_messages = info_order[8].split('///')
+            string_messages = '\n'.join(arr_messages)
+            back_button = {'forward_done': 'Готово ✔️', 'back': '◀ 👈 Назад'}
+            text = 'Отправьте сообщение с номером телефона, на который мы можем написать Вам, если это потребуется.'
+            change_text_head = f"{self.format_text(text)}{whitespace}" \
+                               f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                               f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                               f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                               f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                               f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                               f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                               f"Комментарий: {self.format_text(string_messages)}"
+            answer = await self.edit_message_by_basket(call_back.message, change_text_head,
+                                                       self.build_keyboard(back_button, 1))
+            await self.delete_messages(call_back.from_user.id, answer.message_id)
+            return True
+        else:
+            await self.bot.alert_message(call_back.id, 'Недопустимый адрес электронной почты!')
+            return False
+
+    async def task_record_telephone(self, message: Message):
+        check = await self.record_telephone(message)
+        return check
+
+    async def record_telephone(self, message: Message):
+        try:
+            whitespace = '\n'
+            info_order = await self.execute.get_info_order(message.from_user.id)
+            arr_messages = info_order[8].split('///')
+            string_messages = '\n'.join(arr_messages)
+            back_button = {'forward_done': 'Готово ✔️', 'back': '◀ 👈 Назад'}
+            telephone_company = await self.check_text(message.text)
+            text = 'Отправьте сообщение с номером телефона, на который мы можем написать Вам, если это потребуется.'
+            change_text_head = f"{self.format_text(text)}{whitespace}" \
+                               f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                               f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                               f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                               f"ФИО или наименование компании: {self.format_text(info_order[10])}{whitespace}" \
+                               f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                               f"Телефон: {self.format_text(telephone_company)}{whitespace}" \
+                               f"Комментарий: {self.format_text(string_messages)}"
+            arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+            head_message = arr_messages[0]
+            await self.bot.edit_head_message_by_basket(change_text_head, message.from_user.id, head_message,
+                                                       self.build_keyboard(back_button, 1))
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            await self.execute.record_order_telephone_company(message.from_user.id, telephone_company)
+            return True
+        except TelegramBadRequest:
+            return True
+
+    async def task_forward_done(self, call_back: CallbackQuery):
+        check = await self.forward_done(call_back)
+        if check:
+            await self.execute.delete_element_history(call_back.from_user.id, 3)
+        return True
+
+    async def forward_done(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        info_order = await self.execute.get_info_order(call_back.from_user.id)
+        if self.validate_phone_number(info_order[13]):
+            arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+            head_message = arr_messages[0]
+            if info_order[9] == '':
+                amount_content = 0
+            else:
+                amount_content = len(info_order[9].split('///'))
+            arr_messages = info_order[8].split('///')
+            string_messages = '\n'.join(arr_messages)
+            head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
+                                'post': 'Отправить заказ 📫'}
+            button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
+            change_text_head = f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                               f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                               f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                               f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                               f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                               f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
+                               f"Комментарий: {self.format_text(string_messages)}"
+            await self.bot.edit_head_message_by_basket(change_text_head, call_back.from_user.id, head_message,
+                                                       self.build_keyboard(head_menu_button, 2, button_fill_details))
+            return True
+        else:
+            await self.bot.alert_message(call_back.id, 'Несуществующий номер телефона!')
+            return False
 
     @staticmethod
     async def check_text(string_text: str):
@@ -2350,6 +2539,27 @@ class DispatcherMessage(Dispatcher):
                 new_arr_text.append(new_item)
         new_string = ' '.join(new_arr_text)
         return new_string
+
+    @staticmethod
+    async def check_email(string_text: str):
+        arr_text = string_text.split(' ')
+        new_arr_text = []
+        for item in arr_text:
+            new_item = re.sub("[^A-Za-z@.]", "", item)
+            if new_item != '':
+                new_arr_text.append(new_item)
+        new_string = ' '.join(new_arr_text)
+        return new_string
+
+    @staticmethod
+    def validate_phone_number(potential_number: str) -> bool:
+        try:
+            phone_number_obj = phonenumbers.parse(potential_number)
+        except phonenumbers.phonenumberutil.NumberParseException:
+            return False
+        if not phonenumbers.is_valid_number(phone_number_obj):
+            return False
+        return True
 
     async def task_individual_entrepreneur(self, call_back: CallbackQuery):
         check = await self.individual_entrepreneur(call_back)

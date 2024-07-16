@@ -2415,7 +2415,7 @@ class DispatcherMessage(Dispatcher):
                            f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
                            f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
                            f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
-                           f"ФИО или наименование компании: {self.format_text(info_order[10])}{whitespace}" \
+                           f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
                            f"E-mail: {self.format_text(email_company)}{whitespace}" \
                            f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
                            f"Комментарий: {self.format_text(string_messages)}"
@@ -2442,7 +2442,7 @@ class DispatcherMessage(Dispatcher):
         whitespace = '\n'
         await self.execute.record_order_telephone_company(call_back.from_user.id, '')
         info_order = await self.execute.get_info_order(call_back.from_user.id)
-        if validate_email(info_order[12], check_mx=True):
+        if validate_email(info_order[12], verify=True):
             arr_messages = info_order[8].split('///')
             string_messages = '\n'.join(arr_messages)
             back_button = {'forward_done': 'Готово ✔️', 'back': '◀ 👈 Назад'}
@@ -2468,36 +2468,38 @@ class DispatcherMessage(Dispatcher):
         return check
 
     async def record_telephone(self, message: Message):
+        whitespace = '\n'
+        info_order = await self.execute.get_info_order(message.from_user.id)
+        arr_messages = info_order[8].split('///')
+        string_messages = '\n'.join(arr_messages)
+        back_button = {'forward_done': 'Готово ✔️', 'back': '◀ 👈 Назад'}
+        telephone_company = await self.check_telephone(message.text)
+        text = 'Отправьте сообщение с номером телефона, на который мы можем написать Вам, если это потребуется.'
+        change_text_head = f"{self.format_text(text)}{whitespace}" \
+                           f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
+                           f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
+                           f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
+                           f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
+                           f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
+                           f"Телефон: {self.format_text(telephone_company)}{whitespace}" \
+                           f"Комментарий: {self.format_text(string_messages)}"
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
         try:
-            whitespace = '\n'
-            info_order = await self.execute.get_info_order(message.from_user.id)
-            arr_messages = info_order[8].split('///')
-            string_messages = '\n'.join(arr_messages)
-            back_button = {'forward_done': 'Готово ✔️', 'back': '◀ 👈 Назад'}
-            telephone_company = await self.check_text(message.text)
-            text = 'Отправьте сообщение с номером телефона, на который мы можем написать Вам, если это потребуется.'
-            change_text_head = f"{self.format_text(text)}{whitespace}" \
-                               f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
-                               f"TK или пункт самовывоза: {self.format_text(info_order[7])}{whitespace}" \
-                               f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
-                               f"ФИО или наименование компании: {self.format_text(info_order[10])}{whitespace}" \
-                               f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
-                               f"Телефон: {self.format_text(telephone_company)}{whitespace}" \
-                               f"Комментарий: {self.format_text(string_messages)}"
-            arr_messages = await self.execute.get_arr_messages(message.from_user.id)
-            head_message = arr_messages[0]
             await self.bot.edit_head_message_by_basket(change_text_head, message.from_user.id, head_message,
                                                        self.build_keyboard(back_button, 1))
             await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
             await self.execute.record_order_telephone_company(message.from_user.id, telephone_company)
             return True
         except TelegramBadRequest:
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            await self.execute.record_order_telephone_company(message.from_user.id, telephone_company)
             return True
 
     async def task_forward_done(self, call_back: CallbackQuery):
         check = await self.forward_done(call_back)
         if check:
-            await self.execute.delete_element_history(call_back.from_user.id, 3)
+            await self.execute.delete_element_history(call_back.from_user.id, 4)
         return True
 
     async def forward_done(self, call_back: CallbackQuery):
@@ -2552,10 +2554,23 @@ class DispatcherMessage(Dispatcher):
         return new_string
 
     @staticmethod
+    async def check_telephone(string_text: str):
+        telephone = re.sub("[^0-9+]", "", string_text)
+        if telephone[0] != '+' and len(telephone) == 10:
+            telephone = '+7' + telephone
+        elif len(telephone) == 11:
+            telephone = '+7' + telephone[1:]
+        return telephone
+
+    @staticmethod
     def validate_phone_number(potential_number: str) -> bool:
+        print(potential_number)
         try:
             phone_number_obj = phonenumbers.parse(potential_number)
+            print(phone_number_obj.national_number)
+            print(phone_number_obj.country_code)
         except phonenumbers.phonenumberutil.NumberParseException:
+            print('No')
             return False
         if not phonenumbers.is_valid_number(phone_number_obj):
             return False

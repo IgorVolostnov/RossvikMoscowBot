@@ -205,6 +205,29 @@ class Execute:
             await cursor.execute(sql_record)
             await self.conn.commit()
 
+    async def delete_element_history_before_value(self, id_user: int, value: str):
+        current = await self.get_info_user(id_user)
+        if current[0] is None:
+            current_history = ['/start']
+        else:
+            current_history = self.delete_element_before_value(current[0], value)
+            if len(current_history) == 0:
+                current_history = ['/start']
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_delete_element_history_before_value(id_user, ' '.join(current_history))
+        except Exception as e:
+            await send_message('Ошибка запроса в методе delete_element_history', os.environ["EMAIL"], str(e))
+        return current_history[-1]
+
+    async def execute_delete_element_history_before_value(self, id_user: int, history: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"HISTORY = '{history}' " \
+                         f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
     async def get_arr_messages(self, user_id: int, except_id_message: int = None):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
@@ -862,6 +885,17 @@ class Execute:
         arr_element = arr.split()
         for item in range(amount):
             arr_element.pop()
+        return arr_element
+
+    @staticmethod
+    def delete_element_before_value(arr: str, value: str):
+        arr_element = arr.split()
+        for item in arr_element:
+            if item != value:
+                arr_element.pop()
+            else:
+                arr_element.pop()
+                break
         return arr_element
 
     @staticmethod

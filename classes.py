@@ -88,8 +88,8 @@ class BotMessage(Bot):
         await self.edit_message_caption(caption=text_caption, chat_id=chat_message, message_id=id_message,
                                         parse_mode=ParseMode.HTML)
 
-    async def send_message_start(self, chat_id: int, keyboard: InlineKeyboardMarkup):
-        return await self.send_message(chat_id=chat_id, text=self.format_text("Выберете, что Вас интересует"),
+    async def send_message_start(self, chat_id: int, keyboard: InlineKeyboardMarkup, text_message: str):
+        return await self.send_message(chat_id=chat_id, text=self.format_text(text_message),
                                        parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def send_message_order(self, chat_id: int, user: str, order: str, contact: str, number_order: str,
@@ -170,7 +170,6 @@ class DispatcherMessage(Dispatcher):
         self.data = DATA()
         self.execute = self.data.execute
         self.arr_auth_user = asyncio.run(self.execute.auth_user)
-        self.first_keyboard = self.data.get_first_keyboard
         self.category = self.data.get_category
         self.nomenclatures = self.data.get_nomenclature
         self.pages = self.data.get_pages
@@ -576,6 +575,13 @@ class DispatcherMessage(Dispatcher):
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
+        async def send_update_message(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_update_message())
+            task.set_name(f'{callback.from_user.id}_task_update_message')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
     async def task_back(self, call_back: CallbackQuery):
         current = await self.execute.delete_element_history(call_back.from_user.id, 1)
         if 'search' in current:
@@ -733,7 +739,14 @@ class DispatcherMessage(Dispatcher):
 
     async def start_for_timer(self, user_id: int):
         first_keyboard = await self.data.get_first_keyboard(user_id)
-        answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1))
+        answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
+                                                   "Выберете, что Вас интересует ⤵ ⤵ ⤵")
+        await self.execute.add_element_message(user_id, answer.message_id)
+
+    async def start_for_news(self, user_id: int):
+        first_keyboard = await self.data.get_first_keyboard(user_id)
+        current_news = await self.execute.get_news()
+        answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), current_news)
         await self.execute.add_element_message(user_id, answer.message_id)
 
     async def task_command_catalog(self, message: Message):
@@ -2645,6 +2658,16 @@ class DispatcherMessage(Dispatcher):
         else:
             await self.bot.alert_message(call_back.id, 'Несуществующий номер телефона!')
             return False
+
+    async def task_update_message(self):
+        await self.update_message()
+        return True
+
+    async def update_message(self):
+        list_user = await self.execute.get_list_user
+        for user_id in list_user:
+            await self.delete_messages(int(user_id[0]))
+            await self.start_for_news(int(user_id[0]))
 
     @staticmethod
     async def check_inn(string_text: str):

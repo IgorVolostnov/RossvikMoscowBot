@@ -1,6 +1,7 @@
 import logging
 import aiosqlite
 import os
+import datetime
 from exception import send_message
 from aiogram.types import Message
 from operator import itemgetter
@@ -33,6 +34,21 @@ class Execute:
                 dict_user[int(item[0])] = item[1]
             return dict_user
 
+    async def status_user(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_status_user(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе status_user', os.environ["EMAIL"], str(e))
+
+    async def execute_status_user(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_auth = f"SELECT STATUS FROM TELEGRAMMBOT " \
+                       f"WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_auth)
+            row_table = await cursor.fetchone()
+            return row_table[0]
+
     @property
     async def get_user_admin(self):
         try:
@@ -46,6 +62,22 @@ class Execute:
             sql_user_admin = f"SELECT ID_USER FROM TELEGRAMMBOT " \
                              f"WHERE STATUS = 'creator' "
             await cursor.execute(sql_user_admin)
+            user_admin = await cursor.fetchall()
+            return user_admin
+
+    @property
+    async def get_list_user(self):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_list_user()
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_list_user', os.environ["EMAIL"], str(e))
+
+    async def execute_get_list_user(self):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_list_user = f"SELECT ID_USER FROM TELEGRAMMBOT " \
+                             f"WHERE STATUS != 'creator' "
+            await cursor.execute(sql_list_user)
             user_admin = await cursor.fetchall()
             return user_admin
 
@@ -862,6 +894,25 @@ class Execute:
             await cursor.execute(sql_arr_order)
             row_table = await cursor.fetchone()
             return list(row_table)
+
+    async def get_news(self):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_get_news()
+        except Exception as e:
+            await send_message('Ошибка запроса в методе get_news', os.environ["EMAIL"], str(e))
+
+    async def execute_get_news(self):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            date_str = datetime.date.today().strftime('%d.%m.%Y')
+            sql_news = f"SELECT INFORMATION FROM NEWS " \
+                       f"WHERE DATE_NEWS = '{date_str}' "
+            await cursor.execute(sql_news)
+            row_table = await cursor.fetchone()
+            if row_table is None:
+                return None
+            else:
+                return row_table[0]
 
     @staticmethod
     def quote(request):

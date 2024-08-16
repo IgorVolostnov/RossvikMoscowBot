@@ -47,16 +47,45 @@ class DATA:
     async def get_first_keyboard(self, id_user: int):
         basket = await self.get_basket(id_user)
         amount_order = await self.execute.get_amount_order(id_user)
+        type_user = await self.execute.status_user(id_user)
         if amount_order == 0:
-            first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                              'orders': f'Мои Заказы 🗃️',
-                              'basket': basket['basket'],
-                              'catalog': 'Каталог🧾👀'}
+            if type_user == 'creator':
+                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
+                                  'orders': f'Мои Заказы 🗃️',
+                                  'basket': basket['basket'],
+                                  'catalog': 'Каталог🧾👀',
+                                  'update': 'Обновить сообщения💬',
+                                  'add_status': 'Присвоить статус😎'}
+            elif type_user == 'admin':
+                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
+                                  'orders': f'Мои Заказы 🗃️',
+                                  'basket': basket['basket'],
+                                  'catalog': 'Каталог🧾👀',
+                                  'add_status': 'Присвоить статус😎'}
+            else:
+                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
+                                  'orders': f'Мои Заказы 🗃️',
+                                  'basket': basket['basket'],
+                                  'catalog': 'Каталог🧾👀'}
         else:
-            first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                              'orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
-                              'basket': basket['basket'],
-                              'catalog': 'Каталог🧾👀'}
+            if type_user == 'creator':
+                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
+                                  'orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
+                                  'basket': basket['basket'],
+                                  'catalog': 'Каталог🧾👀',
+                                  'update': 'Обновить сообщения💬',
+                                  'add_status': 'Присвоить статус😎'}
+            elif type_user == 'admin':
+                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
+                                  'orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
+                                  'basket': basket['basket'],
+                                  'catalog': 'Каталог🧾👀',
+                                  'add_status': 'Присвоить статус😎'}
+            else:
+                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
+                                  'orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
+                                  'basket': basket['basket'],
+                                  'catalog': 'Каталог🧾👀'}
         return first_keyboard
 
     @property

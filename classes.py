@@ -577,10 +577,13 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
         async def send_update_message(callback: CallbackQuery):
-            task = asyncio.create_task(self.task_update_message())
+            list_user = await self.execute.get_list_user
+            task = asyncio.create_task(self.task_update_message(list_user))
             task.set_name(f'{callback.from_user.id}_task_update_message')
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
+            for user_id in list_user:
+                await self.timer.start(int(user_id[0]))
 
     async def task_back(self, call_back: CallbackQuery):
         current = await self.execute.delete_element_history(call_back.from_user.id, 1)
@@ -747,6 +750,7 @@ class DispatcherMessage(Dispatcher):
         first_keyboard = await self.data.get_first_keyboard(user_id)
         current_news = await self.execute.get_news()
         answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), current_news)
+        await self.delete_messages(user_id)
         await self.execute.add_element_message(user_id, answer.message_id)
 
     async def task_command_catalog(self, message: Message):
@@ -1244,7 +1248,7 @@ class DispatcherMessage(Dispatcher):
         return amount
 
     @staticmethod
-    def get_availability(amount: str):
+    def get_availability(amount: str) -> str:
         if amount == "0":
             availability = "Нет на складе"
         else:
@@ -1252,7 +1256,7 @@ class DispatcherMessage(Dispatcher):
         return availability
 
     @staticmethod
-    def get_dealer(price: str, dealer: str):
+    def get_dealer(price: str, dealer: str) -> str:
         if any([dealer is None, dealer == '', dealer == '0']):
             value = price
         else:
@@ -1260,7 +1264,7 @@ class DispatcherMessage(Dispatcher):
         return value
 
     @staticmethod
-    def get_amount(text_message: str, button: str):
+    def get_amount(text_message: str, button: str) -> str:
         whitespace = '\n'
         arr_string = text_message.split(whitespace)
         if len(arr_string) == 2:
@@ -1601,7 +1605,7 @@ class DispatcherMessage(Dispatcher):
         await self.execute.update_history(id_user, ' '.join(new_arr_history))
 
     @staticmethod
-    def assembling_basket_dict_for_order(basket_dict: dict):
+    def assembling_basket_dict_for_order(basket_dict: dict) -> str:
         list_basket = []
         for key, value in basket_dict.items():
             item = f'{key}///{value[0]}///{value[1]}'
@@ -1882,13 +1886,12 @@ class DispatcherMessage(Dispatcher):
         return assembling_dict_search
 
     @staticmethod
-    def change_record_search(arr_text_search: list):
+    def change_record_search(arr_text_search: list) -> str:
         arr_value = []
         for item in arr_text_search:
             string_value = '///'.join(item)
             arr_value.append(string_value)
-        result_string = '/////'.join(arr_value)
-        return result_string
+        return '/////'.join(arr_value)
 
     @staticmethod
     def get_text_for_search(text: str):
@@ -2659,14 +2662,12 @@ class DispatcherMessage(Dispatcher):
             await self.bot.alert_message(call_back.id, 'Несуществующий номер телефона!')
             return False
 
-    async def task_update_message(self):
-        await self.update_message()
+    async def task_update_message(self, user_list: list):
+        await self.update_message(user_list)
         return True
 
-    async def update_message(self):
-        list_user = await self.execute.get_list_user
-        for user_id in list_user:
-            await self.delete_messages(int(user_id[0]))
+    async def update_message(self, user_list: list):
+        for user_id in user_list:
             await self.start_for_news(int(user_id[0]))
 
     @staticmethod
@@ -2896,7 +2897,7 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     @staticmethod
-    def assembling_category_dict(list_category: list):
+    def assembling_category_dict(list_category: list) -> dict:
         dict_category = {}
         for item in sorted(list_category, key=itemgetter(2), reverse=False):
             dict_category[item[0]] = item[1]
@@ -2922,7 +2923,7 @@ class DispatcherMessage(Dispatcher):
                 await self.bot.delete_messages_chat(user_id, arr_messages)
                 await self.execute.record_message(user_id, '')
 
-    def build_keyboard(self, dict_button: dict, column: int, dict_return_button=None):
+    def build_keyboard(self, dict_button: dict, column: int, dict_return_button=None) -> InlineKeyboardMarkup:
         keyboard = self.build_menu(self.get_list_keyboard_button(dict_button), column,
                                    footer_buttons=self.get_list_keyboard_button(dict_return_button))
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -2932,7 +2933,7 @@ class DispatcherMessage(Dispatcher):
         return await message.edit_reply_markup(reply_markup=keyboard)
 
     @staticmethod
-    def translit_rus(text_cross: str):
+    def translit_rus(text_cross: str) -> str:
         text_list = list(text_cross)
         dict_letters = {'А': 'A', 'а': 'a', 'В': 'B', 'Е': 'E', 'е': 'e', 'К': 'K', 'к': 'k', 'М': 'M', 'Н': 'H',
                         'О': 'O', 'о': 'o', 'Р': 'P', 'р': 'p', 'С': 'C', 'с': 'c', 'Т': 'T', 'Х': 'X', 'х': 'x'}
@@ -2942,7 +2943,7 @@ class DispatcherMessage(Dispatcher):
         return ''.join(text_list)
 
     @staticmethod
-    def translit_rus_for_search(text_cross: str):
+    def translit_rus_for_search(text_cross: str) -> str:
         text_list = list(text_cross)
         dict_letters = {'А': 'A', 'а': 'a', 'В': 'V', 'в': 'v', 'Е': 'E', 'е': 'e', 'К': 'K', 'к': 'k', 'М': 'M',
                         'м': 'm', 'Н': 'N', 'О': 'O', 'о': 'o', 'Р': 'R', 'р': 'r', 'С': 'C', 'с': 'c', 'Т': 'T',
@@ -2953,17 +2954,17 @@ class DispatcherMessage(Dispatcher):
         return ''.join(text_list)
 
     @staticmethod
-    def get_arr_message_user(messages_user: str):
+    def get_arr_message_user(messages_user: str) -> list:
         arr_arr_message_user = messages_user.split('///')
         return arr_arr_message_user
 
     @staticmethod
-    def get_arr_messages_user_for_record(arr_messages: list):
+    def get_arr_messages_user_for_record(arr_messages: list) -> str:
         string_record = '///'.join(arr_messages)
         return string_record
 
     @staticmethod
-    def add_message_user(arr_messages: list, message: str):
+    def add_message_user(arr_messages: list, message: str) -> list:
         arr_messages.append(message)
         return arr_messages
 
@@ -2981,7 +2982,7 @@ class DispatcherMessage(Dispatcher):
         return button_list
 
     @staticmethod
-    def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
+    def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None) -> list:
         menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
         if header_buttons:
             menu.insert(0, [header_buttons])
@@ -2991,17 +2992,17 @@ class DispatcherMessage(Dispatcher):
         return menu
 
     @staticmethod
-    def format_text(text_message: str):
+    def format_text(text_message: str) -> str:
         cleaner = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
         clean_text = re.sub(cleaner, '', text_message)
         return f'<b>{clean_text}</b>'
 
     @staticmethod
-    def format_price(item: float):
+    def format_price(item: float) -> str:
         return '{0:,} ₽'.format(item).replace(',', ' ')
 
     @staticmethod
-    def quote(request):
+    def quote(request) -> str:
         return f"'{str(request)}'"
 
 

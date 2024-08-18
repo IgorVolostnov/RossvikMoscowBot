@@ -164,6 +164,7 @@ class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
         Dispatcher.__init__(self, **kw)
         self.timer = TimerClean(self, 82800)
+        self.update_messages_user = TimerUpdate(self)
         self.queues = QueuesMedia(self)
         self.queues_message = QueuesMessage()
         self.bot = parent
@@ -577,12 +578,11 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
         async def send_update_message(callback: CallbackQuery):
             list_user = await self.execute.get_list_user_without_creator
-            task = asyncio.create_task(self.task_update_message(list_user))
-            task.set_name(f'{callback.from_user.id}_task_update_message')
-            await self.queues_message.start(task)
-            await self.timer.start(callback.from_user.id)
+            i = 1
             for user_id in list_user:
-                await self.timer.start(int(user_id[0]))
+                await self.update_messages_user.start(int(user_id[0]), i)
+                i += 1
+            await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add_status'))
         async def send_add_status(callback: CallbackQuery):
@@ -2672,14 +2672,6 @@ class DispatcherMessage(Dispatcher):
             await self.bot.alert_message(call_back.id, 'Несуществующий номер телефона!')
             return False
 
-    async def task_update_message(self, user_list: list):
-        await self.update_message(user_list)
-        return True
-
-    async def update_message(self, user_list: list):
-        for user_id in user_list:
-            await self.start_for_news(int(user_id[0]))
-
     async def task_add_status(self, call_back: CallbackQuery):
         check = await self.add_status(call_back)
         if check:
@@ -3132,6 +3124,33 @@ class TimerClean:
     async def clean_timer(self, user: int):
         self.t.pop(user)
         await self.parent.start_for_timer(user)
+        await self.parent.timer.start(user)
+
+
+class TimerUpdate:
+    def __init__(self, parent):
+        self.parent = parent
+        self.t = {}
+
+    async def start(self, user: int, second: int):
+        if user in self.t.keys():
+            self.t[user].cancel()
+            self.t.pop(user)
+            self.t[user] = asyncio.create_task(self.clean_chat(user, second))
+            await self.t[user]
+        else:
+            self.t[user] = asyncio.create_task(self.clean_chat(user, second))
+            await self.t[user]
+
+    async def clean_chat(self, user: int, second: int):
+        await asyncio.sleep(second)
+        print(f'Очищен чат у клиента {str(user)}')
+        await self.clean_timer(user)
+
+    async def clean_timer(self, user: int):
+        self.t.pop(user)
+        await self.parent.start_for_news(user)
+        await self.parent.timer.start(user)
 
 
 class QueuesMedia:

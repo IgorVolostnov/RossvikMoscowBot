@@ -47,6 +47,8 @@ class Execute:
                        f"WHERE ID_USER = {self.quote(id_user)} "
             await cursor.execute(sql_auth)
             row_table = await cursor.fetchone()
+            if row_table is None:
+                print('No user')
             return row_table[0]
 
     @property
@@ -124,10 +126,19 @@ class Execute:
 
     async def execute_start_record_new_user(self, message: Message):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES) " \
-                         f"VALUES ({str(message.from_user.id)}, '/start', {str(message.message_id)}) "
+            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, FIRST_NAME_USER, LAST_NAME_USER, " \
+                         f"USER_NAME_USER, DISCOUNT) " \
+                         f"VALUES (" \
+                         f"'{str(message.from_user.id)}', " \
+                         f"'/start', " \
+                         f"'{str(message.message_id)}', " \
+                         f"'{message.from_user.first_name}', " \
+                         f"'{message.from_user.last_name}', " \
+                         f"'{message.from_user.username}', " \
+                         f"'{0}') "
             await cursor.execute(sql_record)
-            print(f'Новый клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
+            print(f'Новый клиент ID: {message.from_user.id} {message.from_user.first_name} '
+                  f'{message.from_user.last_name} c username: {message.from_user.username} '
                   f'зашел с сообщением: {str(message.message_id)}')
             await self.conn.commit()
 
@@ -141,11 +152,15 @@ class Execute:
     async def execute_restart_catalog(self, message: Message, element_history: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"HISTORY = '{element_history}' " \
+                         f"HISTORY = '{element_history}'," \
+                         f"FIRST_NAME_USER =  '{message.from_user.first_name}'," \
+                         f"LAST_NAME_USER =  '{message.from_user.last_name}'," \
+                         f"USER_NAME_USER =  '{message.from_user.username}' " \
                          f"WHERE ID_USER = {self.quote(message.from_user.id)} "
             await cursor.execute(sql_record)
             if element_history == '/start':
-                print(f'Клиент {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
+                print(f'Клиент ID: {message.from_user.id} {message.from_user.first_name} {message.from_user.last_name} '
+                      f'c username: {message.from_user.username} '
                       f'возобновил работу с сообщением: {str(message.message_id)}')
             await self.conn.commit()
 

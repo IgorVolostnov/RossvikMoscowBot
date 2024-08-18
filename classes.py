@@ -6,6 +6,7 @@ import datetime
 import openpyxl
 import requests
 import phonenumbers
+from pydantic import ValidationError
 from data import DATA
 from aiogram import F
 from aiogram import Bot, Dispatcher
@@ -648,7 +649,7 @@ class DispatcherMessage(Dispatcher):
             await self.execute.restart_catalog(message, '/start')
         else:
             await self.execute.start_record_new_user(message)
-            self.arr_auth_user[message.from_user.id] = None
+            self.arr_auth_user = await self.execute.auth_user
         await self.help_message(message)
         await self.execute.add_element_history(message.from_user.id, 'help')
         return True
@@ -720,15 +721,15 @@ class DispatcherMessage(Dispatcher):
 
     async def task_command_start(self, message: Message):
         await self.checking_bot(message)
-        first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
-        answer = await self.answer_message(message, "Выберете, что Вас интересует ⤵ ⤵ ⤵",
-                                           self.build_keyboard(first_keyboard, 1))
         if await self.execute.start_message(message):
             await self.execute.restart_catalog(message, '/start')
             await self.execute.add_element_message(message.from_user.id, message.message_id)
         else:
             await self.execute.start_record_new_user(message)
-            self.arr_auth_user[message.from_user.id] = None
+            self.arr_auth_user = await self.execute.auth_user
+        first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
+        answer = await self.answer_message(message, "Выберете, что Вас интересует ⤵ ⤵ ⤵",
+                                           self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
         return True

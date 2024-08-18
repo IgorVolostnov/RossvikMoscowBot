@@ -68,20 +68,41 @@ class Execute:
             return user_admin
 
     @property
-    async def get_list_user(self):
+    async def get_list_user_without_creator(self):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_get_list_user()
+                return await self.execute_get_list_user_without_creator()
         except Exception as e:
-            await send_message('Ошибка запроса в методе get_list_user', os.environ["EMAIL"], str(e))
+            await send_message('Ошибка запроса в методе get_list_user_without_creator', os.environ["EMAIL"], str(e))
 
-    async def execute_get_list_user(self):
+    async def execute_get_list_user_without_creator(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_list_user = f"SELECT ID_USER FROM TELEGRAMMBOT " \
                              f"WHERE STATUS != 'creator' "
             await cursor.execute(sql_list_user)
             user_admin = await cursor.fetchall()
             return user_admin
+
+    async def list_user_for_add_status(self, username: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_list_user_for_add_status(username)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе list_user_for_add_status', os.environ["EMAIL"], str(e))
+
+    async def execute_list_user_for_add_status(self, username: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_list_user = f"SELECT ID_USER, USER_NAME_USER FROM TELEGRAMMBOT " \
+                            f"WHERE USER_NAME_USER LIKE '%{username}%' "
+            await cursor.execute(sql_list_user)
+            list_user = await cursor.fetchall()
+            if list_user is None:
+                dict_user = False
+            else:
+                dict_user = {}
+                for item in list_user:
+                    dict_user[item[0]] = item[1]
+            return dict_user
 
     async def get_info_user(self, id_user: int):
         try:

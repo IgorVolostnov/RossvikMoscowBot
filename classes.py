@@ -6,7 +6,6 @@ import datetime
 import openpyxl
 import requests
 import phonenumbers
-from pydantic import ValidationError
 from data import DATA
 from aiogram import F
 from aiogram import Bot, Dispatcher
@@ -306,15 +305,14 @@ class DispatcherMessage(Dispatcher):
                 await self.timer.start(message.from_user.id)
             elif current_history == 'forward_telephone':
                 task = asyncio.create_task(self.task_record_telephone(message))
-                task.set_name(f'{message.from_user.id}task_record_telephone')
+                task.set_name(f'{message.from_user.id}_task_record_telephone')
                 await self.queues_message.start(task)
                 await self.timer.start(message.from_user.id)
-            elif current_history == 'individual_entrepreneur':
-                print('Индивидуальный предприниматель')
-                await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
-            elif current_history == 'limited_liability_company':
-                print('ООО')
-                await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+            elif current_history == 'add_status':
+                task = asyncio.create_task(self.task_get_user(message))
+                task.set_name(f'{message.from_user.id}_task_get_user')
+                await self.queues_message.start(task)
+                await self.timer.start(message.from_user.id)
             else:
                 if message.content_type == "text" or message.content_type == "voice":
                     task = asyncio.create_task(self.task_send_search_result(message))
@@ -578,13 +576,20 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
         async def send_update_message(callback: CallbackQuery):
-            list_user = await self.execute.get_list_user
+            list_user = await self.execute.get_list_user_without_creator
             task = asyncio.create_task(self.task_update_message(list_user))
             task.set_name(f'{callback.from_user.id}_task_update_message')
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
             for user_id in list_user:
                 await self.timer.start(int(user_id[0]))
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add_status'))
+        async def send_add_status(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_add_status(callback))
+            task.set_name(f'{callback.from_user.id}_task_add_status')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
 
     async def task_back(self, call_back: CallbackQuery):
         current = await self.execute.delete_element_history(call_back.from_user.id, 1)
@@ -637,6 +642,10 @@ class DispatcherMessage(Dispatcher):
             await self.forward_email(call_back)
         elif current == 'forward_telephone':
             await self.forward_telephone(call_back)
+        elif current == 'add_status':
+            await self.add_status(call_back)
+        elif 'string_user' in current:
+            await self.back_show_user_for_add_status(call_back, current)
         return True
 
     async def checking_bot(self, message: Message):
@@ -2670,6 +2679,97 @@ class DispatcherMessage(Dispatcher):
     async def update_message(self, user_list: list):
         for user_id in user_list:
             await self.start_for_news(int(user_id[0]))
+
+    async def task_add_status(self, call_back: CallbackQuery):
+        check = await self.add_status(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, call_back.data)
+        return True
+
+    async def add_status(self, call_back: CallbackQuery):
+        whitespace = '\n'
+        back_button = {'back': '◀ 👈 Назад'}
+        text = f"Отправьте сообщение с {self.format_text('username')} пользователя, чтобы найти его.{whitespace} " \
+               f"Если у пользователя нет {self.format_text('username')}:{whitespace}" \
+               f"1. Попросите его создать {self.format_text('username')} в личных настройках Telegram.{whitespace}" \
+               f"2. Попросите нажать в меню бота команду {self.format_text('Главное меню - start')}{whitespace}" \
+               f"3. Отправьте снова сообщение с {self.format_text('username')} пользователя, чтобы найти его."
+        await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(back_button, 1))
+        return True
+
+    async def task_get_user(self, message: Message):
+        check = await self.get_user(message)
+        if check:
+            await self.execute.add_element_history(message.from_user.id, check)
+        return True
+
+    async def get_user(self, message: Message):
+        text_for_search = re.sub("[^A-Za-z0-9@_]", "", message.text)
+        dict_user_for_add_status = await self.execute.list_user_for_add_status(text_for_search)
+        if dict_user_for_add_status:
+            dict_user_for_record = await self.show_user_for_add_status(message, dict_user_for_add_status)
+            string_user_for_add_status = await self.get_string_user_for_add_status(dict_user_for_record)
+            return string_user_for_add_status
+        else:
+            await self.find_nothing_for_add_status(message)
+            return False
+
+    async def find_nothing_for_add_status(self, message: Message):
+        whitespace = '\n'
+        menu_button = {'back': '◀ 👈 Назад'}
+        text = f"Сожалеем, но пользователь с {self.format_text('username')}: {message.text} не найден." \
+               f"Если у пользователя нет {self.format_text('username')}:{whitespace}" \
+               f"1. Попросите его создать {self.format_text('username')} в личных настройках Telegram.{whitespace}" \
+               f"2. Попросите нажать в меню бота команду {self.format_text('Главное меню - start')}{whitespace}" \
+               f"3. Отправьте снова сообщение с {self.format_text('username')} пользователя, чтобы найти его."
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        try:
+            await self.bot.edit_head_message_by_basket(text, message.from_user.id, head_message,
+                                                       self.build_keyboard(menu_button, 1))
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+        except TelegramBadRequest:
+            await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+
+    async def show_user_for_add_status(self, message: Message, dict_user: dict):
+        dict_user['back'] = '◀ 👈 Назад'
+        text = f"Выберите пользователя с нужным {self.format_text('username')}."
+        arr_messages = await self.execute.get_arr_messages(message.from_user.id)
+        head_message = arr_messages[0]
+        await self.bot.edit_head_message_by_basket(text, message.from_user.id, head_message,
+                                                   self.build_keyboard(dict_user, 1))
+        await self.bot.delete_messages_chat(message.chat.id, [message.message_id])
+        dict_user.pop('back')
+        return dict_user
+
+    async def back_show_user_for_add_status(self, call_back: CallbackQuery, list_user: str):
+        dict_user = await self.get_dict_user_for_add_status(list_user)
+        dict_user['back'] = '◀ 👈 Назад'
+        text = f"Выберите пользователя с нужным {self.format_text('username')}."
+        if call_back.message.caption:
+            answer = await self.answer_message_by_basket(call_back.message, text, self.build_keyboard(dict_user, 1))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.record_message(call_back.from_user.id, str(answer.message_id))
+        else:
+            await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(dict_user, 1))
+        return True
+
+    @staticmethod
+    async def get_string_user_for_add_status(dict_user: dict) -> str:
+        list_user = []
+        for key, item in dict_user.items():
+            list_user.append(f"{key}///{item}")
+        str_user = 'string_user' + '___'.join(list_user)
+        return str_user
+
+    @staticmethod
+    async def get_dict_user_for_add_status(list_user: str) -> dict:
+        arr_user = list_user.split('string_user')[1].split('___')
+        dict_user = {}
+        for item in arr_user:
+            user = item.split('///')
+            dict_user[user[0]] = user[1]
+        return dict_user
 
     @staticmethod
     async def check_inn(string_text: str):

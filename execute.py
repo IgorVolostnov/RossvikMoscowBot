@@ -104,6 +104,19 @@ class Execute:
                     dict_user[f'identifier{item[0]}'] = item[1]
             return dict_user
 
+    async def delete_user(self, id_user: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_delete_user(id_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе delete_user', os.environ["EMAIL"], str(e))
+
+    async def execute_delete_user(self, id_user: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_delete = f"DELETE FROM TELEGRAMMBOT WHERE ID_USER = {self.quote(id_user)} "
+            await cursor.execute(sql_delete)
+            await self.conn.commit()
+
     async def get_info_user(self, id_user: int):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:

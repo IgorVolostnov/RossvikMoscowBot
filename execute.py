@@ -78,7 +78,7 @@ class Execute:
     async def execute_get_list_user_without_creator(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_list_user = f"SELECT ID_USER FROM TELEGRAMMBOT " \
-                             f"WHERE STATUS != 'creator' "
+                             f"WHERE STATUS = 'diler' OR STATUS = 'admin' OR STATUS IS NULL"
             await cursor.execute(sql_list_user)
             user_admin = await cursor.fetchall()
             return user_admin

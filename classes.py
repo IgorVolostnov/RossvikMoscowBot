@@ -164,7 +164,6 @@ class DispatcherMessage(Dispatcher):
     def __init__(self, parent, **kw):
         Dispatcher.__init__(self, **kw)
         self.timer = TimerClean(self, 82800)
-        self.update_messages_user = TimerUpdate(self)
         self.queues = QueuesMedia(self)
         self.queues_message = QueuesMessage()
         self.bot = parent
@@ -577,11 +576,15 @@ class DispatcherMessage(Dispatcher):
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
         async def send_update_message(callback: CallbackQuery):
+            news = await self.execute.get_news()
             list_user = await self.execute.get_list_user_without_creator
-            i = 1
+            background_tasks = set()
             for user_id in list_user:
-                await self.update_messages_user.start(int(user_id[0]), i)
-                i += 1
+                check = await self.task_update(int(user_id[0]), news)
+                if check:
+                    task = asyncio.create_task(self.timer.start(int(user_id[0])))
+                    background_tasks.add(task)
+                    task.add_done_callback(background_tasks.discard)
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add_status'))
@@ -754,14 +757,19 @@ class DispatcherMessage(Dispatcher):
         first_keyboard = await self.data.get_first_keyboard(user_id)
         answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
                                                    "Выберете, что Вас интересует ⤵ ⤵ ⤵")
+        await self.delete_messages(user_id)
         await self.execute.add_element_message(user_id, answer.message_id)
 
-    async def start_for_news(self, user_id: int):
+    async def task_update(self, user_id: int, current_news: str):
+        await self.start_for_news(user_id, current_news)
+        return True
+
+    async def start_for_news(self, user_id: int, current_news: str):
         first_keyboard = await self.data.get_first_keyboard(user_id)
-        current_news = await self.execute.get_news()
         answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), current_news)
         await self.delete_messages(user_id)
         await self.execute.add_element_message(user_id, answer.message_id)
+        print(f'Обновили новость у {user_id}')
 
     async def task_command_catalog(self, message: Message):
         await self.checking_bot(message)
@@ -3117,40 +3125,14 @@ class TimerClean:
 
     async def clean_chat(self, user: int):
         await asyncio.sleep(self._clean_time)
-        await self.parent.delete_messages(user)
+        await self.parent.start_for_timer(user)
         print(f'Очищен чат у клиента {str(user)}')
         await self.clean_timer(user)
 
     async def clean_timer(self, user: int):
         self.t.pop(user)
         await self.parent.start_for_timer(user)
-        await self.parent.timer.start(user)
-
-
-class TimerUpdate:
-    def __init__(self, parent):
-        self.parent = parent
-        self.t = {}
-
-    async def start(self, user: int, second: int):
-        if user in self.t.keys():
-            self.t[user].cancel()
-            self.t.pop(user)
-            self.t[user] = asyncio.create_task(self.clean_chat(user, second))
-            await self.t[user]
-        else:
-            self.t[user] = asyncio.create_task(self.clean_chat(user, second))
-            await self.t[user]
-
-    async def clean_chat(self, user: int, second: int):
-        await asyncio.sleep(second)
-        print(f'Очищен чат у клиента {str(user)}')
-        await self.clean_timer(user)
-
-    async def clean_timer(self, user: int):
-        self.t.pop(user)
-        await self.parent.start_for_news(user)
-        await self.parent.timer.start(user)
+        await self.start(user)
 
 
 class QueuesMedia:

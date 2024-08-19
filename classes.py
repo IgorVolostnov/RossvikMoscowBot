@@ -567,13 +567,6 @@ class DispatcherMessage(Dispatcher):
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
-        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
-        async def send_return_message(callback: CallbackQuery):
-            task = asyncio.create_task(self.task_back(callback))
-            task.set_name(f'{callback.from_user.id}_task_back')
-            await self.queues_message.start(task)
-            await self.timer.start(callback.from_user.id)
-
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
         async def send_update_message(callback: CallbackQuery):
             news = await self.execute.get_news()
@@ -591,6 +584,20 @@ class DispatcherMessage(Dispatcher):
         async def send_add_status(callback: CallbackQuery):
             task = asyncio.create_task(self.task_add_status(callback))
             task.set_name(f'{callback.from_user.id}_task_add_status')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('identifier')))
+        async def send_show_choice_status(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_show_choice_status(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_choice_status')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
+        async def send_return_message(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_back(callback))
+            task.set_name(f'{callback.from_user.id}_task_back')
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
@@ -649,6 +656,8 @@ class DispatcherMessage(Dispatcher):
             await self.add_status(call_back)
         elif 'string_user' in current:
             await self.back_show_user_for_add_status(call_back, current)
+        elif 'id_user_for_status' in current:
+            await self.back_show_choice_status(call_back, current)
         return True
 
     async def checking_bot(self, message: Message):
@@ -2752,6 +2761,37 @@ class DispatcherMessage(Dispatcher):
             await self.execute.record_message(call_back.from_user.id, str(answer.message_id))
         else:
             await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(dict_user, 1))
+        return True
+
+    async def task_show_choice_status(self, call_back: CallbackQuery):
+        check = await self.show_choice_status(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, f"id_user_for_status{check}")
+        return True
+
+    async def show_choice_status(self, call_back: CallbackQuery):
+        id_user = call_back.data.split('identifier')[1]
+        menu_button = {f'retail_customer{id_user}': 'Розничный клиент',
+                       f'equipment_dealer{id_user}': 'Дилер',
+                       f'equipment_distributor{id_user}': 'Дистрибьютор',
+                       'back': '◀ 👈 Назад'}
+        text = f"Выберите {self.format_text('статус')} пользователя по оборудованию:"
+        await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 1))
+        return id_user
+
+    async def back_show_choice_status(self, call_back: CallbackQuery, user_id: str):
+        id_user = user_id.split('id_user_for_status')[1]
+        menu_button = {f'retail_customer{id_user}': 'Розничный клиент',
+                       f'equipment_dealer{id_user}': 'Дилер',
+                       f'equipment_distributor{id_user}': 'Дистрибьютор',
+                       'back': '◀ 👈 Назад'}
+        text = f"Выберите {self.format_text('статус')} пользователя по оборудованию:"
+        if call_back.message.caption:
+            answer = await self.answer_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 1))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.record_message(call_back.from_user.id, str(answer.message_id))
+        else:
+            await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 1))
         return True
 
     @staticmethod

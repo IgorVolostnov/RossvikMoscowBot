@@ -101,7 +101,7 @@ class Execute:
             else:
                 dict_user = {}
                 for item in list_user:
-                    dict_user[item[0]] = item[1]
+                    dict_user[f'identifier{item[0]}'] = item[1]
             return dict_user
 
     async def get_info_user(self, id_user: int):

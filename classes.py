@@ -763,11 +763,16 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def start_for_timer(self, user_id: int):
-        first_keyboard = await self.data.get_first_keyboard(user_id)
-        answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
-                                                   "Выберете, что Вас интересует ⤵ ⤵ ⤵")
-        await self.delete_messages(user_id)
-        await self.execute.add_element_message(user_id, answer.message_id)
+        try:
+            first_keyboard = await self.data.get_first_keyboard(user_id)
+            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
+                                                       "Выберете, что Вас интересует ⤵ ⤵ ⤵")
+            await self.delete_messages(user_id)
+            await self.execute.add_element_message(user_id, answer.message_id)
+            return True
+        except TelegramForbiddenError:
+            await self.execute.delete_user(user_id)
+            return False
 
     async def task_update(self, user_id: int, current_news: str):
         check = await self.start_for_news(user_id, current_news)
@@ -3176,7 +3181,6 @@ class TimerClean:
 
     async def clean_timer(self, user: int):
         self.t.pop(user)
-        await self.parent.start_for_timer(user)
         await self.start(user)
 
 

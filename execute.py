@@ -78,7 +78,7 @@ class Execute:
     async def execute_get_list_user_without_creator(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_list_user = f"SELECT ID_USER FROM TELEGRAMMBOT " \
-                             f"WHERE STATUS = 'diler' OR STATUS = 'admin' OR STATUS IS NULL"
+                             f"WHERE STATUS = 'dealer' OR STATUS = 'distributor' OR STATUS = 'admin' OR STATUS IS NULL"
             await cursor.execute(sql_list_user)
             user_admin = await cursor.fetchall()
             return user_admin
@@ -103,6 +103,36 @@ class Execute:
                 for item in list_user:
                     dict_user[f'identifier{item[0]}'] = item[1]
             return dict_user
+
+    async def set_retail_customer(self, user_id: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_set_retail_customer(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе set_retail_customer', os.environ["EMAIL"], str(e))
+
+    async def execute_set_retail_customer(self, user_id: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"STATUS = NULL " \
+                         f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def set_dealer(self, user_id: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_set_dealer(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе set_dealer', os.environ["EMAIL"], str(e))
+
+    async def execute_set_dealer(self, user_id: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"STATUS = 'dealer' " \
+                         f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
 
     async def delete_user(self, id_user: int):
         try:

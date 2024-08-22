@@ -594,6 +594,27 @@ class DispatcherMessage(Dispatcher):
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('retail_customer')))
+        async def send_show_retail_customer(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_show_discount_amount(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_discount_amount')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('distributor')))
+        async def send_show_distributor(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_show_discount_amount(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_discount_amount')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('dealer')))
+        async def send_show_dealer(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_show_discount_amount(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_discount_amount')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             task = asyncio.create_task(self.task_back(callback))
@@ -658,6 +679,8 @@ class DispatcherMessage(Dispatcher):
             await self.back_show_user_for_add_status(call_back, current)
         elif 'id_user_for_status' in current:
             await self.back_show_choice_status(call_back, current)
+        elif 'discount_amount' in current:
+            await self.back_discount_amount(call_back, current)
         return True
 
     async def checking_bot(self, message: Message):
@@ -749,7 +772,7 @@ class DispatcherMessage(Dispatcher):
             await self.execute.start_record_new_user(message)
             self.arr_auth_user = await self.execute.auth_user
         first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
-        answer = await self.answer_message(message, "Выберете, что Вас интересует ⤵ ⤵ ⤵",
+        answer = await self.answer_message(message, "Выберите, что Вас интересует ⤵ ⤵ ⤵",
                                            self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
@@ -757,7 +780,7 @@ class DispatcherMessage(Dispatcher):
 
     async def return_start(self, call_back: CallbackQuery):
         first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
-        answer = await self.answer_message(call_back.message, "Выберете, что Вас интересует ⤵ ⤵ ⤵",
+        answer = await self.answer_message(call_back.message, "Выберите, что Вас интересует ⤵ ⤵ ⤵",
                                            self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
@@ -766,7 +789,7 @@ class DispatcherMessage(Dispatcher):
         try:
             first_keyboard = await self.data.get_first_keyboard(user_id)
             answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
-                                                       "Выберете, что Вас интересует ⤵ ⤵ ⤵")
+                                                       "Выберите, что Вас интересует ⤵ ⤵ ⤵")
             await self.delete_messages(user_id)
             await self.execute.add_element_message(user_id, answer.message_id)
             return True
@@ -946,7 +969,7 @@ class DispatcherMessage(Dispatcher):
             availability = "Нет на складе"
         else:
             availability = arr_description[7]
-        if self.arr_auth_user[id_user] == 'diler':
+        if self.arr_auth_user[id_user] == 'dealer':
             if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
                 await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
                 dealer = arr_description[8]
@@ -1037,7 +1060,7 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_history(call_back.from_user.id, call_back.data)
         else:
             availability = self.get_availability(arr_description[7])
-            if self.arr_auth_user[call_back.from_user.id] == 'diler':
+            if self.arr_auth_user[call_back.from_user.id] == 'dealer':
                 dealer = self.get_dealer(arr_description[8], arr_description[9])
                 info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
                                     f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}' \
@@ -1092,7 +1115,7 @@ class DispatcherMessage(Dispatcher):
             amount = self.get_amount(call_back.message.caption, button)
         else:
             amount = self.get_amount(call_back.message.text, button)
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+        if self.arr_auth_user[call_back.from_user.id] == 'dealer':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
@@ -1123,7 +1146,7 @@ class DispatcherMessage(Dispatcher):
             amount = self.get_amount_minus(call_back.message.caption)
         else:
             amount = self.get_amount_minus(call_back.message.text)
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+        if self.arr_auth_user[call_back.from_user.id] == 'dealer':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
@@ -1159,7 +1182,7 @@ class DispatcherMessage(Dispatcher):
             amount = self.get_amount_minus(call_back.message.caption)
         else:
             amount = self.get_amount_minus(call_back.message.text)
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+        if self.arr_auth_user[call_back.from_user.id] == 'dealer':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
@@ -1195,7 +1218,7 @@ class DispatcherMessage(Dispatcher):
             amount = self.get_amount_delete(call_back.message.caption)
         else:
             amount = self.get_amount_delete(call_back.message.text)
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+        if self.arr_auth_user[call_back.from_user.id] == 'dealer':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
@@ -1230,7 +1253,7 @@ class DispatcherMessage(Dispatcher):
             amount = await self.check_amount(call_back.message.caption, call_back.id, arr_description[7])
         else:
             amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
-        if self.arr_auth_user[call_back.from_user.id] == 'diler':
+        if self.arr_auth_user[call_back.from_user.id] == 'dealer':
             price = self.get_dealer(arr_description[8], arr_description[9])
         else:
             price = arr_description[8]
@@ -2782,8 +2805,8 @@ class DispatcherMessage(Dispatcher):
     async def show_choice_status(self, call_back: CallbackQuery):
         id_user = call_back.data.split('identifier')[1]
         menu_button = {f'retail_customer{id_user}': 'Розничный клиент',
-                       f'equipment_dealer{id_user}': 'Дилер',
-                       f'equipment_distributor{id_user}': 'Дистрибьютор',
+                       f'dealer{id_user}': 'Дилер',
+                       f'distributor{id_user}': 'Дистрибьютор',
                        'back': '◀ 👈 Назад'}
         text = f"Выберите {self.format_text('статус')} пользователя по оборудованию:"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 1))
@@ -2792,8 +2815,8 @@ class DispatcherMessage(Dispatcher):
     async def back_show_choice_status(self, call_back: CallbackQuery, user_id: str):
         id_user = user_id.split('id_user_for_status')[1]
         menu_button = {f'retail_customer{id_user}': 'Розничный клиент',
-                       f'equipment_dealer{id_user}': 'Дилер',
-                       f'equipment_distributor{id_user}': 'Дистрибьютор',
+                       f'dealer{id_user}': 'Дилер',
+                       f'distributor{id_user}': 'Дистрибьютор',
                        'back': '◀ 👈 Назад'}
         text = f"Выберите {self.format_text('статус')} пользователя по оборудованию:"
         if call_back.message.caption:
@@ -2802,6 +2825,72 @@ class DispatcherMessage(Dispatcher):
             await self.execute.record_message(call_back.from_user.id, str(answer.message_id))
         else:
             await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 1))
+        return True
+
+    async def task_show_discount_amount(self, call_back: CallbackQuery):
+        check = await self.show_discount_amount(call_back)
+        if check:
+            await self.execute.add_element_history(call_back.from_user.id, f"discount_amount{check}")
+        return True
+
+    async def show_discount_amount(self, call_back: CallbackQuery):
+        if 'retail_customer' in call_back.data:
+            id_user = call_back.data.split('retail_customer')[1]
+            await self.execute.set_retail_customer(id_user)
+            self.arr_auth_user = await self.execute.auth_user
+        elif 'dealer' in call_back.data:
+            id_user = call_back.data.split('dealer')[1]
+            await self.execute.set_dealer(id_user)
+            self.arr_auth_user = await self.execute.auth_user
+        else:
+            id_user = call_back.data.split('distributor')[1]
+            await self.execute.set_distributor(id_user)
+            self.arr_auth_user = await self.execute.auth_user
+        menu_button = {f'discount_amount///0_{id_user}': '0%',
+                       f'discount_amount///3_{id_user}': '3%',
+                       f'discount_amount///5_{id_user}': '5%',
+                       f'discount_amount///7_{id_user}': '7%',
+                       f'discount_amount///10_{id_user}': '10%',
+                       f'discount_amount///15_{id_user}': '15%',
+                       f'discount_amount///20_{id_user}': '20%',
+                       f'discount_amount///25_{id_user}': '25%',
+                       f'discount_amount///26_{id_user}': '26%',
+                       f'discount_amount///27_{id_user}': '27%',
+                       f'discount_amount///28_{id_user}': '28%',
+                       f'discount_amount///29_{id_user}': '29%',
+                       f'discount_amount///30_{id_user}': '30%',
+                       f'discount_amount///31_{id_user}': '31%',
+                       f'discount_amount///32_{id_user}': '32%',
+                       'back': '◀ 👈 Назад'}
+        text = f"Выберите {self.format_text('скидку')} пользователя на расходные материалы для шиноремонта:"
+        await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 5))
+        return id_user
+
+    async def back_discount_amount(self, call_back: CallbackQuery, user_id: str):
+        id_user = user_id.split('discount_amount')[1]
+        menu_button = {f'discount_amount///0_{id_user}': '0%',
+                       f'discount_amount///3_{id_user}': '3%',
+                       f'discount_amount///5_{id_user}': '5%',
+                       f'discount_amount///7_{id_user}': '7%',
+                       f'discount_amount///10_{id_user}': '10%',
+                       f'discount_amount///15_{id_user}': '15%',
+                       f'discount_amount///20_{id_user}': '20%',
+                       f'discount_amount///25_{id_user}': '25%',
+                       f'discount_amount///26_{id_user}': '26%',
+                       f'discount_amount///27_{id_user}': '27%',
+                       f'discount_amount///28_{id_user}': '28%',
+                       f'discount_amount///29_{id_user}': '29%',
+                       f'discount_amount///30_{id_user}': '30%',
+                       f'discount_amount///31_{id_user}': '31%',
+                       f'discount_amount///32_{id_user}': '32%',
+                       'back': '◀ 👈 Назад'}
+        text = f"Выберите {self.format_text('скидку')} пользователя на расходные материалы для шиноремонта:"
+        if call_back.message.caption:
+            answer = await self.answer_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 5))
+            await self.delete_messages(call_back.from_user.id)
+            await self.execute.record_message(call_back.from_user.id, str(answer.message_id))
+        else:
+            await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 5))
         return True
 
     @staticmethod

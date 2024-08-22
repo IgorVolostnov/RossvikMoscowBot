@@ -92,6 +92,10 @@ class BotMessage(Bot):
         return await self.send_message(chat_id=chat_id, text=self.format_text(text_message),
                                        parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
+    async def send_message_start_news(self, chat_id: int, keyboard: InlineKeyboardMarkup, text_message: str):
+        return await self.send_message(chat_id=chat_id, text=text_message,
+                                       parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
     async def send_message_order(self, chat_id: int, user: str, order: str, contact: str, number_order: str,
                                  keyboard: InlineKeyboardMarkup):
         return await self.send_document(chat_id=chat_id, document=FSInputFile(order),
@@ -804,7 +808,8 @@ class DispatcherMessage(Dispatcher):
     async def start_for_news(self, user_id: int, current_news: str):
         try:
             first_keyboard = await self.data.get_first_keyboard(user_id)
-            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), current_news)
+            answer = await self.bot.send_message_start_news(user_id, self.build_keyboard(first_keyboard, 1),
+                                                            current_news)
             await self.delete_messages(user_id)
             await self.execute.add_element_message(user_id, answer.message_id)
             print(f'Обновили новость у {user_id}')

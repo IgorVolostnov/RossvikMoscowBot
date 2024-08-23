@@ -134,6 +134,36 @@ class Execute:
             await cursor.execute(sql_record)
             await self.conn.commit()
 
+    async def set_distributor(self, user_id: str):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_set_distributor(user_id)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе set_distributor', os.environ["EMAIL"], str(e))
+
+    async def execute_set_distributor(self, user_id: str):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"STATUS = 'distributor' " \
+                         f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def set_discount_amount(self, user_id: str, amount: int):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_set_discount_amount(user_id, amount)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе set_discount_amount', os.environ["EMAIL"], str(e))
+
+    async def execute_set_discount_amount(self, user_id: str, amount: int):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                         f"DISCOUNT = '{amount}' " \
+                         f"WHERE ID_USER = {self.quote(user_id)} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
     async def delete_user(self, id_user: int):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:

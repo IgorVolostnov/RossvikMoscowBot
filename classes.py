@@ -619,6 +619,13 @@ class DispatcherMessage(Dispatcher):
             await self.queues_message.start(task)
             await self.timer.start(callback.from_user.id)
 
+        @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data.contains('discount_amount')))
+        async def send_show_set_discount_amount(callback: CallbackQuery):
+            task = asyncio.create_task(self.task_show_set_discount_amount(callback))
+            task.set_name(f'{callback.from_user.id}_task_show_set_discount_amount')
+            await self.queues_message.start(task)
+            await self.timer.start(callback.from_user.id)
+
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'back'))
         async def send_return_message(callback: CallbackQuery):
             task = asyncio.create_task(self.task_back(callback))
@@ -2851,21 +2858,21 @@ class DispatcherMessage(Dispatcher):
             id_user = call_back.data.split('distributor')[1]
             await self.execute.set_distributor(id_user)
             self.arr_auth_user = await self.execute.auth_user
-        menu_button = {f'discount_amount///0_{id_user}': '0%',
-                       f'discount_amount///3_{id_user}': '3%',
-                       f'discount_amount///5_{id_user}': '5%',
-                       f'discount_amount///7_{id_user}': '7%',
-                       f'discount_amount///10_{id_user}': '10%',
-                       f'discount_amount///15_{id_user}': '15%',
-                       f'discount_amount///20_{id_user}': '20%',
-                       f'discount_amount///25_{id_user}': '25%',
-                       f'discount_amount///26_{id_user}': '26%',
-                       f'discount_amount///27_{id_user}': '27%',
-                       f'discount_amount///28_{id_user}': '28%',
-                       f'discount_amount///29_{id_user}': '29%',
-                       f'discount_amount///30_{id_user}': '30%',
-                       f'discount_amount///31_{id_user}': '31%',
-                       f'discount_amount///32_{id_user}': '32%',
+        menu_button = {f'discount_amount0_{id_user}': '0%',
+                       f'discount_amount3_{id_user}': '3%',
+                       f'discount_amount5_{id_user}': '5%',
+                       f'discount_amount7_{id_user}': '7%',
+                       f'discount_amount10_{id_user}': '10%',
+                       f'discount_amount15_{id_user}': '15%',
+                       f'discount_amount20_{id_user}': '20%',
+                       f'discount_amount25_{id_user}': '25%',
+                       f'discount_amount26_{id_user}': '26%',
+                       f'discount_amount27_{id_user}': '27%',
+                       f'discount_amount28_{id_user}': '28%',
+                       f'discount_amount29_{id_user}': '29%',
+                       f'discount_amount30_{id_user}': '30%',
+                       f'discount_amount31_{id_user}': '31%',
+                       f'discount_amount32_{id_user}': '32%',
                        'back': '◀ 👈 Назад'}
         text = f"Выберите {self.format_text('скидку')} пользователя на расходные материалы для шиноремонта:"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 5))
@@ -2873,21 +2880,21 @@ class DispatcherMessage(Dispatcher):
 
     async def back_discount_amount(self, call_back: CallbackQuery, user_id: str):
         id_user = user_id.split('discount_amount')[1]
-        menu_button = {f'discount_amount///0_{id_user}': '0%',
-                       f'discount_amount///3_{id_user}': '3%',
-                       f'discount_amount///5_{id_user}': '5%',
-                       f'discount_amount///7_{id_user}': '7%',
-                       f'discount_amount///10_{id_user}': '10%',
-                       f'discount_amount///15_{id_user}': '15%',
-                       f'discount_amount///20_{id_user}': '20%',
-                       f'discount_amount///25_{id_user}': '25%',
-                       f'discount_amount///26_{id_user}': '26%',
-                       f'discount_amount///27_{id_user}': '27%',
-                       f'discount_amount///28_{id_user}': '28%',
-                       f'discount_amount///29_{id_user}': '29%',
-                       f'discount_amount///30_{id_user}': '30%',
-                       f'discount_amount///31_{id_user}': '31%',
-                       f'discount_amount///32_{id_user}': '32%',
+        menu_button = {f'discount_amount0_{id_user}': '0%',
+                       f'discount_amount3_{id_user}': '3%',
+                       f'discount_amount5_{id_user}': '5%',
+                       f'discount_amount7_{id_user}': '7%',
+                       f'discount_amount10_{id_user}': '10%',
+                       f'discount_amount15_{id_user}': '15%',
+                       f'discount_amount20_{id_user}': '20%',
+                       f'discount_amount25_{id_user}': '25%',
+                       f'discount_amount26_{id_user}': '26%',
+                       f'discount_amount27_{id_user}': '27%',
+                       f'discount_amount28_{id_user}': '28%',
+                       f'discount_amount29_{id_user}': '29%',
+                       f'discount_amount30_{id_user}': '30%',
+                       f'discount_amount31_{id_user}': '31%',
+                       f'discount_amount32_{id_user}': '32%',
                        'back': '◀ 👈 Назад'}
         text = f"Выберите {self.format_text('скидку')} пользователя на расходные материалы для шиноремонта:"
         if call_back.message.caption:
@@ -2896,6 +2903,24 @@ class DispatcherMessage(Dispatcher):
             await self.execute.record_message(call_back.from_user.id, str(answer.message_id))
         else:
             await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 5))
+        return True
+
+    async def task_show_set_discount_amount(self, call_back: CallbackQuery):
+        check = await self.show_set_discount_amount(call_back)
+        if check:
+            await self.execute.update_history(call_back.from_user.id, '/start')
+        return True
+
+    async def show_set_discount_amount(self, call_back: CallbackQuery):
+        id_user = call_back.data.split('discount_amount')[1].split('_')[1]
+        status_user = await self.execute.status_user(id_user)
+        discount_amount = call_back.data.split('discount_amount')[1].split('_')[0]
+        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
+        text = f"Пользователю ID: {self.format_text(id_user)} назначен:\n" \
+               f"1. Статус по оборудованию: {self.format_text(status_user)}\n" \
+               f"2. Скидка на расходные материалы: {self.format_text(discount_amount)}"
+        await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(first_keyboard, 1))
+        await self.execute.set_discount_amount(id_user, int(discount_amount))
         return True
 
     @staticmethod

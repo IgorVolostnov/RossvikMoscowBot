@@ -26,12 +26,12 @@ class Execute:
 
     async def execute_auth_user(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_auth = f"SELECT ID_USER, STATUS FROM TELEGRAMMBOT "
+            sql_auth = f"SELECT ID_USER, STATUS, LANGUAGE FROM TELEGRAMMBOT "
             await cursor.execute(sql_auth)
             dict_user = {}
             row_table = await cursor.fetchall()
             for item in row_table:
-                dict_user[int(item[0])] = item[1]
+                dict_user[int(item[0])] = [item[1], item[2]]
             return dict_user
 
     async def status_user(self, id_user: int):

@@ -1,5 +1,6 @@
 from execute import Execute
 from operator import itemgetter
+from language import Language
 
 
 class DATA:
@@ -43,6 +44,7 @@ class DATA:
                               'record_answer_mt': 'ТК Мейджик Транс',
                               'record_answer_cdek': 'ТК СДЭК'}
         self.execute = Execute()
+        self.language_data = Language()
 
     async def get_first_keyboard(self, id_user: int):
         basket = await self.get_basket(id_user)
@@ -87,6 +89,31 @@ class DATA:
                                   'basket': basket['basket'],
                                   'catalog': 'Каталог🧾👀'}
         return first_keyboard
+
+    def get_info_help(self, language_user: str) -> str:
+        whitespace = '\n'
+        first_str = f'Вы можете воспользоваться быстрой навигацией, отправляя следующие команды:'
+        menu_str = f'главное меню'
+        catalog_str = f'каталог товара'
+        news_str = f'новости'
+        basket_str = f'корзина'
+        order_str = f'история заказов'
+        main_str = f'Поиск товара:{whitespace}{whitespace}При отправке боту сообщения происходит поиск товара в ' \
+                   f'каталоге по содержимому сообщения, разделенному пробелами. Можно указывать не только слова, ' \
+                   f'но и символы, которые содержатся в наименовании товара.{whitespace}Чтобы понять, как это ' \
+                   f'работает, попробуйте отправить боту сообщение:{whitespace}пласт вст{whitespace}{whitespace}' \
+                   f'УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: Все данные, полученные в процессе взаимодействия между Ботом ' \
+                   f'и Пользователем: фото, видео, текстовая информация, а также любые отправленные документы, ' \
+                   f'которые содержат конфиденциальную информацию не подлежат использованию, копированию, ' \
+                   f'распространению, а также осуществлению любых других действий на их основе.'
+        info = f"{self.language_data.translated_from_russian(language_user, first_str)}{whitespace}{whitespace}" \
+               f"/start - {self.language_data.translated_from_russian(language_user, menu_str)}{whitespace}" \
+               f"/catalog - {self.language_data.translated_from_russian(language_user, catalog_str)}{whitespace}" \
+               f"/news - {self.language_data.translated_from_russian(language_user, news_str)}{whitespace}" \
+               f"/basket - {self.language_data.translated_from_russian(language_user, basket_str)}{whitespace}" \
+               f"/order - {self.language_data.translated_from_russian(language_user, order_str)}{whitespace}" \
+               f"{whitespace}{self.language_data.translated_from_russian(language_user, main_str)}"
+        return info
 
     @property
     def get_prices(self):

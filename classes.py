@@ -7,6 +7,7 @@ import openpyxl
 import requests
 import phonenumbers
 from data import DATA
+from language import Language
 from aiogram import F
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -174,6 +175,7 @@ class DispatcherMessage(Dispatcher):
         self.data = DATA()
         self.execute = self.data.execute
         self.arr_auth_user = asyncio.run(self.execute.auth_user)
+        self.language = Language()
         self.category = self.data.get_category
         self.nomenclatures = self.data.get_nomenclature
         self.pages = self.data.get_pages
@@ -710,33 +712,10 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def help_message(self, message: Message):
-        whitespace = '\n'
         first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
+        language_user = self.arr_auth_user[message.from_user.id][1]
         answer = await self.bot.push_photo(message.chat.id,
-                                           self.format_text(f"Вы можете воспользоваться быстрой навигацией,"
-                                                            f"отправляя следующие команды:{whitespace}{whitespace}"
-                                                            f"/start - главное меню{whitespace}"
-                                                            f"/catalog - каталог товара{whitespace}"
-                                                            f"/news - новости{whitespace}"
-                                                            f"/basket - корзина{whitespace}"
-                                                            f"/order - история заказов{whitespace}{whitespace}"
-                                                            f"Поиск товара:{whitespace}{whitespace}"
-                                                            f"При отправке боту сообщения происходит "
-                                                            f"поиск товара в каталоге "
-                                                            f"по содержимому сообщения, разделенному пробелами. Можно "
-                                                            f"указывать не только слова, но и символы, "
-                                                            f"которые содержатся, например, в наименовании товара."
-                                                            f"{whitespace}Чтобы понять, "
-                                                            f"как это работает, попробуйте отправить боту "
-                                                            f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
-                                                            f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: "
-                                                            f"Все данные, полученные в процессе взаимодействия между "
-                                                            f"Ботом и Пользователем: фото, видео, текстовая "
-                                                            f"информация, а также любые отправленные документы, "
-                                                            f"которые содержат конфиденциальную информацию не "
-                                                            f"подлежат использованию, копированию, распространению, "
-                                                            f"а также осуществлению любых других действий "
-                                                            f"на основе этой информации."),
+                                           self.format_text(self.data.get_info_help(language_user)),
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)

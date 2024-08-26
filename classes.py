@@ -699,87 +699,91 @@ class DispatcherMessage(Dispatcher):
     async def checking_bot(self, message: Message):
         if message.from_user.is_bot:
             await self.bot.restrict_chat_member(message.chat.id, message.from_user.id, ChatPermissions())
+            this_bot = True
+        else:
+            this_bot = False
+        return this_bot
 
     async def task_command_help(self, message: Message):
-        await self.checking_bot(message)
-        if await self.execute.start_message(message):
-            await self.execute.restart_catalog(message, '/start')
+        check = await self.checking_bot(message)
+        if check:
+            pass
         else:
-            await self.execute.start_record_new_user(message)
-            self.arr_auth_user = await self.execute.auth_user
-        await self.help_message(message)
-        await self.execute.add_element_history(message.from_user.id, 'help')
+            if await self.execute.start_message(message):
+                await self.execute.restart_catalog(message, '/start')
+            else:
+                await self.execute.start_record_new_user(message)
+                self.arr_auth_user = await self.execute.auth_user
+            await self.help_message(message)
+            await self.execute.add_element_history(message.from_user.id, 'help')
         return True
 
     async def help_message(self, message: Message):
-        first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
         language_user = self.arr_auth_user[message.from_user.id][1]
+        first_keyboard = await self.data.get_first_keyboard(message.from_user.id,
+                                                            self.arr_auth_user[message.from_user.id][0],
+                                                            language_user)
+        text_help = await self.data.get_info_help(language_user)
         answer = await self.bot.push_photo(message.chat.id,
-                                           self.format_text(self.data.get_info_help(language_user)),
+                                           self.format_text(text_help),
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
 
     async def return_help_message(self, call_back: CallbackQuery):
-        whitespace = '\n'
-        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
+        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id,
+                                                            self.arr_auth_user[call_back.from_user.id][0],
+                                                            language_user)
+        text_help = await self.data.get_info_help(language_user)
         answer = await self.bot.push_photo(call_back.message.chat.id,
-                                           self.format_text(f"Вы можете воспользоваться быстрой навигацией,"
-                                                            f"отправляя следующие команды:{whitespace}{whitespace}"
-                                                            f"/start - главное меню{whitespace}"
-                                                            f"/catalog - каталог товара{whitespace}"
-                                                            f"/news - новости{whitespace}"
-                                                            f"/basket - корзина{whitespace}"
-                                                            f"/order - история заказов{whitespace}{whitespace}"
-                                                            f"Поиск товара:{whitespace}{whitespace}"
-                                                            f"При отправке боту сообщения происходит "
-                                                            f"поиск товара в каталоге "
-                                                            f"по содержимому сообщения, разделенному пробелами. Можно "
-                                                            f"указывать не только слова, но и символы, "
-                                                            f"которые содержатся, например, в наименовании товара."
-                                                            f"{whitespace}Чтобы понять, "
-                                                            f"как это работает, попробуйте отправить боту "
-                                                            f"сообщение:{whitespace}пласт вст{whitespace}{whitespace}"
-                                                            f"УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: "
-                                                            f"Все данные, полученные в процессе взаимодействия между "
-                                                            f"Ботом и Пользователем: фото, видео, текстовая "
-                                                            f"информация, а также любые отправленные документы, "
-                                                            f"которые содержат конфиденциальную информацию не "
-                                                            f"подлежат использованию, копированию, распространению, "
-                                                            f"а также осуществлению любых других действий "
-                                                            f"на основе этой информации."),
+                                           self.format_text(text_help),
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def task_command_start(self, message: Message):
-        await self.checking_bot(message)
-        if await self.execute.start_message(message):
-            await self.execute.restart_catalog(message, '/start')
-            await self.execute.add_element_message(message.from_user.id, message.message_id)
+        check = await self.checking_bot(message)
+        if check:
+            pass
         else:
-            await self.execute.start_record_new_user(message)
-            self.arr_auth_user = await self.execute.auth_user
-        first_keyboard = await self.data.get_first_keyboard(message.from_user.id)
-        answer = await self.answer_message(message, "Выберите, что Вас интересует ⤵ ⤵ ⤵",
-                                           self.build_keyboard(first_keyboard, 1))
-        await self.delete_messages(message.from_user.id)
-        await self.execute.add_element_message(message.from_user.id, answer.message_id)
+            if await self.execute.start_message(message):
+                await self.execute.restart_catalog(message, '/start')
+                await self.execute.add_element_message(message.from_user.id, message.message_id)
+            else:
+                await self.execute.start_record_new_user(message)
+                self.arr_auth_user = await self.execute.auth_user
+            language_user = self.arr_auth_user[message.from_user.id][1]
+            first_keyboard = await self.data.get_first_keyboard(message.from_user.id,
+                                                                self.arr_auth_user[message.from_user.id][0],
+                                                                language_user)
+            text_message = await self.language.translated_from_russian(language_user,
+                                                                       "Выберите, что Вас интересует ⤵ ⤵ ⤵")
+            answer = await self.answer_message(message, text_message, self.build_keyboard(first_keyboard, 1))
+            await self.delete_messages(message.from_user.id)
+            await self.execute.add_element_message(message.from_user.id, answer.message_id)
         return True
 
     async def return_start(self, call_back: CallbackQuery):
-        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
-        answer = await self.answer_message(call_back.message, "Выберите, что Вас интересует ⤵ ⤵ ⤵",
-                                           self.build_keyboard(first_keyboard, 1))
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
+        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id,
+                                                            self.arr_auth_user[call_back.from_user.id][0],
+                                                            language_user)
+        text_message = await self.language.translated_from_russian(language_user,
+                                                                   "Выберите, что Вас интересует ⤵ ⤵ ⤵")
+        answer = await self.answer_message(call_back.message, text_message, self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def start_for_timer(self, user_id: int):
         try:
-            first_keyboard = await self.data.get_first_keyboard(user_id)
-            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
-                                                       "Выберите, что Вас интересует ⤵ ⤵ ⤵")
+            language_user = self.arr_auth_user[user_id][1]
+            first_keyboard = await self.data.get_first_keyboard(user_id, self.arr_auth_user[user_id][0],
+                                                                language_user)
+            text_message = await self.language.translated_from_russian(language_user,
+                                                                       "Выберите, что Вас интересует ⤵ ⤵ ⤵")
+            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), text_message)
             await self.delete_messages(user_id)
             await self.execute.add_element_message(user_id, answer.message_id)
             return True
@@ -793,9 +797,11 @@ class DispatcherMessage(Dispatcher):
 
     async def start_for_news(self, user_id: int, current_news: str):
         try:
-            first_keyboard = await self.data.get_first_keyboard(user_id)
+            language_user = self.arr_auth_user[user_id][1]
+            first_keyboard = await self.data.get_first_keyboard(user_id, self.arr_auth_user[user_id][0], language_user)
+            text_message = await self.language.translated_from_russian(language_user, current_news)
             answer = await self.bot.send_message_start_news(user_id, self.build_keyboard(first_keyboard, 1),
-                                                            current_news)
+                                                            text_message)
             await self.delete_messages(user_id)
             await self.execute.add_element_message(user_id, answer.message_id)
             print(f'Обновили новость у {user_id}')
@@ -805,15 +811,21 @@ class DispatcherMessage(Dispatcher):
             return False
 
     async def task_command_catalog(self, message: Message):
-        await self.checking_bot(message)
-        menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.bot.push_photo(message.chat.id, self.format_text("Каталог товаров 📖"),
-                                           self.build_keyboard(self.data.get_prices, 1, menu_button),
-                                           self.bot.catalog_logo)
-        await self.execute.add_element_message(message.from_user.id, message.message_id)
-        await self.delete_messages(message.from_user.id)
-        await self.execute.add_element_message(message.from_user.id, answer.message_id)
-        await self.execute.restart_catalog(message, '/start catalog')
+        check = await self.checking_bot(message)
+        if check:
+            pass
+        else:
+            language_user = self.arr_auth_user[message.from_user.id][1]
+            back_text = await self.language.translated_from_russian(language_user, "◀ 👈 Назад")
+            text_message = await self.language.translated_from_russian(language_user, "Каталог товаров 📖")
+            price_button = await self.data.get_prices(language_user)
+            answer = await self.bot.push_photo(message.chat.id, self.format_text(text_message),
+                                               self.build_keyboard(price_button, 1, {'back': back_text}),
+                                               self.bot.catalog_logo)
+            await self.execute.add_element_message(message.from_user.id, message.message_id)
+            await self.delete_messages(message.from_user.id)
+            await self.execute.add_element_message(message.from_user.id, answer.message_id)
+            await self.execute.restart_catalog(message, '/start catalog')
         return True
 
     async def task_catalog(self, call_back: CallbackQuery):
@@ -822,17 +834,23 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def catalog(self, call_back: CallbackQuery):
-        menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text("Каталог товаров 📖"),
-                                           self.build_keyboard(self.data.get_prices, 1, menu_button),
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
+        back_text = await self.language.translated_from_russian(language_user, "◀ 👈 Назад")
+        text_message = await self.language.translated_from_russian(language_user, "Каталог товаров 📖")
+        price_button = await self.data.get_prices(language_user)
+        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text_message),
+                                           self.build_keyboard(price_button, 1, {'back': back_text}),
                                            self.bot.catalog_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def task_command_link(self, message: Message):
-        await self.checking_bot(message)
-        await self.show_link(message)
-        await self.execute.add_element_history(message.from_user.id, 'news')
+        check = await self.checking_bot(message)
+        if check:
+            pass
+        else:
+            await self.show_link(message)
+            await self.execute.add_element_history(message.from_user.id, 'news')
         return True
 
     async def show_link(self, message: Message):
@@ -960,7 +978,7 @@ class DispatcherMessage(Dispatcher):
             availability = "Нет на складе"
         else:
             availability = arr_description[7]
-        if self.arr_auth_user[id_user] == 'dealer':
+        if self.arr_auth_user[id_user][0] == 'dealer':
             if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
                 await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
                 dealer = arr_description[8]
@@ -1369,9 +1387,12 @@ class DispatcherMessage(Dispatcher):
         return amount
 
     async def task_command_basket(self, message: Message):
-        await self.checking_bot(message)
-        await self.show_basket_by_command(message, message.from_user.id)
-        await self.execute.add_element_history(message.from_user.id, 'Корзина_Стр.1')
+        check = await self.checking_bot(message)
+        if check:
+            pass
+        else:
+            await self.show_basket_by_command(message, message.from_user.id)
+            await self.execute.add_element_history(message.from_user.id, 'Корзина_Стр.1')
         return True
 
     async def task_show_basket(self, call_back: CallbackQuery):
@@ -1709,8 +1730,11 @@ class DispatcherMessage(Dispatcher):
         return self.assembling_search(list(total_search))
 
     async def task_send_search_result(self, message: Message):
-        await self.checking_bot(message)
-        result = await self.send_search_result(message)
+        check = await self.checking_bot(message)
+        if check:
+            result = False
+        else:
+            result = await self.send_search_result(message)
         return result
 
     async def send_search_result(self, message: Message):
@@ -2894,7 +2918,9 @@ class DispatcherMessage(Dispatcher):
         id_user = call_back.data.split('discount_amount')[1].split('_')[1]
         status_user = await self.execute.status_user(id_user)
         discount_amount = call_back.data.split('discount_amount')[1].split('_')[0]
-        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id)
+        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id,
+                                                            self.arr_auth_user[call_back.from_user.id][0],
+                                                            self.arr_auth_user[call_back.from_user.id][1])
         text = f"Пользователю ID: {self.format_text(id_user)} назначен:\n" \
                f"1. Статус по оборудованию: {self.format_text(status_user)}\n" \
                f"2. Скидка на расходные материалы: {self.format_text(discount_amount)}"

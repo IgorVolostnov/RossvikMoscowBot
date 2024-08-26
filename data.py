@@ -5,35 +5,6 @@ from language import Language
 
 class DATA:
     def __init__(self):
-        self.price = [['506', 'Шиноремонтные материалы ✂⚒', 100],
-                      ['507', 'Вентили 🔌', 100],
-                      ['556', 'Ремонтные шипы ‍🌵', 100],
-                      ['658', 'Грузики балансировочные ⚖', 100],
-                      ['552', 'Шиномонтажное оборудование 🚗🔧', 100],
-                      ['600', 'Подъемное оборудование ⛓', 100],
-                      ['547', 'Ручной инструмент 🔧', 100],
-                      ['608', 'Специнструмент 🛠', 100],
-                      ['726', 'Заправки кондиционеров ❄', 100],
-                      ['549', 'Компрессоры ⛽', 100],
-                      ['597', 'Пневмоинструмент 🎣', 100],
-                      ['707', 'Пневмолинии 💨💧', 100],
-                      ['623', 'Расходные материалы для автосервиса 📜🚗', 100],
-                      ['946', 'Моечно-уборочное оборудование 🧹', 100],
-                      ['493', 'АвтоХимия ☣⚗ ', 100],
-                      ['580', 'Гаражное оборудование 👨🏾‍🔧', 100],
-                      ['593', 'Диагностическое оборудование 🕵️‍♀', 100],
-                      ['603', 'Маслосменное оборудование 💦🛢️', 100],
-                      ['702', 'Запчасти 🧩⚙️', 100],
-                      ['1101', 'Садовая техника 👩‍🌾', 100],
-                      ['738', 'Электроинструмент 🔋', 100],
-                      ['1100', 'Автотовары 🍱', 100],
-                      ['688', 'Мебель для автосервиса 🗄️', 100],
-                      ['1095', 'Вытяжка отработанных газов ♨', 100],
-                      ['660', 'Сход/развалы 🔩📐', 100],
-                      ['663', 'Мойки деталей 🛁', 100],
-                      ['692', 'Экспресс-сервис 🚅🤝🏻', 100],
-                      ['942', 'Зарядные и пуско-зарядные устройства ⚡', 100],
-                      ['1237', 'Режущий инструмент 🔪', 100]]
         self.delivery = {'pickup': 'Самовывоз',
                          'delivery': 'Доставка'}
         self.kind_pickup = {'record_answer_shop': 'Москва, Хачатуряна, 8 корпус 3 (Магазин)',
@@ -46,79 +17,186 @@ class DATA:
         self.execute = Execute()
         self.language_data = Language()
 
-    async def get_first_keyboard(self, id_user: int):
+    async def get_first_keyboard(self, id_user: int, status_user: str, user_language: str) -> dict:
         basket = await self.get_basket(id_user)
+        text_basket = await self.language_data.translated_from_russian(user_language, basket['basket'])
         amount_order = await self.execute.get_amount_order(id_user)
-        type_user = await self.execute.status_user(id_user)
-        if amount_order == 0:
-            if type_user == 'creator':
-                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                                  'orders': f'Мои Заказы 🗃️',
-                                  'basket': basket['basket'],
-                                  'catalog': 'Каталог🧾👀',
-                                  'update': 'Обновить сообщения💬',
-                                  'add_status': 'Присвоить статус😎'}
-            elif type_user == 'admin':
-                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                                  'orders': f'Мои Заказы 🗃️',
-                                  'basket': basket['basket'],
-                                  'catalog': 'Каталог🧾👀',
-                                  'add_status': 'Присвоить статус😎'}
-            else:
-                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                                  'orders': f'Мои Заказы 🗃️',
-                                  'basket': basket['basket'],
-                                  'catalog': 'Каталог🧾👀'}
+        language_first_keyboard = {'russian': {'text_news': 'Новости 📣🌐💬',
+                                               'text_orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
+                                               'text_basket': text_basket,
+                                               'text_catalog': 'Каталог🧾👀',
+                                               'text_update': 'Обновить сообщения💬',
+                                               'text_add_status': 'Присвоить статус😎'},
+                                   'azerbaijani': {'text_news': 'Xəbərlər 📣🌐💬',
+                                                   'text_orders': f'Sifarişlərim 🗃️ (Yeni sifarişlər: '
+                                                                  f'{str(amount_order)})',
+                                                   'text_basket': text_basket,
+                                                   'text_catalog': 'Kataloq🧾👀',
+                                                   'text_update': 'Mesajları yeniləyin💬',
+                                                   'text_add_status': 'Status verin😎'}
+                                   }
+        if status_user == 'creator':
+            first_keyboard = {'https://t.me/rossvik_moscow': language_first_keyboard[user_language]['text_news'],
+                              'orders': language_first_keyboard[user_language]['text_orders'],
+                              'basket': language_first_keyboard[user_language]['text_basket'],
+                              'catalog': language_first_keyboard[user_language]['text_catalog'],
+                              'update': language_first_keyboard[user_language]['text_update'],
+                              'add_status': language_first_keyboard[user_language]['text_add_status']}
+        elif status_user == 'admin':
+            first_keyboard = {'https://t.me/rossvik_moscow': language_first_keyboard[user_language]['text_news'],
+                              'orders': language_first_keyboard[user_language]['text_orders'],
+                              'basket': language_first_keyboard[user_language]['text_basket'],
+                              'catalog': language_first_keyboard[user_language]['text_catalog'],
+                              'add_status': language_first_keyboard[user_language]['text_add_status']}
         else:
-            if type_user == 'creator':
-                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                                  'orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
-                                  'basket': basket['basket'],
-                                  'catalog': 'Каталог🧾👀',
-                                  'update': 'Обновить сообщения💬',
-                                  'add_status': 'Присвоить статус😎'}
-            elif type_user == 'admin':
-                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                                  'orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
-                                  'basket': basket['basket'],
-                                  'catalog': 'Каталог🧾👀',
-                                  'add_status': 'Присвоить статус😎'}
-            else:
-                first_keyboard = {'https://t.me/rossvik_moscow': 'Новости 📣🌐💬',
-                                  'orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
-                                  'basket': basket['basket'],
-                                  'catalog': 'Каталог🧾👀'}
+            first_keyboard = {'https://t.me/rossvik_moscow': language_first_keyboard[user_language]['text_news'],
+                              'orders': language_first_keyboard[user_language]['text_orders'],
+                              'basket': language_first_keyboard[user_language]['text_basket'],
+                              'catalog': language_first_keyboard[user_language]['text_catalog']}
         return first_keyboard
 
-    def get_info_help(self, language_user: str) -> str:
-        whitespace = '\n'
-        first_str = f'Вы можете воспользоваться быстрой навигацией, отправляя следующие команды:'
-        menu_str = f'главное меню'
-        catalog_str = f'каталог товара'
-        news_str = f'новости'
-        basket_str = f'корзина'
-        order_str = f'история заказов'
-        main_str = f'Поиск товара:{whitespace}{whitespace}При отправке боту сообщения происходит поиск товара в ' \
-                   f'каталоге по содержимому сообщения, разделенному пробелами. Можно указывать не только слова, ' \
-                   f'но и символы, которые содержатся в наименовании товара.{whitespace}Чтобы понять, как это ' \
-                   f'работает, попробуйте отправить боту сообщение:{whitespace}пласт вст{whitespace}{whitespace}' \
-                   f'УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: Все данные, полученные в процессе взаимодействия между Ботом ' \
-                   f'и Пользователем: фото, видео, текстовая информация, а также любые отправленные документы, ' \
-                   f'которые содержат конфиденциальную информацию не подлежат использованию, копированию, ' \
-                   f'распространению, а также осуществлению любых других действий на их основе.'
-        info = f"{self.language_data.translated_from_russian(language_user, first_str)}{whitespace}{whitespace}" \
-               f"/start - {self.language_data.translated_from_russian(language_user, menu_str)}{whitespace}" \
-               f"/catalog - {self.language_data.translated_from_russian(language_user, catalog_str)}{whitespace}" \
-               f"/news - {self.language_data.translated_from_russian(language_user, news_str)}{whitespace}" \
-               f"/basket - {self.language_data.translated_from_russian(language_user, basket_str)}{whitespace}" \
-               f"/order - {self.language_data.translated_from_russian(language_user, order_str)}{whitespace}" \
-               f"{whitespace}{self.language_data.translated_from_russian(language_user, main_str)}"
+    @staticmethod
+    async def get_info_help(language_user: str) -> str:
+        space = '\n'
+        language_help = {'russian': {'first_str': 'Вы можете воспользоваться быстрой навигацией, отправляя следующие '
+                                                  'команды:',
+                                     'menu_str': 'главное меню',
+                                     'catalog_str': 'каталог товара',
+                                     'news_str': 'новости',
+                                     'basket_str': 'корзина',
+                                     'order_str': 'история заказов',
+                                     'main_str': f'Поиск товара:{space}{space}При отправке боту сообщения происходит '
+                                                 f'поиск товара в каталоге по содержимому сообщения, разделенному '
+                                                 f'пробелами. Можно указывать не только слова, но и символы, '
+                                                 f'которые содержатся в наименовании товара.{space}Чтобы понять, '
+                                                 f'как это работает, попробуйте отправить боту сообщение:{space}'
+                                                 f'пласт вст{space}{space}УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ: '
+                                                 f'Все данные, полученные в процессе взаимодействия между Ботом и '
+                                                 f'Пользователем: фото, видео, текстовая информация, а также любые '
+                                                 f'отправленные документы, которые содержат конфиденциальную '
+                                                 f'информацию не подлежат использованию, копированию, распространению,'
+                                                 f' а также осуществлению любых других действий на их основе.'},
+                         'azerbaijani': {'first_str': 'aşağıdakıları göndərərək sürətli naviqasiyadan faydalana '
+                                                      'bilərsiniz komandalar:',
+                                         'menu_str': 'əsas menyu',
+                                         'catalog_str': 'məhsul kataloqu',
+                                         'news_str': 'xəbərlər',
+                                         'basket_str': 'səbət',
+                                         'order_str': 'sifariş tarixi',
+                                         'main_str': f'məhsul axtarışı:{space}{space}Bota mesaj göndərərkən '
+                                                     f'bölünmüş mesaj məzmununa görə Kataloqda məhsul axtarın '
+                                                     f'boşluqlar. Yalnız sözləri deyil, simvolları da göstərə '
+                                                     f'bilərsiniz, malların adında olanlar.{space}anlamaq üçün, '
+                                                     f'necə işləyir, Bota mesaj göndərməyə çalışın:{space}'
+                                                     f'пласт вст{space}{space}Məxfilik Bildirişi: '
+                                                     f'bot və arasındakı qarşılıqlı əlaqə prosesində əldə edilən bütün '
+                                                     f'məlumatlar istifadəçi: foto, video, mətn məlumat, eləcə də hər '
+                                                     f'hansı məxfi olan sənədlər göndərildi məlumat istifadə edilə '
+                                                     f'bilməz, kopyalana bilməz, paylaşıla bilməz, və onlara əsaslanan '
+                                                     f'hər hansı digər hərəkətlərin həyata keçirilməsi.'}
+                         }
+        info = f"{language_help[language_user]['first_str']}{space}{space}" \
+               f"/start - {language_help[language_user]['menu_str']}{space}" \
+               f"/catalog - {language_help[language_user]['catalog_str']}{space}" \
+               f"/news - {language_help[language_user]['news_str']}{space}" \
+               f"/basket - {language_help[language_user]['basket_str']}{space}" \
+               f"/order - {language_help[language_user]['order_str']}{space}" \
+               f"{space}{language_help[language_user]['main_str']}"
         return info
 
-    @property
-    def get_prices(self):
+    @staticmethod
+    async def get_prices(language_user: str) -> dict:
+        language_price = {'russian': {'repair_materials': 'Шиноремонтные материалы ✂⚒',
+                                      'valves': 'Вентили 🔌',
+                                      'repair_spikes': 'Ремонтные шипы ‍🌵',
+                                      'balancing_weights': 'Грузики балансировочные ⚖',
+                                      'tire_fitting_equipment': 'Шиномонтажное оборудование 🚗🔧',
+                                      'lifting_equipment': 'Подъемное оборудование ⛓',
+                                      'hand_tool': 'Ручной инструмент 🔧',
+                                      'special_tools': 'Специнструмент 🛠',
+                                      'refueling_air_conditioners': 'Заправки кондиционеров ❄',
+                                      'compressors': 'Компрессоры ⛽',
+                                      'pneumatic_tool': 'Пневмоинструмент 🎣',
+                                      'pneumolines': 'Пневмолинии 💨💧',
+                                      'consumables_car_service': 'Расходные материалы для автосервиса 📜🚗',
+                                      'washing_cleaning_equipment': 'Моечно-уборочное оборудование 🧹',
+                                      'auto_chemistry': 'АвтоХимия ☣⚗',
+                                      'garage_equipment': 'Гаражное оборудование 👨🏾‍🔧',
+                                      'diagnostic_equipment': 'Диагностическое оборудование 🕵️‍♀',
+                                      'oil_changing_equipment': 'Маслосменное оборудование 💦🛢️',
+                                      'spare_parts': 'Запчасти 🧩⚙️',
+                                      'garden_equipment': 'Садовая техника 👩‍🌾',
+                                      'power_tool': 'Электроинструмент 🔋',
+                                      'automotive_products': 'Автотовары 🍱',
+                                      'car_service_furniture': 'Мебель для автосервиса 🗄️',
+                                      'exhaust_gas_extraction': 'Вытяжка отработанных газов ♨',
+                                      'convergence_collapse': 'Сход/развалы 🔩📐',
+                                      'washing_parts': 'Мойки деталей 🛁',
+                                      'express_service': 'Экспресс-сервис 🚅🤝🏻',
+                                      'chargers': 'Зарядные и пуско-зарядные устройства ⚡',
+                                      'cutting_tool': 'Режущий инструмент 🔪'
+                                      },
+                          'azerbaijani': {'repair_materials': 'Şin təmiri materialları ✂⚒',
+                                          'valves': 'Vana 🔌',
+                                          'repair_spikes': 'Təmir tırmanıştır ‍🌵',
+                                          'balancing_weights': 'Balans çəkiləri ⚖',
+                                          'tire_fitting_equipment': 'Şin montaj avadanlığı 🚗🔧',
+                                          'lifting_equipment': 'Qaldırıcı avadanlıq ⛓',
+                                          'hand_tool': 'Əl aləti 🔧',
+                                          'special_tools': 'Xüsusi alət 🛠',
+                                          'refueling_air_conditioners': 'Kondisionerlərin doldurulması ❄',
+                                          'compressors': 'Kompressorlar ⛽',
+                                          'pneumatic_tool': 'Pnevmatik alət 🎣',
+                                          'pneumolines': 'Pnevmoliniya 💨💧',
+                                          'consumables_car_service': 'Avtomobil xidməti üçün istehlak materialları 📜🚗',
+                                          'washing_cleaning_equipment': 'Yuyucu və təmizləyici avadanlıq 🧹',
+                                          'auto_chemistry': 'Avtokimya ☣⚗',
+                                          'garage_equipment': 'Qaraj avadanlığı 👨🏾‍🔧',
+                                          'diagnostic_equipment': 'Diaqnostik avadanlıq 🕵️‍♀',
+                                          'oil_changing_equipment': 'Yağ dəyişdirmə avadanlığı 💦🛢️',
+                                          'spare_parts': 'Ehtiyat hissələri 🧩⚙️',
+                                          'garden_equipment': 'Bağ texnikası 👩‍🌾',
+                                          'power_tool': 'Elektrik aləti 🔋',
+                                          'automotive_products': 'Avtovağzal 🍱',
+                                          'car_service_furniture': 'Avtomobil xidməti üçün mebel 🗄️',
+                                          'exhaust_gas_extraction': 'İşlənmiş qaz ekstraktı ♨',
+                                          'convergence_collapse': 'Yıxılma/Kamber 🔩📐',
+                                          'washing_parts': 'Yuma hissələri 🛁',
+                                          'express_service': 'Ekspress xidmət 🚅🤝🏻',
+                                          'chargers': 'Şarj cihazları və şarj cihazları ⚡',
+                                          'cutting_tool': 'Kəsmə aləti 🔪'}
+                          }
+        price = [['506', language_price[language_user]['repair_materials'], 100],
+                 ['507', language_price[language_user]['valves'], 100],
+                 ['556', language_price[language_user]['repair_spikes'], 100],
+                 ['658', language_price[language_user]['balancing_weights'], 100],
+                 ['552', language_price[language_user]['tire_fitting_equipment'], 100],
+                 ['600', language_price[language_user]['lifting_equipment'], 100],
+                 ['547', language_price[language_user]['hand_tool'], 100],
+                 ['608', language_price[language_user]['special_tools'], 100],
+                 ['726', language_price[language_user]['refueling_air_conditioners'], 100],
+                 ['549', language_price[language_user]['compressors'], 100],
+                 ['597', language_price[language_user]['pneumatic_tool'], 100],
+                 ['707', language_price[language_user]['pneumolines'], 100],
+                 ['623', language_price[language_user]['consumables_car_service'], 100],
+                 ['946', language_price[language_user]['washing_cleaning_equipment'], 100],
+                 ['493', language_price[language_user]['auto_chemistry'], 100],
+                 ['580', language_price[language_user]['garage_equipment'], 100],
+                 ['593', language_price[language_user]['diagnostic_equipment'], 100],
+                 ['603', language_price[language_user]['oil_changing_equipment'], 100],
+                 ['702', language_price[language_user]['spare_parts'], 100],
+                 ['1101', language_price[language_user]['garden_equipment'], 100],
+                 ['738', language_price[language_user]['power_tool'], 100],
+                 ['1100', language_price[language_user]['automotive_products'], 100],
+                 ['688', language_price[language_user]['car_service_furniture'], 100],
+                 ['1095', language_price[language_user]['exhaust_gas_extraction'], 100],
+                 ['660', language_price[language_user]['convergence_collapse'], 100],
+                 ['663', language_price[language_user]['washing_parts'], 100],
+                 ['692', language_price[language_user]['express_service'], 100],
+                 ['942', language_price[language_user]['chargers'], 100],
+                 ['1237', language_price[language_user]['cutting_tool'], 100]]
         dict_price = {}
-        for item in sorted(self.price, key=itemgetter(2), reverse=False):
+        for item in sorted(price, key=itemgetter(2), reverse=False):
             dict_price[item[0]] = item[1]
         return dict_price
 

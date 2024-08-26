@@ -221,7 +221,7 @@ class Execute:
     async def execute_start_record_new_user(self, message: Message):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, FIRST_NAME_USER, LAST_NAME_USER, " \
-                         f"USER_NAME_USER, DISCOUNT) " \
+                         f"USER_NAME_USER, DISCOUNT, LANGUAGE) " \
                          f"VALUES (" \
                          f"'{str(message.from_user.id)}', " \
                          f"'/start', " \
@@ -229,7 +229,8 @@ class Execute:
                          f"'{message.from_user.first_name}', " \
                          f"'{message.from_user.last_name}', " \
                          f"'{message.from_user.username}', " \
-                         f"'{0}') "
+                         f"'{0}'," \
+                         f"'russian') "
             await cursor.execute(sql_record)
             print(f'Новый клиент ID: {message.from_user.id} {message.from_user.first_name} '
                   f'{message.from_user.last_name} c username: {message.from_user.username} '

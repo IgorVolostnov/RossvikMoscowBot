@@ -13,7 +13,7 @@ class Language:
         self.source_language = 'russian'
         self.detect_key = os.environ["DETECT_LANGUAGE_API"]
 
-    def translated_from_russian(self, language_translate: str, text_to_translate: str):
+    async def translated_from_russian(self, language_translate: str, text_to_translate: str):
         if language_translate == 'russian':
             translations = text_to_translate
         else:
@@ -21,7 +21,7 @@ class Language:
             translations = translator.translate(text=text_to_translate)
         return translations
 
-    def translated_by_search(self, language_translate: str, text_to_translate: str):
+    async def translated_by_search(self, language_translate: str, text_to_translate: str):
         if language_translate == 'russian':
             translations = text_to_translate
         else:

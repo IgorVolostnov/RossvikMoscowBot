@@ -18,19 +18,18 @@ class DATA:
         self.language_data = Language()
 
     async def get_first_keyboard(self, id_user: int, status_user: str, user_language: str) -> dict:
-        basket = await self.get_basket(id_user)
-        text_basket = await self.language_data.translated_from_russian(user_language, basket['basket'])
+        text_basket = await self.get_basket(id_user)
         amount_order = await self.execute.get_amount_order(id_user)
         language_first_keyboard = {'russian': {'text_news': 'Новости 📣🌐💬',
                                                'text_orders': f'Мои Заказы 🗃️ (Новых заказов: {str(amount_order)})',
-                                               'text_basket': text_basket,
+                                               'text_basket': text_basket['basket'][user_language],
                                                'text_catalog': 'Каталог🧾👀',
                                                'text_update': 'Обновить сообщения💬',
                                                'text_add_status': 'Присвоить статус😎'},
                                    'azerbaijani': {'text_news': 'Xəbərlər 📣🌐💬',
                                                    'text_orders': f'Sifarişlərim 🗃️ (Yeni sifarişlər: '
                                                                   f'{str(amount_order)})',
-                                                   'text_basket': text_basket,
+                                                   'text_basket': text_basket['basket'][user_language],
                                                    'text_catalog': 'Kataloq🧾👀',
                                                    'text_update': 'Mesajları yeniləyin💬',
                                                    'text_add_status': 'Status verin😎'}
@@ -285,9 +284,30 @@ class DATA:
         amount = await self.execute.current_amount_basket(id_user)
         sum_basket = await self.execute.current_sum_basket(id_user)
         if amount is None:
-            basket['basket'] = f"Корзина 🛒(0 шт. на 0 ₽)"
+            basket['basket'] = {'russian': 'Корзина 🛒(0 шт. на 0 ₽)',
+                                'armenian': 'Զամբյուղ 🛒(0 հատ 0 ₽)',
+                                'azerbaijani': 'Səbət (0 ədəd 0 ₽)',
+                                'english': 'Basket 🛒(0 pieces per 0 ₽)',
+                                'georgian': 'კალათა 🛒(0 ცალი 0 ₽)',
+                                'kazakh': 'Себет 🛒(0 дана 0 ₽)',
+                                'kyrgyz': 'Себет 🛒(0 даана 0 ₽)',
+                                'mongolian': 'Сагс 🛒(0 ширхэг тутамд 0 ₽)',
+                                'tajik': 'Сабад 🛒(0 дона ба 0 ₽)',
+                                'uzbek': 'Savat 🛒(0 dona 0 ₽)'
+                                }
         else:
-            basket['basket'] = f"Корзина 🛒({int(amount)} шт. на {self.format_price(float(sum_basket))})"
+            basket['basket'] = {'russian': f'Корзина 🛒({int(amount)} шт. на {self.format_price(float(sum_basket))})',
+                                'armenian': f'Զամբյուղ 🛒({int(amount)} հատ {self.format_price(float(sum_basket))})',
+                                'azerbaijani': f'Səbət 🛒({int(amount)} ədəd {self.format_price(float(sum_basket))})',
+                                'english': f'Basket 🛒({int(amount)} pieces per {self.format_price(float(sum_basket))})',
+                                'georgian': f'კალათა 🛒({int(amount)} ცალი {self.format_price(float(sum_basket))})',
+                                'kazakh': f'Себет 🛒({int(amount)} дана {self.format_price(float(sum_basket))})',
+                                'kyrgyz': f'Себет 🛒({int(amount)} даана {self.format_price(float(sum_basket))})',
+                                'mongolian': f'Сагс 🛒({int(amount)} ширхэг тутамд '
+                                             f'{self.format_price(float(sum_basket))})',
+                                'tajik': f'Сабад 🛒({int(amount)} дона ба {self.format_price(float(sum_basket))})',
+                                'uzbek': f'Savat 🛒({int(amount)} dona {self.format_price(float(sum_basket))})',
+                                }
         return basket
 
     @staticmethod

@@ -578,9 +578,12 @@ class DispatcherMessage(Dispatcher):
             news = await self.execute.get_news()
             list_user = await self.execute.get_list_user_without_creator
             background_tasks = set()
+            print(list_user)
             for user_id in list_user:
-                check = await self.task_update(int(user_id[0]), news)
-                if check:
+                task_up = asyncio.create_task(self.task_update(int(user_id[0]), news))
+                task_up.set_name(f'{callback.from_user.id}_task_update')
+                await self.queues_message.start(task_up)
+                if int(user_id[0]) in self.arr_auth_user.keys():
                     task = asyncio.create_task(self.timer.start(int(user_id[0])))
                     background_tasks.add(task)
                     task.add_done_callback(background_tasks.discard)
@@ -759,8 +762,8 @@ class DispatcherMessage(Dispatcher):
                                                                 self.arr_auth_user[message.from_user.id][0],
                                                                 language_user)
             text_message = await self.language.translated_from_russian(language_user,
-                                                                       "Выберите, что Вас интересует ⤵ ⤵ ⤵")
-            answer = await self.answer_message(message, text_message, self.build_keyboard(first_keyboard, 1))
+                                                                       ["Выберите, что Вас интересует ⤵ ⤵ ⤵"])
+            answer = await self.answer_message(message, text_message[0], self.build_keyboard(first_keyboard, 1))
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
         return True
@@ -771,8 +774,8 @@ class DispatcherMessage(Dispatcher):
                                                             self.arr_auth_user[call_back.from_user.id][0],
                                                             language_user)
         text_message = await self.language.translated_from_russian(language_user,
-                                                                   "Выберите, что Вас интересует ⤵ ⤵ ⤵")
-        answer = await self.answer_message(call_back.message, text_message, self.build_keyboard(first_keyboard, 1))
+                                                                   ["Выберите, что Вас интересует ⤵ ⤵ ⤵"])
+        answer = await self.answer_message(call_back.message, text_message[0], self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
@@ -782,33 +785,31 @@ class DispatcherMessage(Dispatcher):
             first_keyboard = await self.data.get_first_keyboard(user_id, self.arr_auth_user[user_id][0],
                                                                 language_user)
             text_message = await self.language.translated_from_russian(language_user,
-                                                                       "Выберите, что Вас интересует ⤵ ⤵ ⤵")
-            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), text_message)
+                                                                       ["Выберите, что Вас интересует ⤵ ⤵ ⤵"])
+            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), text_message[0])
             await self.delete_messages(user_id)
             await self.execute.add_element_message(user_id, answer.message_id)
-            return True
         except TelegramForbiddenError:
             await self.execute.delete_user(user_id)
-            return False
+            self.arr_auth_user = await self.execute.auth_user
 
     async def task_update(self, user_id: int, current_news: str):
-        check = await self.start_for_news(user_id, current_news)
-        return check
+        await self.start_for_news(user_id, current_news)
+        return True
 
     async def start_for_news(self, user_id: int, current_news: str):
         try:
             language_user = self.arr_auth_user[user_id][1]
             first_keyboard = await self.data.get_first_keyboard(user_id, self.arr_auth_user[user_id][0], language_user)
-            text_message = await self.language.translated_from_russian(language_user, current_news)
+            text_message = await self.language.translated_from_russian(language_user, [current_news])
             answer = await self.bot.send_message_start_news(user_id, self.build_keyboard(first_keyboard, 1),
-                                                            text_message)
+                                                            text_message[0])
             await self.delete_messages(user_id)
             await self.execute.add_element_message(user_id, answer.message_id)
             print(f'Обновили новость у {user_id}')
-            return True
         except TelegramForbiddenError:
             await self.execute.delete_user(user_id)
-            return False
+            self.arr_auth_user = await self.execute.auth_user
 
     async def task_command_catalog(self, message: Message):
         check = await self.checking_bot(message)
@@ -816,11 +817,11 @@ class DispatcherMessage(Dispatcher):
             pass
         else:
             language_user = self.arr_auth_user[message.from_user.id][1]
-            back_text = await self.language.translated_from_russian(language_user, "◀ 👈 Назад")
-            text_message = await self.language.translated_from_russian(language_user, "Каталог товаров 📖")
+            back_text = await self.language.translated_from_russian(language_user, ["◀ 👈 Назад"])
+            text_message = await self.language.translated_from_russian(language_user, ["Каталог товаров 📖"])
             price_button = await self.data.get_prices(language_user)
-            answer = await self.bot.push_photo(message.chat.id, self.format_text(text_message),
-                                               self.build_keyboard(price_button, 1, {'back': back_text}),
+            answer = await self.bot.push_photo(message.chat.id, self.format_text(text_message[0]),
+                                               self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                                self.bot.catalog_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
@@ -835,11 +836,11 @@ class DispatcherMessage(Dispatcher):
 
     async def catalog(self, call_back: CallbackQuery):
         language_user = self.arr_auth_user[call_back.from_user.id][1]
-        back_text = await self.language.translated_from_russian(language_user, "◀ 👈 Назад")
-        text_message = await self.language.translated_from_russian(language_user, "Каталог товаров 📖")
+        back_text = await self.language.translated_from_russian(language_user, ["◀ 👈 Назад"])
+        text_message = await self.language.translated_from_russian(language_user, ["Каталог товаров 📖"])
         price_button = await self.data.get_prices(language_user)
-        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text_message),
-                                           self.build_keyboard(price_button, 1, {'back': back_text}),
+        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text_message[0]),
+                                           self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                            self.bot.catalog_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
@@ -926,11 +927,13 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def description(self, call_back: CallbackQuery, id_nomenclature: str):
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
         arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1], 10)
         basket = await self.data.get_basket(call_back.from_user.id)
-        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
+        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
+                       'basket': basket['basket'][language_user]}
         if current_description[3]:
             answer_description = await self.answer_message(arr_answer[0], current_description[2],
                                                            self.build_keyboard(menu_button, 2, current_description[3]))
@@ -945,6 +948,7 @@ class DispatcherMessage(Dispatcher):
         await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
 
     async def remove_price(self, call_back: CallbackQuery):
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
         id_nomenclature = call_back.data.split('remove_dealer_price')[0]
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
@@ -952,7 +956,8 @@ class DispatcherMessage(Dispatcher):
         arr_text.pop(4)
         new_text = '\n'.join(arr_text)
         basket = await self.data.get_basket(call_back.from_user.id)
-        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
+        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
+                       'basket': basket['basket'][language_user]}
         dict_show = {f'{id_nomenclature}show_dealer_price': '👀 Показать дилерскую цену'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(new_text, call_back.message.chat.id, arr_messages[0])
@@ -960,11 +965,13 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def show_price(self, call_back: CallbackQuery):
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
         id_nomenclature = call_back.data.split('show_dealer_price')[0]
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
         basket = await self.data.get_basket(call_back.from_user.id)
-        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
+        menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
+                       'basket': basket['basket'][language_user]}
         dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(current_description[1], call_back.message.chat.id, arr_messages[0])
@@ -1093,6 +1100,7 @@ class DispatcherMessage(Dispatcher):
 
     async def back_add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
         id_nomenclature = self.dict_back_add[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
@@ -1102,7 +1110,8 @@ class DispatcherMessage(Dispatcher):
             if re.sub('\W+', '', info_nomenclature) == "":
                 info_nomenclature = "Нет подробной информации"
             basket = await self.data.get_basket(call_back.from_user.id)
-            menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️', 'basket': basket['basket']}
+            menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
+                           'basket': basket['basket'][language_user]}
             await self.execute.delete_element_history(call_back.from_user.id, 1)
         else:
             info_nomenclature = f'{self.format_text(arr_description[2])}'
@@ -1256,6 +1265,7 @@ class DispatcherMessage(Dispatcher):
 
     async def add_to_basket(self, call_back: CallbackQuery):
         whitespace = '\n'
+        language_user = self.arr_auth_user[call_back.from_user.id][1]
         id_nomenclature = self.dict_done[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
@@ -1289,11 +1299,13 @@ class DispatcherMessage(Dispatcher):
                 menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                                f'{id_nomenclature}add': 'Добавить ✅🗑️'}
             if call_back.message.caption:
-                await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 2,
-                                                                                     {'basket': basket['basket']}))
+                await self.edit_caption(call_back.message, text,
+                                        self.build_keyboard(menu_button, 2,
+                                                            {'basket': basket['basket'][language_user]}))
             else:
-                await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 2,
-                                                                                     {'basket': basket['basket']}))
+                await self.edit_message(call_back.message, text,
+                                        self.build_keyboard(menu_button, 2,
+                                                            {'basket': basket['basket'][language_user]}))
             return True
         else:
             return True

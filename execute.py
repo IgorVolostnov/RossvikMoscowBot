@@ -17,14 +17,14 @@ class Execute:
         self.conn = None
 
     @property
-    async def auth_user(self):
+    async def auth_user(self) -> dict:
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_auth_user()
         except Exception as e:
             await send_message('Ошибка запроса в методе auth_user', os.environ["EMAIL"], str(e))
 
-    async def execute_auth_user(self):
+    async def execute_auth_user(self) -> dict:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_auth = f"SELECT ID_USER, STATUS, LANGUAGE FROM TELEGRAMMBOT "
             await cursor.execute(sql_auth)

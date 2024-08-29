@@ -211,14 +211,14 @@ class Execute:
                 row_table = True
             return row_table
 
-    async def start_record_new_user(self, message: Message):
+    async def start_record_new_user(self, message: Message) -> list:
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_start_record_new_user(message)
         except Exception as e:
             await send_message('Ошибка запроса в методе start_record_new_user', os.environ["EMAIL"], str(e))
 
-    async def execute_start_record_new_user(self, message: Message):
+    async def execute_start_record_new_user(self, message: Message) -> list:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, FIRST_NAME_USER, LAST_NAME_USER, " \
                          f"USER_NAME_USER, DISCOUNT, LANGUAGE) " \
@@ -236,6 +236,7 @@ class Execute:
                   f'{message.from_user.last_name} c username: {message.from_user.username} '
                   f'зашел с сообщением: {str(message.message_id)}')
             await self.conn.commit()
+            return [message.from_user.id, None, 'russian']
 
     async def restart_catalog(self, message: Message, element_history: str):
         try:

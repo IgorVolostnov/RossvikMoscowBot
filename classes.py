@@ -1009,7 +1009,7 @@ class DispatcherMessage(Dispatcher):
             dict_hide = None
         description_text = f'{arr_description[4]}{whitespace}' \
                            f'{arr_description[5]}'
-        if re.sub('[^A-Za-z0-9]', '', description_text) == "":
+        if re.sub(r"[^-/().&' \w]|_", '', description_text) == "":
             description_text = "Нет подробной информации"
         return arr_description[6], info_nomenclature, description_text, dict_hide
 
@@ -1108,7 +1108,7 @@ class DispatcherMessage(Dispatcher):
         if current_history in self.dict_add:
             info_nomenclature = f'{arr_description[4]}{whitespace}' \
                                 f'{arr_description[5]}'
-            if re.sub('[^A-Za-z0-9]', '', info_nomenclature) == "":
+            if re.sub(r"[^-/().&' \w]|_", '', info_nomenclature) == "":
                 info_nomenclature = "Нет подробной информации"
             basket = await self.data.get_basket(call_back.from_user.id)
             menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
@@ -1714,9 +1714,9 @@ class DispatcherMessage(Dispatcher):
         for item in text_for_search:
             if i == 1:
                 search_variant = await self.execute.search_in_base_article(
-                    self.translit_rus(re.sub('[^A-Za-z0-9]', '', item[0]).upper()))
+                    self.translit_rus(re.sub(r"[^-/().&' \w]|_", '', item[0]).upper()))
                 search_variant_translit_rus = await self.execute.search_in_base_article(
-                    self.translit_rus_for_search(re.sub('[^A-Za-z0-9]', '', item[0]).upper()))
+                    self.translit_rus_for_search(re.sub(r"[^-/().&' \w]|_", '', item[0]).upper()))
                 union_variant = search_variant.union(search_variant_translit_rus)
                 for variant in item:
                     search_result_by_name = await self.execute.search_in_base_name(variant)
@@ -1728,9 +1728,9 @@ class DispatcherMessage(Dispatcher):
                 i += 1
             else:
                 search_variant = await self.execute.search_in_base_article(
-                    self.translit_rus(re.sub('[^A-Za-z0-9]', '', item[0]).upper()))
+                    self.translit_rus(re.sub(r"[^-/().&' \w]|_", '', item[0]).upper()))
                 search_variant_translit_rus = await self.execute.search_in_base_article(
-                    self.translit_rus_for_search(re.sub('[^A-Za-z0-9]', '', item[0]).upper()))
+                    self.translit_rus_for_search(re.sub(r"[^-/().&' \w]|_", '', item[0]).upper()))
                 union_variant = search_variant.union(search_variant_translit_rus)
                 for variant in item:
                     search_result_by_name = await self.execute.search_in_base_name(variant)
@@ -1940,7 +1940,7 @@ class DispatcherMessage(Dispatcher):
         i = 0
         for item in arr_text:
             string_delete_end = snowball.stem(item)
-            new_item = re.sub('[^A-Za-z0-9]', '', string_delete_end)
+            new_item = re.sub(r"[^-/().&' \w]|_", '', string_delete_end)
             if new_item != '':
                 text_dict[new_item] = new_item
                 text_dict[new_item.lower()] = new_item.lower()
@@ -2774,7 +2774,7 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def get_user(self, message: Message):
-        text_for_search = re.sub("[^A-Za-z0-9@_]", "", message.text)
+        text_for_search = re.sub(r"[^-/().&' \w]|_", "", message.text)
         dict_user_for_add_status = await self.execute.list_user_for_add_status(text_for_search)
         if dict_user_for_add_status:
             dict_user_for_record = await self.show_user_for_add_status(message, dict_user_for_add_status)
@@ -2971,7 +2971,7 @@ class DispatcherMessage(Dispatcher):
         arr_text = string_text.split(' ')
         new_arr_text = []
         for item in arr_text:
-            new_item = re.sub('[^A-Za-z0-9]', '', item)
+            new_item = re.sub(r"[^-/().&' \w]|_", '', item)
             if new_item != '':
                 new_arr_text.append(new_item)
         new_string = ' '.join(new_arr_text)

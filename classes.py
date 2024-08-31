@@ -6,7 +6,7 @@ import datetime
 import openpyxl
 import requests
 import phonenumbers
-from data import DATA
+from keyboard_bot import DATA
 from language import Language
 from aiogram import F
 from aiogram import Bot, Dispatcher
@@ -172,29 +172,29 @@ class DispatcherMessage(Dispatcher):
         self.queues = QueuesMedia(self)
         self.queues_message = QueuesMessage()
         self.bot = parent
-        self.data = DATA()
-        self.execute = self.data.execute
+        self.keyboard_bot = DATA()
+        self.execute = self.keyboard_bot.execute
         self.arr_auth_user = asyncio.run(self.execute.auth_user)
         self.language = Language()
-        self.category = self.data.get_category
-        self.nomenclatures = self.data.get_nomenclature
-        self.pages = self.data.get_pages
-        self.pages_search = self.data.get_pages_search
-        self.pages_basket = self.data.get_pages_basket
-        self.dict_add = self.data.get_dict_value('add', 4000, 30000)
-        self.dict_back_add = self.data.get_dict_value('back_add', 4000, 30000)
-        self.dict_button_calculater = self.data.get_button_calculater
-        self.dict_minus = self.data.get_dict_value('minus', 4000, 30000)
-        self.dict_plus = self.data.get_dict_value('plus', 4000, 30000)
-        self.dict_delete = self.data.get_dict_value('delete', 4000, 30000)
-        self.dict_done = self.data.get_dict_value('done', 4000, 30000)
-        self.button_basket_minus = self.data.get_dict_value('basket_minus', 4000, 30000)
-        self.button_basket_plus = self.data.get_dict_value('basket_plus', 4000, 30000)
-        self.choice_delivery = self.data.delivery
-        self.kind_pickup = self.data.kind_pickup
-        self.kind_delivery = self.data.kind_delivery
-        self.dict_hide_dealer = self.data.get_dealer_price_remove
-        self.dict_show_dealer = self.data.get_dealer_price_show
+        self.category = self.keyboard_bot.get_category
+        self.nomenclatures = self.keyboard_bot.get_nomenclature
+        self.pages = self.keyboard_bot.get_pages
+        self.pages_search = self.keyboard_bot.get_pages_search
+        self.pages_basket = self.keyboard_bot.get_pages_basket
+        self.dict_add = self.keyboard_bot.get_dict_value('add', 4000, 30000)
+        self.dict_back_add = self.keyboard_bot.get_dict_value('back_add', 4000, 30000)
+        self.dict_button_calculater = self.keyboard_bot.get_button_calculater
+        self.dict_minus = self.keyboard_bot.get_dict_value('minus', 4000, 30000)
+        self.dict_plus = self.keyboard_bot.get_dict_value('plus', 4000, 30000)
+        self.dict_delete = self.keyboard_bot.get_dict_value('delete', 4000, 30000)
+        self.dict_done = self.keyboard_bot.get_dict_value('done', 4000, 30000)
+        self.button_basket_minus = self.keyboard_bot.get_dict_value('basket_minus', 4000, 30000)
+        self.button_basket_plus = self.keyboard_bot.get_dict_value('basket_plus', 4000, 30000)
+        self.choice_delivery = self.keyboard_bot.delivery
+        self.kind_pickup = self.keyboard_bot.kind_pickup
+        self.kind_delivery = self.keyboard_bot.kind_delivery
+        self.dict_hide_dealer = self.keyboard_bot.get_dealer_price_remove
+        self.dict_show_dealer = self.keyboard_bot.get_dealer_price_show
 
         @self.message(Command("help"))
         async def cmd_help(message: Message):
@@ -720,26 +720,22 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def help_message(self, message: Message):
-        language_user = self.arr_auth_user[message.from_user.id][1]
-        first_keyboard = await self.data.get_first_keyboard(message.from_user.id,
-                                                            self.arr_auth_user[message.from_user.id][0],
-                                                            self.arr_auth_user[message.from_user.id][1])
-        text_help = await self.data.get_info_help(language_user)
-        answer = await self.bot.push_photo(message.chat.id,
-                                           self.format_text(text_help),
+        first_keyboard = await self.keyboard_bot.get_first_keyboard(message.from_user.id,
+                                                                    self.arr_auth_user[message.from_user.id][0],
+                                                                    self.arr_auth_user[message.from_user.id][1])
+        text_help = await self.keyboard_bot.get_info_help(self.arr_auth_user[message.from_user.id][1])
+        answer = await self.bot.push_photo(message.chat.id, text_help,
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         await self.delete_messages(message.from_user.id)
         await self.execute.add_element_message(message.from_user.id, answer.message_id)
 
     async def return_help_message(self, call_back: CallbackQuery):
-        language_user = self.arr_auth_user[call_back.from_user.id][1]
-        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id,
-                                                            self.arr_auth_user[call_back.from_user.id][0],
-                                                            language_user)
-        text_help = await self.data.get_info_help(language_user)
-        answer = await self.bot.push_photo(call_back.message.chat.id,
-                                           self.format_text(text_help),
+        first_keyboard = await self.keyboard_bot.get_first_keyboard(call_back.from_user.id,
+                                                                    self.arr_auth_user[call_back.from_user.id][0],
+                                                                    self.arr_auth_user[call_back.from_user.id][1])
+        text_help = await self.keyboard_bot.get_info_help(self.arr_auth_user[call_back.from_user.id][1])
+        answer = await self.bot.push_photo(call_back.message.chat.id, text_help,
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
@@ -755,36 +751,36 @@ class DispatcherMessage(Dispatcher):
             else:
                 data_user = await self.execute.start_record_new_user(message)
                 self.arr_auth_user[data_user[0]] = [data_user[1], data_user[2]]
-            language_user = self.arr_auth_user[message.from_user.id][1]
-            first_keyboard = await self.data.get_first_keyboard(message.from_user.id,
-                                                                self.arr_auth_user[message.from_user.id][0],
-                                                                language_user)
-            text_message = await self.language.translated_from_russian(language_user,
-                                                                       ["Выберите, что Вас интересует ⤵ ⤵ ⤵"])
-            answer = await self.answer_message(message, text_message[0], self.build_keyboard(first_keyboard, 1))
+            first_keyboard = await self.keyboard_bot.get_first_keyboard(message.from_user.id,
+                                                                        self.arr_auth_user[message.from_user.id][0],
+                                                                        self.arr_auth_user[message.from_user.id][1])
+            text_message = await self.keyboard_bot.get_start_message
+            answer = await self.answer_message(message, text_message[self.arr_auth_user[message.from_user.id][1]],
+                                               self.build_keyboard(first_keyboard, 1))
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, answer.message_id)
         return True
 
     async def return_start(self, call_back: CallbackQuery):
         language_user = self.arr_auth_user[call_back.from_user.id][1]
-        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id,
-                                                            self.arr_auth_user[call_back.from_user.id][0],
-                                                            language_user)
-        text_message = await self.language.translated_from_russian(language_user,
-                                                                   ["Выберите, что Вас интересует ⤵ ⤵ ⤵"])
-        answer = await self.answer_message(call_back.message, text_message[0], self.build_keyboard(first_keyboard, 1))
+        first_keyboard = await self.keyboard_bot.get_first_keyboard(call_back.from_user.id,
+                                                                    self.arr_auth_user[call_back.from_user.id][0],
+                                                                    language_user)
+        text_message = await self.keyboard_bot.get_start_message
+        answer = await self.answer_message(call_back.message,
+                                           text_message[self.arr_auth_user[call_back.from_user.id][1]],
+                                           self.build_keyboard(first_keyboard, 1))
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 
     async def start_for_timer(self, user_id: int):
         try:
             language_user = self.arr_auth_user[user_id][1]
-            first_keyboard = await self.data.get_first_keyboard(user_id, self.arr_auth_user[user_id][0],
-                                                                language_user)
-            text_message = await self.language.translated_from_russian(language_user,
-                                                                       ["Выберите, что Вас интересует ⤵ ⤵ ⤵"])
-            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1), text_message[0])
+            first_keyboard = await self.keyboard_bot.get_first_keyboard(user_id, self.arr_auth_user[user_id][0],
+                                                                        language_user)
+            text_message = await self.keyboard_bot.get_start_message
+            answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
+                                                       text_message[self.arr_auth_user[user_id][1]])
             await self.delete_messages(user_id)
             await self.execute.add_element_message(user_id, answer.message_id)
         except TelegramForbiddenError:
@@ -798,7 +794,8 @@ class DispatcherMessage(Dispatcher):
     async def start_for_news(self, user_id: int, current_news: str):
         try:
             language_user = self.arr_auth_user[user_id][1]
-            first_keyboard = await self.data.get_first_keyboard(user_id, self.arr_auth_user[user_id][0], language_user)
+            first_keyboard = await self.keyboard_bot.get_first_keyboard(user_id, self.arr_auth_user[user_id][0],
+                                                                        language_user)
             text_message = await self.language.translated_from_russian(language_user, [current_news])
             answer = await self.bot.send_message_start_news(user_id, self.build_keyboard(first_keyboard, 1),
                                                             text_message[0])
@@ -817,7 +814,7 @@ class DispatcherMessage(Dispatcher):
             language_user = self.arr_auth_user[message.from_user.id][1]
             back_text = await self.language.translated_from_russian(language_user, ["◀ 👈 Назад"])
             text_message = await self.language.translated_from_russian(language_user, ["Каталог товаров 📖"])
-            price_button = await self.data.get_prices(language_user)
+            price_button = await self.keyboard_bot.get_prices(language_user)
             answer = await self.bot.push_photo(message.chat.id, self.format_text(text_message[0]),
                                                self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                                self.bot.catalog_logo)
@@ -836,7 +833,7 @@ class DispatcherMessage(Dispatcher):
         language_user = self.arr_auth_user[call_back.from_user.id][1]
         back_text = await self.language.translated_from_russian(language_user, ["◀ 👈 Назад"])
         text_message = await self.language.translated_from_russian(language_user, ["Каталог товаров 📖"])
-        price_button = await self.data.get_prices(language_user)
+        price_button = await self.keyboard_bot.get_prices(language_user)
         answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text_message[0]),
                                            self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                            self.bot.catalog_logo)
@@ -929,7 +926,7 @@ class DispatcherMessage(Dispatcher):
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
         arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1], 10)
-        basket = await self.data.get_basket(call_back.from_user.id)
+        basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                        'basket': basket['basket'][language_user]}
         if current_description[3]:
@@ -953,7 +950,7 @@ class DispatcherMessage(Dispatcher):
         arr_text = current_description[1].split('\n')
         arr_text.pop(4)
         new_text = '\n'.join(arr_text)
-        basket = await self.data.get_basket(call_back.from_user.id)
+        basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                        'basket': basket['basket'][language_user]}
         dict_show = {f'{id_nomenclature}show_dealer_price': '👀 Показать дилерскую цену'}
@@ -967,7 +964,7 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = call_back.data.split('show_dealer_price')[0]
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
-        basket = await self.data.get_basket(call_back.from_user.id)
+        basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                        'basket': basket['basket'][language_user]}
         dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
@@ -1089,7 +1086,7 @@ class DispatcherMessage(Dispatcher):
                                     f'{whitespace}' \
                                     f'Наличие: {self.format_text(availability)}{whitespace}' \
                                     f'Введите количество, которое нужно добавить в корзину:{whitespace}'
-        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
+        menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         if call_back.message.caption:
             await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
         else:
@@ -1107,7 +1104,7 @@ class DispatcherMessage(Dispatcher):
                                 f'{arr_description[5]}'
             if re.sub(r"[^-/().&' \w]|_", '', info_nomenclature) == "":
                 info_nomenclature = "Нет подробной информации"
-            basket = await self.data.get_basket(call_back.from_user.id)
+            basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
             menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                            'basket': basket['basket'][language_user]}
             await self.execute.delete_element_history(call_back.from_user.id, 1)
@@ -1125,7 +1122,7 @@ class DispatcherMessage(Dispatcher):
         whitespace = '\n'
         button = self.dict_button_calculater[call_back.data]
         id_nomenclature = call_back.data.split('///')[0]
-        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
+        menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
             amount = self.get_amount(call_back.message.caption, button)
@@ -1156,7 +1153,7 @@ class DispatcherMessage(Dispatcher):
     async def minus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
         id_nomenclature = self.dict_minus[call_back.data]
-        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
+        menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
             amount = self.get_amount_minus(call_back.message.caption)
@@ -1192,7 +1189,7 @@ class DispatcherMessage(Dispatcher):
     async def plus_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
         id_nomenclature = self.dict_plus[call_back.data]
-        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
+        menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
             amount = self.get_amount_minus(call_back.message.caption)
@@ -1228,7 +1225,7 @@ class DispatcherMessage(Dispatcher):
     async def delete_amount(self, call_back: CallbackQuery):
         whitespace = '\n'
         id_nomenclature = self.dict_delete[call_back.data]
-        menu_button = await self.data.get_calculater(call_back.from_user.id, id_nomenclature)
+        menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
             amount = self.get_amount_delete(call_back.message.caption)
@@ -1288,7 +1285,7 @@ class DispatcherMessage(Dispatcher):
                                                               float(new_amount), new_sum_nomenclature)
             text = f"Вы добавили {arr_description[2]} в количестве:{whitespace}" \
                    f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
-            basket = await self.data.get_basket(call_back.from_user.id)
+            basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
             current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
             if current_history in self.dict_add:
                 menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️'}
@@ -2931,9 +2928,9 @@ class DispatcherMessage(Dispatcher):
         id_user = call_back.data.split('discount_amount')[1].split('_')[1]
         status_user = await self.execute.status_user(id_user)
         discount_amount = call_back.data.split('discount_amount')[1].split('_')[0]
-        first_keyboard = await self.data.get_first_keyboard(call_back.from_user.id,
-                                                            self.arr_auth_user[call_back.from_user.id][0],
-                                                            self.arr_auth_user[call_back.from_user.id][1])
+        first_keyboard = await self.keyboard_bot.get_first_keyboard(call_back.from_user.id,
+                                                                    self.arr_auth_user[call_back.from_user.id][0],
+                                                                    self.arr_auth_user[call_back.from_user.id][1])
         text = f"Пользователю ID: {self.format_text(id_user)} назначен:\n" \
                f"1. Статус по оборудованию: {self.format_text(status_user)}\n" \
                f"2. Скидка на расходные материалы: {self.format_text(discount_amount)}"

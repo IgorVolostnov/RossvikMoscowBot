@@ -576,16 +576,13 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
         async def send_update_message(callback: CallbackQuery):
             news = await self.execute.get_news()
-            list_user = await self.execute.get_list_user_without_creator
+            for user_id in self.arr_auth_user.keys():
+                task = asyncio.create_task(self.task_update(user_id, news))
+                task.set_name(f'{user_id}_task_update')
+                await self.queues_message.start(task)
             background_tasks = set()
-            for user_id in list_user:
-                task = asyncio.create_task(self.task_update(int(user_id[0]), news))
-                background_tasks.add(task)
-                task.add_done_callback(background_tasks.discard)
-            list_user = await self.execute.get_list_user_without_creator
-            background_tasks = set()
-            for user_id in list_user:
-                task = asyncio.create_task(self.timer.start(int(user_id[0])))
+            for user_id in self.arr_auth_user.keys():
+                task = asyncio.create_task(self.timer.start(user_id))
                 background_tasks.add(task)
                 task.add_done_callback(background_tasks.discard)
             await self.timer.start(callback.from_user.id)
@@ -2241,7 +2238,7 @@ class DispatcherMessage(Dispatcher):
         return photo_info
 
     async def get_video(self, message: Message):
-        video_info = await self.bot.save_photo(message)
+        video_info = await self.bot.save_video(message)
         arr_message = await self.get_answer(message)
         await self.bot.delete_messages_chat(message.chat.id, arr_message[1:])
         return video_info
@@ -3341,6 +3338,7 @@ class QueuesMedia:
 
     async def start_task(self, user_id: int):
         info = await self.queues[0]
+        print(info)
         update_info = await self.parent.record_comment_and_content(info, self.info_media)
         self.info_media = update_info
         await self.delete_task_queues(user_id)

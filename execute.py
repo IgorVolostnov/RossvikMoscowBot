@@ -2,6 +2,7 @@ import logging
 import aiosqlite
 import os
 import datetime
+from prettytable import PrettyTable
 from exception import send_message
 from aiogram.types import Message
 from operator import itemgetter
@@ -550,7 +551,7 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_current_basket_for_xlsx(id_user)
         except Exception as e:
-            await send_message('Ошибка запроса в методе current_basket', os.environ["EMAIL"], str(e))
+            await send_message('Ошибка запроса в методе current_basket_for_xlsx', os.environ["EMAIL"], str(e))
 
     async def execute_current_basket_for_xlsx(self, id_user: int):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
@@ -915,7 +916,15 @@ class Execute:
             if row_table is None:
                 return None
             else:
-                return row_table
+                my_table = PrettyTable()
+                my_table.field_names = ["Id_user", "Id_order", "Status", "Messages_by_admin", "Order_XLS",
+                                        "Score", "Type_delivery", "Kind_transport_company", "Comment", "Content",
+                                        "INN_company", "Name_company", "Email_company", "Telephone_company"]
+                my_table.add_row([row_table[0], row_table[1], row_table[2], row_table[3], row_table[4], row_table[5],
+                                 row_table[6], row_table[7], row_table[8], row_table[9], row_table[10], row_table[11],
+                                 row_table[12], row_table[13]])
+                print(my_table)
+            return row_table
 
     async def get_amount_order(self, user_id: int):
         try:
@@ -1052,13 +1061,13 @@ class Execute:
     @staticmethod
     def delete_element_before_value(arr: str, value: str):
         arr_element = arr.split()
+        new_arr = []
         for item in arr_element:
             if item != value:
-                arr_element.pop()
+                new_arr.append(item)
             else:
-                arr_element.pop()
                 break
-        return arr_element
+        return new_arr
 
     @staticmethod
     def assembling_nomenclatures(arr: list):

@@ -32,7 +32,7 @@ class Execute:
             dict_user = {}
             row_table = await cursor.fetchall()
             for item in row_table:
-                dict_user[int(item[0])] = [item[1], item[2]]
+                dict_user[int(item[0])] = {'status': item[1], 'lang': item[2]}
             return dict_user
 
     async def status_user(self, id_user: int):

@@ -928,7 +928,7 @@ class DispatcherMessage(Dispatcher):
         arr_answer = await self.send_photo(call_back.message, current_description[0], current_description[1], 10)
         basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
-                       'basket': basket['basket'][language_user]}
+                       'basket': basket[language_user]}
         if current_description[3]:
             answer_description = await self.answer_message(arr_answer[0], current_description[2],
                                                            self.build_keyboard(menu_button, 2, current_description[3]))
@@ -952,7 +952,7 @@ class DispatcherMessage(Dispatcher):
         new_text = '\n'.join(arr_text)
         basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
-                       'basket': basket['basket'][language_user]}
+                       'basket': basket[language_user]}
         dict_show = {f'{id_nomenclature}show_dealer_price': '👀 Показать дилерскую цену'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(new_text, call_back.message.chat.id, arr_messages[0])
@@ -966,7 +966,7 @@ class DispatcherMessage(Dispatcher):
                                                                   call_back.id)
         basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
-                       'basket': basket['basket'][language_user]}
+                       'basket': basket[language_user]}
         dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(current_description[1], call_back.message.chat.id, arr_messages[0])
@@ -1106,7 +1106,7 @@ class DispatcherMessage(Dispatcher):
                 info_nomenclature = "Нет подробной информации"
             basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
             menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
-                           'basket': basket['basket'][language_user]}
+                           'basket': basket[language_user]}
             await self.execute.delete_element_history(call_back.from_user.id, 1)
         else:
             info_nomenclature = f'{self.format_text(arr_description[2])}'
@@ -1296,11 +1296,11 @@ class DispatcherMessage(Dispatcher):
             if call_back.message.caption:
                 await self.edit_caption(call_back.message, text,
                                         self.build_keyboard(menu_button, 2,
-                                                            {'basket': basket['basket'][language_user]}))
+                                                            {'basket': basket[language_user]}))
             else:
                 await self.edit_message(call_back.message, text,
                                         self.build_keyboard(menu_button, 2,
-                                                            {'basket': basket['basket'][language_user]}))
+                                                            {'basket': basket[language_user]}))
             return True
         else:
             return True

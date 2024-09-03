@@ -3122,7 +3122,6 @@ class DispatcherMessage(Dispatcher):
 
     async def send_photo(self, message: Message, photo: str, text: str, amount_photo: int):
         media_group = MediaGroupBuilder(caption=text)
-        print(photo)
         if photo:
             arr_photo = photo.split()[:amount_photo]
         else:

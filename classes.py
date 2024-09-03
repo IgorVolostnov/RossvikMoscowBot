@@ -181,15 +181,15 @@ class DispatcherMessage(Dispatcher):
         self.pages = self.keyboard_bot.get_pages
         self.pages_search = self.keyboard_bot.get_pages_search
         self.pages_basket = self.keyboard_bot.get_pages_basket
-        self.dict_add = self.keyboard_bot.get_dict_value('add', 4000, 30000)
-        self.dict_back_add = self.keyboard_bot.get_dict_value('back_add', 4000, 30000)
+        self.dict_add = self.keyboard_bot.get_dict_value('add', 4000, 40000)
+        self.dict_back_add = self.keyboard_bot.get_dict_value('back_add', 4000, 40000)
         self.dict_button_calculater = self.keyboard_bot.get_button_calculater
-        self.dict_minus = self.keyboard_bot.get_dict_value('minus', 4000, 30000)
-        self.dict_plus = self.keyboard_bot.get_dict_value('plus', 4000, 30000)
-        self.dict_delete = self.keyboard_bot.get_dict_value('delete', 4000, 30000)
-        self.dict_done = self.keyboard_bot.get_dict_value('done', 4000, 30000)
-        self.button_basket_minus = self.keyboard_bot.get_dict_value('basket_minus', 4000, 30000)
-        self.button_basket_plus = self.keyboard_bot.get_dict_value('basket_plus', 4000, 30000)
+        self.dict_minus = self.keyboard_bot.get_dict_value('minus', 4000, 40000)
+        self.dict_plus = self.keyboard_bot.get_dict_value('plus', 4000, 40000)
+        self.dict_delete = self.keyboard_bot.get_dict_value('delete', 4000, 40000)
+        self.dict_done = self.keyboard_bot.get_dict_value('done', 4000, 40000)
+        self.button_basket_minus = self.keyboard_bot.get_dict_value('basket_minus', 4000, 40000)
+        self.button_basket_plus = self.keyboard_bot.get_dict_value('basket_plus', 4000, 40000)
         self.choice_delivery = self.keyboard_bot.delivery
         self.kind_pickup = self.keyboard_bot.kind_pickup
         self.kind_delivery = self.keyboard_bot.kind_delivery
@@ -576,12 +576,14 @@ class DispatcherMessage(Dispatcher):
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'update'))
         async def send_update_message(callback: CallbackQuery):
             news = await self.execute.get_news()
-            for user_id in self.arr_auth_user.keys():
+            arr_user = self.arr_auth_user.keys()
+            for user_id in arr_user:
                 task = asyncio.create_task(self.task_update(user_id, news))
                 task.set_name(f'{user_id}_task_update')
                 await self.queues_message.start(task)
             background_tasks = set()
-            for user_id in self.arr_auth_user.keys():
+            arr_user = self.arr_auth_user.keys()
+            for user_id in arr_user:
                 task = asyncio.create_task(self.timer.start(user_id))
                 background_tasks.add(task)
                 task.add_done_callback(background_tasks.discard)
@@ -1708,10 +1710,8 @@ class DispatcherMessage(Dispatcher):
     async def search(self, text_for_search: list):
         total_search = set()
         i = 1
-        print(text_for_search)
         for item in text_for_search:
             if i == 1:
-                print(re.sub(r"[^ \w]", '', item[0]).upper())
                 search_variant = await self.execute.search_in_base_article(
                     self.translit_rus(re.sub(r"[^ \w]", '', item[0]).upper()))
                 search_variant_translit_rus = await self.execute.search_in_base_article(

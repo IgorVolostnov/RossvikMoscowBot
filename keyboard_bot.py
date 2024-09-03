@@ -490,21 +490,21 @@ class DATA:
     @property
     def get_nomenclature(self):
         dict_nomenclature = {}
-        for item in range(4000, 30000):
+        for item in range(4000, 40000):
             dict_nomenclature[str(item)] = str(item)
         return dict_nomenclature
 
     @property
     def get_dealer_price_remove(self):
         dict_dealer_price_remove = {}
-        for item in range(4000, 30000):
+        for item in range(4000, 40000):
             dict_dealer_price_remove[f'{str(item)}remove_dealer_price'] = str(item)
         return dict_dealer_price_remove
 
     @property
     def get_dealer_price_show(self):
         dict_dealer_price_show = {}
-        for item in range(4000, 30000):
+        for item in range(4000, 40000):
             dict_dealer_price_show[f'{str(item)}show_dealer_price'] = str(item)
         return dict_dealer_price_show
 
@@ -549,7 +549,7 @@ class DATA:
     def get_button_calculater(self):
         dict_button_calculater = {}
         for item in range(10):
-            for id_nomenclature in range(4000, 30000):
+            for id_nomenclature in range(4000, 40000):
                 dict_button_calculater[f'{str(id_nomenclature)}///{str(item)}'] = str(item)
         return dict_button_calculater
 

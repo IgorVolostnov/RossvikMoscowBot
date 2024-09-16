@@ -422,6 +422,22 @@ class Execute:
             await cursor.execute(sql_record)
             await self.conn.commit()
 
+    async def add_list_element_message(self, dict_user: dict):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_add_list_element_message(dict_user)
+        except Exception as e:
+            await send_message('Ошибка запроса в методе add_arr_messages', os.environ["EMAIL"], str(e))
+
+    async def execute_add_list_element_message(self, dict_user: dict):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            for key, item in dict_user.items():
+                sql_record = f"UPDATE TELEGRAMMBOT SET " \
+                             f"MESSAGES = '{item}' " \
+                             f"WHERE ID_USER = {self.quote(key)} "
+                await cursor.execute(sql_record)
+            await self.conn.commit()
+
     async def record_message(self, user_id: int, record_message: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:

@@ -577,16 +577,13 @@ class DispatcherMessage(Dispatcher):
         async def send_update_message(callback: CallbackQuery):
             news = await self.execute.get_news()
             arr_user = self.arr_auth_user.keys()
-            for user_id in arr_user:
-                task = asyncio.create_task(self.task_update(user_id, news))
-                task.set_name(f'{user_id}_task_update')
-                await self.queues_message.start(task)
-            background_tasks = set()
+            task = asyncio.create_task(self.task_update(arr_user, news))
+            task.set_name(f'{callback.from_user.id}_task_update')
+            await self.queues_message.start(task)
             arr_user = self.arr_auth_user.keys()
-            for user_id in arr_user:
-                task = asyncio.create_task(self.timer.start(user_id))
-                background_tasks.add(task)
-                task.add_done_callback(background_tasks.discard)
+            for user in arr_user:
+                task = asyncio.create_task(self.timer.start(user))
+                await task
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add_status'))
@@ -753,7 +750,7 @@ class DispatcherMessage(Dispatcher):
                 await self.execute.add_element_message(message.from_user.id, message.message_id)
             else:
                 data_user = await self.execute.start_record_new_user(message)
-                self.arr_auth_user[data_user[0]] = [data_user[1], data_user[2]]
+                self.arr_auth_user[data_user[0]] = {'status': data_user[1], 'lang': data_user[2]}
             first_keyboard = await self.keyboard_bot.get_first_keyboard(message.from_user.id,
                                                                         self.arr_auth_user[message.from_user.id][
                                                                             'status'],
@@ -787,13 +784,19 @@ class DispatcherMessage(Dispatcher):
             answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
                                                        text_message[self.arr_auth_user[user_id]['lang']])
             await self.delete_messages(user_id)
-            await self.execute.add_element_message(user_id, answer.message_id)
+            return answer.message_id
         except TelegramForbiddenError:
             await self.execute.delete_user(user_id)
             self.arr_auth_user.pop(user_id)
+            return False
 
-    async def task_update(self, user_id: int, current_news: str):
-        await self.start_for_news(user_id, current_news)
+    async def task_update(self, list_user_id: list, current_news: str):
+        dict_messages = {}
+        for user_id in list_user_id:
+            number_message = await self.start_for_news(user_id, current_news)
+            if number_message:
+                dict_messages[user_id] = number_message
+        await self.execute.add_list_element_message(dict_messages)
         return True
 
     async def start_for_news(self, user_id: int, current_news: str):
@@ -806,11 +809,12 @@ class DispatcherMessage(Dispatcher):
             answer = await self.bot.send_message_start_news(user_id, self.build_keyboard(first_keyboard, 1),
                                                             text_message[0])
             await self.delete_messages(user_id)
-            await self.execute.add_element_message(user_id, answer.message_id)
             print(f'Обновили новость у {user_id}')
+            return answer.message_id
         except TelegramForbiddenError:
             await self.execute.delete_user(user_id)
             self.arr_auth_user.pop(user_id)
+            return False
 
     async def task_command_catalog(self, message: Message):
         check = await self.checking_bot(message)
@@ -3312,9 +3316,11 @@ class TimerClean:
 
     async def clean_chat(self, user: int):
         await asyncio.sleep(self._clean_time)
-        await self.parent.start_for_timer(user)
-        print(f'Очищен чат у клиента {str(user)}')
-        await self.clean_timer(user)
+        id_message = await self.parent.start_for_timer(user)
+        if id_message:
+            await self.parent.execute.add_element_message(user, id_message)
+            print(f'Очищен чат у клиента {str(user)}')
+            await self.clean_timer(user)
 
     async def clean_timer(self, user: int):
         self.t.pop(user)

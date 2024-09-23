@@ -2,12 +2,10 @@ import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from aiosmtplib import SMTP
-from dotenv import load_dotenv
 import os
 
 
 logging.basicConfig(level=logging.INFO)
-load_dotenv()
 
 
 async def send_mail(subject_letter: str, to_mail: str, message_text: str):

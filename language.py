@@ -1,13 +1,9 @@
-import asyncio
 import os
 import logging
 import detectlanguage
-import time
-from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
 
 logging.basicConfig(level=logging.INFO)
-load_dotenv()
 
 
 class Language:

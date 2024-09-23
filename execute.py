@@ -6,10 +6,8 @@ from prettytable import PrettyTable
 from exception import send_message
 from aiogram.types import Message
 from operator import itemgetter
-from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
-load_dotenv()
 
 
 class Execute:
@@ -427,7 +425,7 @@ class Execute:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 await self.execute_add_list_element_message(dict_user)
         except Exception as e:
-            await send_message('Ошибка запроса в методе add_arr_messages', os.environ["EMAIL"], str(e))
+            await send_message('Ошибка запроса в методе add_list_element_message', os.environ["EMAIL"], str(e))
 
     async def execute_add_list_element_message(self, dict_user: dict):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:

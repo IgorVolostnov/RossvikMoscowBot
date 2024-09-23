@@ -22,6 +22,7 @@ from number_parser import parse
 from nltk.stem import SnowballStemmer
 from validate_email import validate_email
 from check import is_valid
+from update_data import UpdateBase
 
 logging.basicConfig(level=logging.INFO)
 snowball = SnowballStemmer(language="russian")
@@ -31,10 +32,13 @@ class BotTelegram:
     def __init__(self, token_from_telegram):
         self.bot = BotMessage(token_from_telegram)
         self.dispatcher = DispatcherMessage(self.bot)
-        self.conn = None
+        self.data = UpdateBase(os.environ["XML_DATA"])
 
     async def start_dispatcher(self):
-        await self.dispatcher.start_polling(self.bot)
+        task_dispatcher = asyncio.create_task(self.dispatcher.start_polling(self.bot))
+        task_data = asyncio.create_task(self.data.run())
+        await task_dispatcher
+        await task_data
 
     def run(self):
         asyncio.run(self.start_dispatcher())
@@ -580,10 +584,6 @@ class DispatcherMessage(Dispatcher):
             task = asyncio.create_task(self.task_update(arr_user, news))
             task.set_name(f'{callback.from_user.id}_task_update')
             await self.queues_message.start(task)
-            arr_user = self.arr_auth_user.keys()
-            for user in arr_user:
-                task = asyncio.create_task(self.timer.start(user))
-                await task
             await self.timer.start(callback.from_user.id)
 
         @self.callback_query(F.from_user.id.in_(self.arr_auth_user) & (F.data == 'add_status'))
@@ -726,8 +726,10 @@ class DispatcherMessage(Dispatcher):
         answer = await self.bot.push_photo(message.chat.id, text_help,
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.execute.add_element_message(message.from_user.id, message.message_id)
-        await self.delete_messages(message.from_user.id)
-        await self.execute.add_element_message(message.from_user.id, answer.message_id)
+        arr_messages_for_record = await self.delete_messages(message.from_user.id)
+        arr_messages_for_record.append(answer.message_id)
+        record_message = ' '.join(arr_messages_for_record)
+        await self.execute.record_message(message.from_user.id, record_message)
 
     async def return_help_message(self, call_back: CallbackQuery):
         first_keyboard = await self.keyboard_bot.get_first_keyboard(call_back.from_user.id,
@@ -737,8 +739,10 @@ class DispatcherMessage(Dispatcher):
         text_help = await self.keyboard_bot.get_info_help(self.arr_auth_user[call_back.from_user.id]['lang'])
         answer = await self.bot.push_photo(call_back.message.chat.id, text_help,
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
-        await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+        arr_messages_for_record = await self.delete_messages(call_back.from_user.id)
+        arr_messages_for_record.append(answer.message_id)
+        record_message = ' '.join(arr_messages_for_record)
+        await self.execute.record_message(call_back.from_user.id, record_message)
 
     async def task_command_start(self, message: Message):
         check = await self.checking_bot(message)
@@ -759,8 +763,10 @@ class DispatcherMessage(Dispatcher):
             text_message = await self.keyboard_bot.get_start_message
             answer = await self.answer_message(message, text_message[self.arr_auth_user[message.from_user.id]['lang']],
                                                self.build_keyboard(first_keyboard, 1))
-            await self.delete_messages(message.from_user.id)
-            await self.execute.add_element_message(message.from_user.id, answer.message_id)
+            arr_messages_for_record = await self.delete_messages(message.from_user.id)
+            arr_messages_for_record.append(str(answer.message_id))
+            record_message = ' '.join(arr_messages_for_record)
+            await self.execute.record_message(message.from_user.id, record_message)
         return True
 
     async def return_start(self, call_back: CallbackQuery):
@@ -772,8 +778,10 @@ class DispatcherMessage(Dispatcher):
         answer = await self.answer_message(call_back.message,
                                            text_message[self.arr_auth_user[call_back.from_user.id]['lang']],
                                            self.build_keyboard(first_keyboard, 1))
-        await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+        arr_messages_for_record = await self.delete_messages(call_back.from_user.id)
+        arr_messages_for_record.append(str(answer.message_id))
+        record_message = ' '.join(arr_messages_for_record)
+        await self.execute.record_message(call_back.from_user.id, record_message)
 
     async def start_for_timer(self, user_id: int):
         try:
@@ -783,8 +791,10 @@ class DispatcherMessage(Dispatcher):
             text_message = await self.keyboard_bot.get_start_message
             answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
                                                        text_message[self.arr_auth_user[user_id]['lang']])
-            await self.delete_messages(user_id)
-            return answer.message_id
+            arr_messages_for_record = await self.delete_messages(user_id)
+            arr_messages_for_record.append(str(answer.message_id))
+            record_message = ' '.join(arr_messages_for_record)
+            return record_message
         except TelegramForbiddenError:
             await self.execute.delete_user(user_id)
             self.arr_auth_user.pop(user_id)
@@ -808,9 +818,11 @@ class DispatcherMessage(Dispatcher):
                                                                        [current_news])
             answer = await self.bot.send_message_start_news(user_id, self.build_keyboard(first_keyboard, 1),
                                                             text_message[0])
-            await self.delete_messages(user_id)
+            arr_messages_for_record = await self.delete_messages(user_id)
+            arr_messages_for_record.append(str(answer.message_id))
+            record_message = ' '.join(arr_messages_for_record)
             print(f'Обновили новость у {user_id}')
-            return answer.message_id
+            return record_message
         except TelegramForbiddenError:
             await self.execute.delete_user(user_id)
             self.arr_auth_user.pop(user_id)
@@ -830,8 +842,10 @@ class DispatcherMessage(Dispatcher):
                                                self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                                self.bot.catalog_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
-            await self.delete_messages(message.from_user.id)
-            await self.execute.add_element_message(message.from_user.id, answer.message_id)
+            arr_messages_for_record = await self.delete_messages(message.from_user.id)
+            arr_messages_for_record.append(str(answer.message_id))
+            record_message = ' '.join(arr_messages_for_record)
+            await self.execute.record_message(message.from_user.id, record_message)
             await self.execute.restart_catalog(message, '/start catalog')
         return True
 
@@ -849,8 +863,10 @@ class DispatcherMessage(Dispatcher):
         answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text_message[0]),
                                            self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                            self.bot.catalog_logo)
-        await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+        arr_messages_for_record = await self.delete_messages(call_back.from_user.id)
+        arr_messages_for_record.append(str(answer.message_id))
+        record_message = ' '.join(arr_messages_for_record)
+        await self.execute.record_message(call_back.from_user.id, record_message)
 
     async def task_command_link(self, message: Message):
         check = await self.checking_bot(message)
@@ -867,8 +883,10 @@ class DispatcherMessage(Dispatcher):
         answer = await self.answer_message(message, f"Перейдите по ссылкам ниже, чтобы узнать ещё больше информации:",
                                            self.build_keyboard(link_keyboard, 1))
         await self.execute.add_element_message(message.from_user.id, message.message_id)
-        await self.delete_messages(message.from_user.id)
-        await self.execute.add_element_message(message.from_user.id, answer.message_id)
+        arr_messages_for_record = await self.delete_messages(message.from_user.id)
+        arr_messages_for_record.append(str(answer.message_id))
+        record_message = ' '.join(arr_messages_for_record)
+        await self.execute.record_message(message.from_user.id, record_message)
 
     async def return_show_link(self, call_back: CallbackQuery):
         link_keyboard = {'https://t.me/rossvik_moscow': 'Канал @ROSSVIK_MOSCOW 📣💬',
@@ -876,8 +894,10 @@ class DispatcherMessage(Dispatcher):
         answer = await self.answer_message(call_back.message, f"Перейдите по ссылкам ниже, "
                                                               f"чтобы узнать ещё больше информации:",
                                            self.build_keyboard(link_keyboard, 1))
-        await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+        arr_messages_for_record = await self.delete_messages(call_back.from_user.id)
+        arr_messages_for_record.append(str(answer.message_id))
+        record_message = ' '.join(arr_messages_for_record)
+        await self.execute.record_message(call_back.from_user.id, record_message)
 
     async def task_next_category(self, call_back: CallbackQuery):
         if await self.next_category(call_back):
@@ -951,7 +971,8 @@ class DispatcherMessage(Dispatcher):
         for item_message in arr_answer:
             arr_message.append(str(item_message.message_id))
         await self.delete_messages(call_back.from_user.id)
-        await self.execute.add_arr_messages(call_back.from_user.id, arr_message)
+        record_message = ' '.join(arr_message)
+        await self.execute.record_message(call_back.from_user.id, record_message)
 
     async def remove_price(self, call_back: CallbackQuery):
         id_nomenclature = call_back.data.split('remove_dealer_price')[0]
@@ -1034,8 +1055,7 @@ class DispatcherMessage(Dispatcher):
                                               f"{call_back.message.caption.split('№')[0]}"
                                               f"№{self.pages[call_back.data]}",
                                               self.build_keyboard(pages, 5))
-            await self.delete_messages(call_back.from_user.id, heading.message_id)
-            arr_answers = []
+            arr_answers = await self.delete_messages(call_back.from_user.id, heading.message_id)
             for key, value in current_nomenclature[call_back.data].items():
                 menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
                 if value[1]:
@@ -1044,7 +1064,8 @@ class DispatcherMessage(Dispatcher):
                     photo = "https://www.rossvik.moscow/images/no_foto.png"
                 answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
-            await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
+            record_message = ' '.join(arr_answers)
+            await self.execute.record_message(call_back.from_user.id, record_message)
             return True
 
     async def return_page(self, call_back: CallbackQuery, current_page: str):
@@ -1068,7 +1089,8 @@ class DispatcherMessage(Dispatcher):
                 photo = "https://www.rossvik.moscow/images/no_foto.png"
             answer = await self.answer_photo(heading, photo, value[0], self.build_keyboard(menu_button, 2))
             arr_answers.append(str(answer.message_id))
-        await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
+        record_message = ' '.join(arr_answers)
+        await self.execute.record_message(call_back.from_user.id, record_message)
 
     async def add_nomenclature(self, call_back: CallbackQuery):
         whitespace = '\n'
@@ -3199,21 +3221,21 @@ class DispatcherMessage(Dispatcher):
         if individual:
             arr_messages = await self.execute.get_arr_messages(user_id, except_id_message)
             await self.bot.delete_messages_chat(user_id, [except_id_message])
-            await self.execute.record_message(user_id, ' '.join(arr_messages))
         else:
             if except_id_message:
                 arr_messages = await self.execute.get_arr_messages(user_id, except_id_message)
                 if arr_messages is None:
-                    pass
+                    arr_messages = []
                 elif len(arr_messages) > 0:
                     await self.bot.delete_messages_chat(user_id, arr_messages)
-                    await self.execute.record_message(user_id, str(except_id_message))
+                    arr_messages = [str(except_id_message)]
                 else:
-                    pass
+                    arr_messages = []
             else:
                 arr_messages = await self.execute.get_arr_messages(user_id, except_id_message)
                 await self.bot.delete_messages_chat(user_id, arr_messages)
-                await self.execute.record_message(user_id, '')
+                arr_messages = []
+        return arr_messages
 
     def build_keyboard(self, dict_button: dict, column: int, dict_return_button=None) -> InlineKeyboardMarkup:
         keyboard = self.build_menu(self.get_list_keyboard_button(dict_button), column,
@@ -3318,7 +3340,7 @@ class TimerClean:
         await asyncio.sleep(self._clean_time)
         id_message = await self.parent.start_for_timer(user)
         if id_message:
-            await self.parent.execute.add_element_message(user, id_message)
+            await self.parent.execute.record_message(user, id_message)
             print(f'Очищен чат у клиента {str(user)}')
             await self.clean_timer(user)
 

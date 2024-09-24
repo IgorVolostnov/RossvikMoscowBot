@@ -1,10 +1,12 @@
 import logging
 import asyncio
 import datetime
+import time
 import aiosqlite
 import requests
 import re
 import os
+from prettytable import PrettyTable
 from dotenv import load_dotenv
 from exception import send_message
 from bs4 import BeautifulSoup
@@ -17,7 +19,7 @@ load_dotenv()
 class UpdateBase:
     def __init__(self, url_xml):
         self.url_xml = url_xml
-        self.timer_update_base = TimerUpdate(self, 3300)
+        self.timer_update_base = TimerUpdate(self, 60)
         self.connect_string = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.environ["CONNECTION"])
         self.response = None
 
@@ -27,13 +29,13 @@ class UpdateBase:
     async def update_all(self):
         self.response = await self.request
         date_time_update = await self.get_date_update()
-        await self.record_update_none('CATEGORY')
-        await self.up_date_category(date_time_update)
-        await self.delete_olds('CATEGORY')
+        await self.record_update_none_category()
+        await self.up_date_base_category(date_time_update)
+        await self.delete_olds_category()
         await self.show_category()
-        await self.record_update_none('NOMENCLATURE')
-        await self.up_date_nomenclature(date_time_update)
-        await self.delete_olds('NOMENCLATURE')
+        await self.record_update_none_nomenclature()
+        await self.up_date_base_nomenclature(date_time_update)
+        await self.delete_olds_nomenclature()
         await self.show_nomenclature()
 
     async def get_date_update(self) -> str:
@@ -41,64 +43,91 @@ class UpdateBase:
         time_update = self.response.find(name='yml_catalog')['date'].split('T')[1].split('+')[0]
         return f"{date}_{time_update}"
 
-    async def record_update_none(self, name_table: str):
+    async def record_update_none_category(self):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                await self.execute_record_update_none(name_table)
+                await self.execute_record_update_none_category()
         except Exception as e:
-            await send_message('Ошибка запроса в методе record_update_none', os.environ["EMAIL"], str(e))
+            await send_message('Ошибка запроса в методе record_update_none_category', os.environ["EMAIL"], str(e))
 
-    async def execute_record_update_none(self, name_table: str):
+    async def execute_record_update_none_category(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE {name_table} SET " \
-                         f"DATE_UPDATE = NULL "
+            sql_record = f"UPDATE CATEGORY SET " \
+                         f"DATE_UPDATE_CATEGORY = NULL "
             await cursor.execute(sql_record)
             await self.conn.commit()
 
-    async def up_date_category(self, date: str):
+    async def up_date_base_category(self, date: str):
+        dict_category = await self.up_date_dict_category(date)
+        for key, item in dict_category.items():
+            await self.up_date_category([key, item[0], item[1], item[2], item[3]])
+
+    async def up_date_dict_category(self, date: str):
+        all_elements = await self.get_all_elements('category')
+        list_category = await self.select_all_category()
+        dict_category = await self.get_dict_category(list_category)
+        for element in all_elements:
+            id_element = element.get('id')
+            try:
+                sort_element = dict_category[id_element][3]
+                dict_category[id_element] = [element.get('parentId'), element.text, date, sort_element]
+            except KeyError:
+                # print(f'Код {id_element} не нашли в базе')
+                dict_category[id_element] = [element.get('parentId'), element.text, date, 100]
+        print(len(dict_category))
+        return dict_category
+
+    @staticmethod
+    async def get_dict_category(list_category: list) -> dict:
+        dict_category = {}
+        for item in list_category:
+            dict_category[item[0]] = [item[1], item[2], item[3], item[4]]
+        return dict_category
+
+    async def select_all_category(self):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                await self.execute_up_date_category(date)
+                return await self.execute_select_all_category()
+        except Exception as e:
+            await send_message('Ошибка запроса в методе select_all_category', os.environ["EMAIL"], str(e))
+
+    async def execute_select_all_category(self):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_category = f"SELECT * FROM CATEGORY "
+            await cursor.execute(sql_category)
+            row_table = await cursor.fetchall()
+            return row_table
+
+    async def up_date_category(self, data: list):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_up_date_category(data)
         except Exception as e:
             await send_message('Ошибка запроса в методе up_date_category', os.environ["EMAIL"], str(e))
 
-    async def execute_up_date_category(self, date: str):
+    async def execute_up_date_category(self, data: list):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            all_elements = await self.get_all_elements('category')
-            for element in all_elements:
-                sql_category = f"SELECT [KOD], [PARENT_ID], [NAME_CATEGORY], [DATE_UPDATE], [SORT_CATEGORY] " \
-                               f"FROM [CATEGORY] " \
-                               f"WHERE [KOD] = {self.quote(element.get('id'))} "
-                await cursor.execute(sql_category)
-                row_table = await cursor.fetchone()
-                if row_table is None:
-                    sql_record = f"INSERT INTO [CATEGORY] " \
-                                 f"([KOD], [PARENT_ID], [NAME_CATEGORY], [DATE_UPDATE], [SORT_CATEGORY]) " \
-                                 f"VALUES ('{element.get('id')}', " \
-                                 f"'{element.get('parentId')}', " \
-                                 f"'{element.text}', " \
-                                 f"'{date}', " \
-                                 f"'{1000}') "
-                    await cursor.execute(sql_record)
-                else:
-                    sql_record = f"UPDATE [CATEGORY] SET " \
-                                 f"[PARENT_ID] = '{element.get('parentId')}', " \
-                                 f"[NAME_CATEGORY] = '{element.text}', " \
-                                 f"[DATE_UPDATE] = '{date}' " \
-                                 f"WHERE [KOD] = {self.quote(element.get('id'))} "
-                    await cursor.execute(sql_record)
+            sql_record = f"INSERT INTO CATEGORY " \
+                         f"(ID, PARENT_ID, NAME_CATEGORY, DATE_UPDATE_CATEGORY, SORT_CATEGORY, LOGO_CATEGORY) " \
+                         f"VALUES('{data[0]}', '{data[1]}', '{data[2]}', '{data[3]}', '{data[4]}', '') " \
+                         f"ON CONFLICT (ID) DO UPDATE SET " \
+                         f"PARENT_ID = '{data[1]}', " \
+                         f"NAME_CATEGORY = '{data[2]}', " \
+                         f"DATE_UPDATE_CATEGORY = '{data[3]}' " \
+                         f"WHERE ID = {data[0]} "
+            await cursor.execute(sql_record)
             await self.conn.commit()
 
-    async def delete_olds(self, name_table: str):
+    async def delete_olds_category(self):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                await self.execute_delete_olds(name_table)
+                await self.execute_delete_olds_category()
         except Exception as e:
-            await send_message('Ошибка запроса в методе delete_olds', os.environ["EMAIL"], str(e))
+            await send_message('Ошибка запроса в методе delete_olds_category', os.environ["EMAIL"], str(e))
 
-    async def execute_delete_olds(self, name_table: str):
+    async def execute_delete_olds_category(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            await cursor.execute(f"DELETE FROM {name_table} WHERE DATE_UPDATE IS NULL ")
+            await cursor.execute(f"DELETE FROM CATEGORY WHERE DATE_UPDATE_CATEGORY IS NULL ")
             await self.conn.commit()
 
     async def show_category(self):
@@ -113,80 +142,150 @@ class UpdateBase:
             sql_category = f"SELECT * FROM [CATEGORY] "
             await cursor.execute(sql_category)
             row_table = await cursor.fetchall()
+            my_table = PrettyTable()
+            for item in row_table:
+                my_table.field_names = ["ID", "PARENT_ID", "NAME_CATEGORY", "DATE_UPDATE_CATEGORY", "SORT_CATEGORY",
+                                        "LOGO_CATEGORY"]
+                my_table.add_row([item[0], item[1], item[2], item[3], item[4], item[5]])
+            print(my_table)
             print(f"Updated {len(row_table)} SKU categories {datetime.datetime.now()}")
 
-    async def up_date_nomenclature(self, date: str):
+    async def record_update_none_nomenclature(self):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                await self.execute_up_date_nomenclature(date)
+                await self.execute_record_update_none_nomenclature()
+        except Exception as e:
+            await send_message('Ошибка запроса в методе record_update_none_nomenclature', os.environ["EMAIL"], str(e))
+
+    async def execute_record_update_none_nomenclature(self):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_record = f"UPDATE NOMENCLATURE_NEW SET " \
+                         f"DATE_UPDATE_NOMENCLATURE = NULL "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def up_date_base_nomenclature(self, date: str):
+        dict_nomenclature = await self.up_date_dict_nomenclature(date)
+        for key, item in dict_nomenclature.items():
+            await self.up_date_nomenclature([key, item[0], item[1], item[2], item[3], item[4], item[5], item[6],
+                                             item[7], item[8], item[9], item[10], item[11], item[12], item[13],
+                                             item[14], item[15], item[16]])
+
+    async def up_date_dict_nomenclature(self, date: str):
+        all_elements = await self.get_all_elements('offer')
+        list_nomenclature = await self.select_all_nomenclature()
+        dict_nomenclature = await self.get_dict_nomenclature(list_nomenclature)
+        for element in all_elements:
+            id_element = element.get('id')
+            category_id = await self.find_text_by_name_element(element, 'categoryId')
+            article = await self.find_text_by_name_attribute(element, 'Артикул')
+            name = await self.find_text_by_name_element(element, 'name')
+            if article == '':
+                article_change = self.translit_rus(re.sub(r"[^ \w]", '', name).upper())
+            else:
+                article_change = self.translit_rus(re.sub(r"[^ \w]", '', article).upper())
+            vendor = await self.find_text_by_name_element(element, 'vendor')
+            description = await self.find_text_by_name_element(element, 'description')
+            picture = await self.find_text_photo(element, 'picture')
+            url = await self.find_text_by_name_element(element, 'url')
+            amount = await self.find_text_by_name_attribute(element, 'Доступное количество')
+            if float(amount) < 0:
+                availability = 0
+            else:
+                availability = float(amount)
+            price = await self.find_text_by_name_element(element, 'price')
+            dealer = await self.find_text_by_name_attribute(element, 'Дилерская Цена')
+
+            try:
+                sort_element = dict_nomenclature[id_element][16]
+                discount = dict_nomenclature[id_element][5]
+                specification = dict_nomenclature[id_element][7]
+                distributor = dict_nomenclature[id_element][13]
+                views = dict_nomenclature[id_element][15]
+                dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, discount,
+                                                 description, specification, picture, url, availability, float(price),
+                                                 float(dealer), distributor, date, views, sort_element]
+            except KeyError:
+                # print(f'Код {id_element} не нашли в базе')
+                dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, 0,
+                                                 description, '', picture, url, availability, float(price),
+                                                 float(dealer), 0, date, 0, 1000]
+        print(len(dict_nomenclature))
+        return dict_nomenclature
+
+    @staticmethod
+    async def get_dict_nomenclature(list_nomenclature: list) -> dict:
+        dict_nomenclature = {}
+        for item in list_nomenclature:
+            dict_nomenclature[item[0]] = [item[1], item[2], item[3], item[4], item[5], item[6], item[7], item[8],
+                                          item[9], item[10], item[11], item[12], item[13], item[14], item[15],
+                                          item[16], item[17]]
+        return dict_nomenclature
+
+    async def select_all_nomenclature(self):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                return await self.execute_select_all_nomenclature()
+        except Exception as e:
+            await send_message('Ошибка запроса в методе select_all_category', os.environ["EMAIL"], str(e))
+
+    async def execute_select_all_nomenclature(self):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            sql_category = f"SELECT * FROM NOMENCLATURE_NEW "
+            await cursor.execute(sql_category)
+            row_table = await cursor.fetchall()
+            return row_table
+
+    async def up_date_nomenclature(self, data: list):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_up_date_nomenclature(data)
         except Exception as e:
             await send_message('Ошибка запроса в методе up_date_nomenclature', os.environ["EMAIL"], str(e))
 
-    async def execute_up_date_nomenclature(self, date: str):
+    async def execute_up_date_nomenclature(self, data: list):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            all_elements = await self.get_all_elements('offer')
-            for element in all_elements:
-                article = await self.find_text_by_name_attribute(element, 'Артикул')
-                name = await self.find_text_by_name_element(element, 'name')
-                category_id = await self.find_text_by_name_element(element, 'categoryId')
-                vendor = await self.find_text_by_name_element(element, 'vendor')
-                description = await self.find_text_by_name_element(element, 'description')
-                picture = await self.find_text_photo(element, 'picture')
-                url = await self.find_text_by_name_element(element, 'url')
-                amount = await self.find_text_by_name_attribute(element, 'Доступное количество')
-                price = await self.find_text_by_name_element(element, 'price')
-                dealer = await self.find_text_by_name_attribute(element, 'Дилерская Цена')
-                if article == '':
-                    article_change = self.translit_rus(re.sub(r"[^ \w]", '', name).upper())
-                else:
-                    article_change = self.translit_rus(re.sub(r"[^ \w]", '', article).upper())
-                sql_nomenclature = f"SELECT [KOD], [CATEGORY_ID], [ARTICLE_CHANGE], [ARTICLE], [BRAND], [NAME], " \
-                                   f"[DESCRIPTION], [PHOTO], [URL], [AVAILABILITY], [PRICE], [DEALER], [DATE_UPDATE] " \
-                                   f"FROM [NOMENCLATURE] " \
-                                   f"WHERE [KOD] = {self.quote(element.get('id'))} "
-                await cursor.execute(sql_nomenclature)
-                row_table = await cursor.fetchone()
-                if row_table is None:
-                    sql_record = f"INSERT INTO [NOMENCLATURE] ([KOD], [CATEGORY_ID], [ARTICLE_CHANGE], [ARTICLE], " \
-                                 f"[BRAND], [NAME], [DISCOUNT], [DESCRIPTION], [SPECIFICATION], [PHOTO], [URL], " \
-                                 f"[AVAILABILITY], [PRICE], [DEALER], [DISTRIBUTOR], [DATE_UPDATE], [VIEWS], " \
-                                 f"[SORT_NOMENCLATURE], [CROSS]) " \
-                                 f"VALUES ('{element.get('id')}', " \
-                                 f"'{category_id}', " \
-                                 f"'{article_change}', " \
-                                 f"'{article}', " \
-                                 f"'{vendor}', " \
-                                 f"'{name}', " \
-                                 f"'', " \
-                                 f"'{description}', " \
-                                 f"'', " \
-                                 f"'{picture}', " \
-                                 f"'{url}', " \
-                                 f"'{amount}', " \
-                                 f"'{price}', " \
-                                 f"'{dealer}', " \
-                                 f"'', " \
-                                 f"'{date}', " \
-                                 f"'', " \
-                                 f"'{1000}', " \
-                                 f"'') "
-                    await cursor.execute(sql_record)
-                else:
-                    sql_record = f"UPDATE [NOMENCLATURE] SET " \
-                                 f"[CATEGORY_ID] = '{category_id}', " \
-                                 f"[ARTICLE_CHANGE] = '{article_change}', " \
-                                 f"[ARTICLE] = '{article}', " \
-                                 f"[BRAND] = '{vendor}', " \
-                                 f"[NAME] = '{name}', " \
-                                 f"[DESCRIPTION] = '{description}', " \
-                                 f"[PHOTO] = '{picture}', " \
-                                 f"[URL] = '{url}', " \
-                                 f"[AVAILABILITY] = '{amount}', " \
-                                 f"[PRICE] = '{price}', " \
-                                 f"[DEALER] = '{dealer}', " \
-                                 f"[DATE_UPDATE] = '{date}' " \
-                                 f"WHERE [KOD] = {self.quote(element.get('id'))} "
-                    await cursor.execute(sql_record)
+            sql_record = f"INSERT INTO NOMENCLATURE_NEW " \
+                         f"(ID, CATEGORY_ID, ARTICLE_CHANGE, ARTICLE, BRAND, NAME_NOMENCLATURE, " \
+                         f"DISCOUNT_NOMENCLATURE, DESCRIPTION_NOMENCLATURE, SPECIFICATION_NOMENCLATURE, " \
+                         f"PHOTO_NOMENCLATURE, URL_NOMENCLATURE, AVAILABILITY_NOMENCLATURE, PRICE_NOMENCLATURE, " \
+                         f"DEALER_NOMENCLATURE, DISTRIBUTOR_NOMENCLATURE, DATE_UPDATE_NOMENCLATURE, " \
+                         f"VIEWS_NOMENCLATURE, SORT_NOMENCLATURE) " \
+                         f"VALUES('{data[0]}', '{data[1]}', '{data[2]}', '{data[3]}', '{data[4]}', '{data[5]}', " \
+                         f"'{data[6]}', '{data[7]}', '{data[8]}', '{data[9]}', '{data[10]}', '{data[11]}', " \
+                         f"'{data[12]}', '{data[13]}', '{data[14]}', '{data[15]}', '{data[16]}', '{data[17]}') " \
+                         f"ON CONFLICT (ID) DO UPDATE SET " \
+                         f"CATEGORY_ID = '{data[1]}', " \
+                         f"ARTICLE_CHANGE = '{data[2]}', " \
+                         f"ARTICLE = '{data[3]}', " \
+                         f"BRAND = '{data[4]}', " \
+                         f"NAME_NOMENCLATURE = '{data[5]}', " \
+                         f"DISCOUNT_NOMENCLATURE = '{data[6]}', " \
+                         f"DESCRIPTION_NOMENCLATURE = '{data[7]}', " \
+                         f"SPECIFICATION_NOMENCLATURE = '{data[8]}', " \
+                         f"PHOTO_NOMENCLATURE = '{data[9]}', " \
+                         f"URL_NOMENCLATURE = '{data[10]}', " \
+                         f"AVAILABILITY_NOMENCLATURE = '{data[11]}', " \
+                         f"PRICE_NOMENCLATURE = '{data[12]}', " \
+                         f"DEALER_NOMENCLATURE = '{data[13]}', " \
+                         f"DISTRIBUTOR_NOMENCLATURE = '{data[14]}', " \
+                         f"DATE_UPDATE_NOMENCLATURE = '{data[15]}', " \
+                         f"VIEWS_NOMENCLATURE = '{data[16]}', " \
+                         f"SORT_NOMENCLATURE = '{data[17]}' " \
+                         f"WHERE ID = {data[0]} "
+            await cursor.execute(sql_record)
+            await self.conn.commit()
+
+    async def delete_olds_nomenclature(self):
+        try:
+            async with aiosqlite.connect(self.connect_string) as self.conn:
+                await self.execute_delete_olds_nomenclature()
+        except Exception as e:
+            await send_message('Ошибка запроса в методе delete_olds_nomenclature', os.environ["EMAIL"], str(e))
+
+    async def execute_delete_olds_nomenclature(self):
+        async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
+            await cursor.execute(f"DELETE FROM NOMENCLATURE_NEW WHERE DATE_UPDATE_NOMENCLATURE IS NULL ")
             await self.conn.commit()
 
     async def show_nomenclature(self):
@@ -198,7 +297,7 @@ class UpdateBase:
 
     async def execute_show_nomenclature(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT * FROM [NOMENCLATURE] "
+            sql_nomenclature = f"SELECT * FROM NOMENCLATURE_NEW "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
             print(f"Updated {len(row_table)} SKU nomenclatures {datetime.datetime.now()}")
@@ -284,9 +383,15 @@ class TimerUpdate:
 
     async def update_base(self):
         await asyncio.sleep(self._clean_time)
+        start_time = time.time()
         await self.parent.update_all()
+        print("--- %s seconds ---" % (time.time() - start_time))
         await self.clean_timer()
 
     async def clean_timer(self):
         self.task.pop('current_update')
         await self.start()
+
+
+up_data = UpdateBase(os.environ["XML_DATA"])
+asyncio.run(up_data.run())

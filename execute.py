@@ -460,7 +460,7 @@ class Execute:
 
     async def execute_current_category(self, id_parent: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_category = f"SELECT KOD, NAME_CATEGORY, SORT_CATEGORY FROM CATEGORY " \
+            sql_category = f"SELECT ID, NAME_CATEGORY, SORT_CATEGORY FROM CATEGORY " \
                            f"WHERE PARENT_ID = '{id_parent}' "
             await cursor.execute(sql_category)
             row_table = await cursor.fetchall()
@@ -476,7 +476,7 @@ class Execute:
     async def execute_text_category(self, id_category: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_category = f"SELECT NAME_CATEGORY FROM CATEGORY " \
-                           f"WHERE KOD = '{id_category}' "
+                           f"WHERE ID = '{id_category}' "
             await cursor.execute(sql_category)
             row_table = await cursor.fetchone()
             return row_table[0]
@@ -490,7 +490,8 @@ class Execute:
 
     async def execute_current_nomenclature(self, id_parent: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE, PHOTO FROM NOMENCLATURE " \
+            sql_nomenclature = f"SELECT ID, NAME_NOMENCLATURE, SORT_NOMENCLATURE, PHOTO_NOMENCLATURE " \
+                               f"FROM NOMENCLATURE " \
                                f"WHERE CATEGORY_ID = '{id_parent}' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
@@ -505,10 +506,12 @@ class Execute:
 
     async def execute_current_description(self, kod_nomenclature: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT ARTICLE, BRAND, NAME, DISCOUNT, DESCRIPTION, SPECIFICATION, PHOTO, " \
-                               f"AVAILABILITY, PRICE, DEALER, DISTRIBUTOR " \
+            sql_nomenclature = f"SELECT ARTICLE, BRAND, NAME_NOMENCLATURE, DISCOUNT_NOMENCLATURE, " \
+                               f"DESCRIPTION_NOMENCLATURE, SPECIFICATION_NOMENCLATURE, PHOTO_NOMENCLATURE, " \
+                               f"AVAILABILITY_NOMENCLATURE, PRICE_NOMENCLATURE, DEALER_NOMENCLATURE, " \
+                               f"DISTRIBUTOR_NOMENCLATURE " \
                                f"FROM NOMENCLATURE " \
-                               f"WHERE KOD = '{kod_nomenclature}' "
+                               f"WHERE ID = '{kod_nomenclature}' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchone()
             return row_table
@@ -522,7 +525,8 @@ class Execute:
 
     async def execute_search_in_base_article(self, search_text: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE, PHOTO FROM NOMENCLATURE " \
+            sql_nomenclature = f"SELECT ID, NAME_NOMENCLATURE, SORT_NOMENCLATURE, PHOTO_NOMENCLATURE " \
+                               f"FROM NOMENCLATURE " \
                                f"WHERE ARTICLE_CHANGE LIKE '%{search_text}%' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
@@ -537,8 +541,9 @@ class Execute:
 
     async def execute_search_in_base_name(self, search_text: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT KOD, NAME, SORT_NOMENCLATURE, PHOTO FROM NOMENCLATURE " \
-                               f"WHERE NAME LIKE '%{search_text}%' "
+            sql_nomenclature = f"SELECT ID, NAME_NOMENCLATURE, SORT_NOMENCLATURE, PHOTO_NOMENCLATURE " \
+                               f"FROM NOMENCLATURE " \
+                               f"WHERE NAME_NOMENCLATURE LIKE '%{search_text}%' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
             return set(row_table)

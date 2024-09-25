@@ -19,7 +19,7 @@ load_dotenv()
 class UpdateBase:
     def __init__(self, url_xml):
         self.url_xml = url_xml
-        self.timer_update_base = TimerUpdate(self, 60)
+        self.timer_update_base = TimerUpdate(self, 3300)
         self.connect_string = os.path.join(os.path.split(os.path.dirname(__file__))[0], os.environ["CONNECTION"])
         self.response = None
 
@@ -52,8 +52,7 @@ class UpdateBase:
 
     async def execute_record_update_none_category(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE CATEGORY SET " \
-                         f"DATE_UPDATE_CATEGORY = NULL "
+            sql_record = f"UPDATE CATEGORY SET DATE_UPDATE_CATEGORY = NULL "
             await cursor.execute(sql_record)
             await self.conn.commit()
 
@@ -139,15 +138,15 @@ class UpdateBase:
 
     async def execute_show_category(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_category = f"SELECT * FROM [CATEGORY] "
+            sql_category = f"SELECT * FROM CATEGORY "
             await cursor.execute(sql_category)
             row_table = await cursor.fetchall()
-            my_table = PrettyTable()
-            for item in row_table:
-                my_table.field_names = ["ID", "PARENT_ID", "NAME_CATEGORY", "DATE_UPDATE_CATEGORY", "SORT_CATEGORY",
-                                        "LOGO_CATEGORY"]
-                my_table.add_row([item[0], item[1], item[2], item[3], item[4], item[5]])
-            print(my_table)
+            # my_table = PrettyTable()
+            # my_table.field_names = ["ID", "PARENT_ID", "NAME_CATEGORY", "DATE_UPDATE_CATEGORY", "SORT_CATEGORY",
+            #                         "LOGO_CATEGORY"]
+            # for item in row_table:
+            #     my_table.add_row([item[0], item[1], item[2], item[3], item[4], item[5]])
+            # print(my_table)
             print(f"Updated {len(row_table)} SKU categories {datetime.datetime.now()}")
 
     async def record_update_none_nomenclature(self):
@@ -159,7 +158,7 @@ class UpdateBase:
 
     async def execute_record_update_none_nomenclature(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"UPDATE NOMENCLATURE_NEW SET " \
+            sql_record = f"UPDATE NOMENCLATURE SET " \
                          f"DATE_UPDATE_NOMENCLATURE = NULL "
             await cursor.execute(sql_record)
             await self.conn.commit()
@@ -189,13 +188,12 @@ class UpdateBase:
             picture = await self.find_text_photo(element, 'picture')
             url = await self.find_text_by_name_element(element, 'url')
             amount = await self.find_text_by_name_attribute(element, 'Доступное количество')
-            if float(amount) < 0:
-                availability = 0
-            else:
-                availability = float(amount)
+            if float(amount) < 0 or amount == '':
+                amount = 0
             price = await self.find_text_by_name_element(element, 'price')
             dealer = await self.find_text_by_name_attribute(element, 'Дилерская Цена')
-
+            if dealer == '':
+                dealer = 0
             try:
                 sort_element = dict_nomenclature[id_element][16]
                 discount = dict_nomenclature[id_element][5]
@@ -203,12 +201,12 @@ class UpdateBase:
                 distributor = dict_nomenclature[id_element][13]
                 views = dict_nomenclature[id_element][15]
                 dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, discount,
-                                                 description, specification, picture, url, availability, float(price),
+                                                 description, specification, picture, url, float(amount), float(price),
                                                  float(dealer), distributor, date, views, sort_element]
             except KeyError:
                 # print(f'Код {id_element} не нашли в базе')
                 dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, 0,
-                                                 description, '', picture, url, availability, float(price),
+                                                 description, '', picture, url, float(amount), float(price),
                                                  float(dealer), 0, date, 0, 1000]
         print(len(dict_nomenclature))
         return dict_nomenclature
@@ -231,7 +229,7 @@ class UpdateBase:
 
     async def execute_select_all_nomenclature(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_category = f"SELECT * FROM NOMENCLATURE_NEW "
+            sql_category = f"SELECT * FROM NOMENCLATURE "
             await cursor.execute(sql_category)
             row_table = await cursor.fetchall()
             return row_table
@@ -245,7 +243,7 @@ class UpdateBase:
 
     async def execute_up_date_nomenclature(self, data: list):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"INSERT INTO NOMENCLATURE_NEW " \
+            sql_record = f"INSERT INTO NOMENCLATURE " \
                          f"(ID, CATEGORY_ID, ARTICLE_CHANGE, ARTICLE, BRAND, NAME_NOMENCLATURE, " \
                          f"DISCOUNT_NOMENCLATURE, DESCRIPTION_NOMENCLATURE, SPECIFICATION_NOMENCLATURE, " \
                          f"PHOTO_NOMENCLATURE, URL_NOMENCLATURE, AVAILABILITY_NOMENCLATURE, PRICE_NOMENCLATURE, " \
@@ -285,7 +283,7 @@ class UpdateBase:
 
     async def execute_delete_olds_nomenclature(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            await cursor.execute(f"DELETE FROM NOMENCLATURE_NEW WHERE DATE_UPDATE_NOMENCLATURE IS NULL ")
+            await cursor.execute(f"DELETE FROM NOMENCLATURE WHERE DATE_UPDATE_NOMENCLATURE IS NULL ")
             await self.conn.commit()
 
     async def show_nomenclature(self):
@@ -297,10 +295,22 @@ class UpdateBase:
 
     async def execute_show_nomenclature(self):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT * FROM NOMENCLATURE_NEW "
-            await cursor.execute(sql_nomenclature)
+            sql_category = f"SELECT * FROM NOMENCLATURE "
+            await cursor.execute(sql_category)
             row_table = await cursor.fetchall()
-            print(f"Updated {len(row_table)} SKU nomenclatures {datetime.datetime.now()}")
+            # my_table = PrettyTable()
+            # my_table.field_names = ["ID", "CATEGORY_ID", "ARTICLE_CHANGE", "ARTICLE", "BRAND", "NAME_NOMENCLATURE",
+            #                         "DISCOUNT_NOMENCLATURE", "DESCRIPTION_NOMENCLATURE",
+            #                         "SPECIFICATION_NOMENCLATURE", "PHOTO_NOMENCLATURE", "URL_NOMENCLATURE",
+            #                         "AVAILABILITY_NOMENCLATURE", "PRICE_NOMENCLATURE", "DEALER_NOMENCLATURE",
+            #                         "DISTRIBUTOR_NOMENCLATURE", "DATE_UPDATE_NOMENCLATURE", "VIEWS_NOMENCLATURE",
+            #                         "SORT_NOMENCLATURE"]
+            # for item in row_table:
+            #     my_table.add_row([item[0], item[1], item[2], item[3], item[4], item[5], item[6], item[7], item[8],
+            #                       item[9], item[10], item[11], item[12], item[13], item[14], item[15], item[16],
+            #                       item[17]])
+            # print(my_table)
+            print(f"Updated {len(row_table)} SKU categories {datetime.datetime.now()}")
 
     @property
     async def request(self):
@@ -393,5 +403,5 @@ class TimerUpdate:
         await self.start()
 
 
-up_data = UpdateBase(os.environ["XML_DATA"])
-asyncio.run(up_data.run())
+# up_data = UpdateBase(os.environ["XML_DATA"])
+# asyncio.run(up_data.run())

@@ -838,7 +838,8 @@ class DispatcherMessage(Dispatcher):
             text_message = await self.language.translated_from_russian(self.arr_auth_user[message.from_user.id]['lang'],
                                                                        ["Каталог товаров 📖"])
             price_button = await self.keyboard_bot.get_prices(self.arr_auth_user[message.from_user.id]['lang'])
-            answer = await self.bot.push_photo(message.chat.id, self.format_text(text_message[0]),
+            text_by_format = await self.format_text(text_message[0])
+            answer = await self.bot.push_photo(message.chat.id, text_by_format,
                                                self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                                self.bot.catalog_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
@@ -860,7 +861,8 @@ class DispatcherMessage(Dispatcher):
         text_message = await self.language.translated_from_russian(self.arr_auth_user[call_back.from_user.id]['lang'],
                                                                    ["Каталог товаров 📖"])
         price_button = await self.keyboard_bot.get_prices(self.arr_auth_user[call_back.from_user.id]['lang'])
-        answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text_message[0]),
+        text_by_format = await self.format_text(text_message[0])
+        answer = await self.bot.push_photo(call_back.message.chat.id, text_by_format,
                                            self.build_keyboard(price_button, 1, {'back': back_text[0]}),
                                            self.bot.catalog_logo)
         arr_messages_for_record = await self.delete_messages(call_back.from_user.id)
@@ -934,9 +936,8 @@ class DispatcherMessage(Dispatcher):
         for page in current_nomenclature.keys():
             pages[page] = page
         text = await self.execute.text_category(call_back.data)
-        heading = await self.edit_caption(call_back.message,
-                                          self.format_text(text + number_page),
-                                          self.build_keyboard(pages, 5))
+        text_by_format = await self.format_text(text + number_page)
+        heading = await self.edit_caption(call_back.message, text_by_format, self.build_keyboard(pages, 5))
         arr_answers = []
         for key, value in current_nomenclature['Стр.1'].items():
             menu_button = {'back': '◀ 👈 Назад', key: 'Подробнее 👀📸', f'{key}add': 'Добавить ✅🗑️'}
@@ -1004,38 +1005,27 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
-        whitespace = '\n'
         arr_description = await self.execute.current_description(id_item)
-        if arr_description[7] == "0":
-            availability = "Нет на складе"
-        else:
-            availability = arr_description[7]
+        availability = await self.get_availability(arr_description['AVAILABILITY_NOMENCLATURE'])
+        name = await self.format_text(arr_description['NAME_NOMENCLATURE'])
+        article = await self.format_text(arr_description['ARTICLE'])
+        brand = await self.format_text(arr_description['BRAND'])
+        price = await self.format_text(self.format_price(float(arr_description['PRICE_NOMENCLATURE'])))
+        amount = await self.format_text(str(availability))
         if self.arr_auth_user[id_user]['status'] == 'dealer':
-            if arr_description[9] is None or arr_description[9] == '' or arr_description[9] == '0':
-                await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
-                dealer = arr_description[8]
-            else:
-                dealer = arr_description[9]
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}{whitespace}' \
-                                f'Дилерская цена: {self.format_text(self.format_price(float(dealer)))}' \
-                                f'{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
+            dealer = await self.get_dealer(arr_description, id_call_back)
+            dealer_price = await self.format_text(self.format_price(dealer))
+            dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
+                                      'Дилерская цена': dealer_price, 'Наличие': amount}
+            text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             dict_hide = {f'{id_item}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
         else:
-            info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                f'Артикул: {self.format_text(arr_description[0])}{whitespace}' \
-                                f'Бренд: {self.format_text(arr_description[1])}{whitespace}' \
-                                f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}{whitespace}' \
-                                f'Наличие: {self.format_text(availability)}{whitespace}'
+            dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
+                                      'Дилерская цена': None, 'Наличие': amount}
+            text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             dict_hide = None
-        description_text = f'{arr_description[4]}{whitespace}' \
-                           f'{arr_description[5]}'
-        if re.sub(r"[^ \w]", '', description_text) == "":
-            description_text = "Нет подробной информации"
-        return arr_description[6], info_nomenclature, description_text, dict_hide
+        description_text = await self.get_description(arr_description)
+        return arr_description['PHOTO_NOMENCLATURE'], text_description_nomenclature, description_text, dict_hide
 
     async def task_next_page(self, call_back: CallbackQuery):
         if await self.next_page(call_back):
@@ -1076,7 +1066,8 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in current_nomenclature.keys():
             pages[page] = page
-        heading = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text + number_page),
+        text_by_format = await self.format_text(text + number_page)
+        heading = await self.bot.push_photo(call_back.message.chat.id, text_by_format,
                                             self.build_keyboard(pages, 5), self.bot.catalog_logo)
         await self.delete_messages(call_back.from_user.id)
         await asyncio.sleep(0.5)
@@ -1097,55 +1088,54 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = self.dict_add[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
+        availability = await self.get_availability(arr_description['AVAILABILITY_NOMENCLATURE'])
+        name = await self.format_text(arr_description['NAME_NOMENCLATURE'])
+        article = await self.format_text(arr_description['ARTICLE'])
+        brand = await self.format_text(arr_description['BRAND'])
+        price = await self.format_text(self.format_price(float(arr_description['PRICE_NOMENCLATURE'])))
+        amount = await self.format_text(str(availability))
         if current_history in self.nomenclatures:
-            info_nomenclature = f'Введите количество, которое нужно добавить в корзину:{whitespace}'
+            text_description_nomenclature = f'Введите количество, которое нужно добавить в корзину:{whitespace}'
             await self.execute.add_element_history(call_back.from_user.id, call_back.data)
         else:
-            availability = self.get_availability(arr_description[7])
+            await self.get_availability(arr_description['AVAILABILITY_NOMENCLATURE'])
             if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-                dealer = self.get_dealer(arr_description[8], arr_description[9])
-                info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                    f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}' \
-                                    f'{whitespace}' \
-                                    f'Дилерская цена: {self.format_text(self.format_price(float(dealer)))}' \
-                                    f'{whitespace}' \
-                                    f'Наличие: {self.format_text(availability)}{whitespace}' \
-                                    f'Введите количество, которое нужно добавить в корзину:{whitespace}'
+                dealer = await self.get_dealer(arr_description, call_back.id)
+                dealer_price = await self.format_text(self.format_price(dealer))
+                dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
+                                          'Дилерская цена': dealer_price, 'Наличие': amount}
+                text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             else:
-                info_nomenclature = f'{self.format_text(arr_description[2])}{whitespace}' \
-                                    f'Цена: {self.format_text(self.format_price(float(arr_description[8])))}' \
-                                    f'{whitespace}' \
-                                    f'Наличие: {self.format_text(availability)}{whitespace}' \
-                                    f'Введите количество, которое нужно добавить в корзину:{whitespace}'
+                dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
+                                          'Дилерская цена': None, 'Наличие': amount}
+                text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
         menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         if call_back.message.caption:
-            await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+            await self.edit_caption(call_back.message, text_description_nomenclature,
+                                    self.build_keyboard(menu_button, 3))
         else:
-            await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+            await self.edit_message(call_back.message, text_description_nomenclature,
+                                    self.build_keyboard(menu_button, 3))
         return True
 
     async def back_add_nomenclature(self, call_back: CallbackQuery):
-        whitespace = '\n'
         id_nomenclature = self.dict_back_add[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
         if current_history in self.dict_add:
-            info_nomenclature = f'{arr_description[4]}{whitespace}' \
-                                f'{arr_description[5]}'
-            if re.sub(r"[^ \w]", '', info_nomenclature) == "":
-                info_nomenclature = "Нет подробной информации"
+            description_text = await self.get_description(arr_description)
             basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
             menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                            'basket': basket[self.arr_auth_user[call_back.from_user.id]['lang']]}
             await self.execute.delete_element_history(call_back.from_user.id, 1)
         else:
-            info_nomenclature = f'{self.format_text(arr_description[2])}'
+            description_text = await self.format_text(arr_description['NAME_NOMENCLATURE'])
             menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                            f'{id_nomenclature}add': 'Добавить ✅🗑️'}
         if call_back.message.caption:
-            await self.edit_caption(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 2))
+            await self.edit_caption(call_back.message, description_text, self.build_keyboard(menu_button, 2))
         else:
-            await self.edit_message(call_back.message, info_nomenclature, self.build_keyboard(menu_button, 3))
+            await self.edit_message(call_back.message, description_text, self.build_keyboard(menu_button, 3))
         return True
 
     async def change_amount(self, call_back: CallbackQuery):
@@ -1155,17 +1145,19 @@ class DispatcherMessage(Dispatcher):
         menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
-            amount = self.get_amount(call_back.message.caption, button)
+            amount = await self.get_amount(call_back.message.caption, button)
         else:
-            amount = self.get_amount(call_back.message.text, button)
+            amount = await self.get_amount(call_back.message.text, button)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = self.get_dealer(arr_description[8], arr_description[9])
+            price = await self.get_dealer(arr_description, call_back.id)
         else:
-            price = arr_description[8]
+            price = arr_description['PRICE_NOMENCLATURE']
         sum_nomenclature = float(amount) * float(price)
+        price_by_format = self.format_price(float(price))
+        sum_nomenclature_by_format = self.format_price(float(sum_nomenclature))
         if call_back.message.caption:
             text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                   f"{amount} шт. х {price_by_format} = {sum_nomenclature_by_format}"
             try:
                 await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
                 return True
@@ -1173,7 +1165,7 @@ class DispatcherMessage(Dispatcher):
                 return True
         else:
             text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                   f"{amount} шт. х {self.format_price(float(price))} = {self.format_price(float(sum_nomenclature))}"
+                   f"{amount} шт. х {price_by_format} = {sum_nomenclature_by_format}"
             try:
                 await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
                 return True
@@ -1186,19 +1178,21 @@ class DispatcherMessage(Dispatcher):
         menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
-            amount = self.get_amount_minus(call_back.message.caption)
+            amount = await self.get_amount_minus(call_back.message.caption)
         else:
-            amount = self.get_amount_minus(call_back.message.text)
+            amount = await self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = self.get_dealer(arr_description[8], arr_description[9])
+            price = await self.get_dealer(arr_description, call_back.id)
         else:
-            price = arr_description[8]
+            price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
+            price_by_format = self.format_price(float(price))
+            sum_nomenclature_by_format = self.format_price(float(sum_nomenclature))
             if call_back.message.caption:
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = " \
-                       f"{self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {price_by_format} = " \
+                       f"{sum_nomenclature_by_format}"
                 try:
                     await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
                     return True
@@ -1206,8 +1200,8 @@ class DispatcherMessage(Dispatcher):
                     return True
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = " \
-                       f"{self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {price_by_format} = " \
+                       f"{sum_nomenclature_by_format}"
                 try:
                     await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
                     return True
@@ -1222,19 +1216,21 @@ class DispatcherMessage(Dispatcher):
         menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
-            amount = self.get_amount_minus(call_back.message.caption)
+            amount = await self.get_amount_minus(call_back.message.caption)
         else:
-            amount = self.get_amount_minus(call_back.message.text)
+            amount = await self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = self.get_dealer(arr_description[8], arr_description[9])
+            price = await self.get_dealer(arr_description, call_back.id)
         else:
-            price = arr_description[8]
+            price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
+            price_by_format = self.format_price(float(price))
+            sum_nomenclature_by_format = self.format_price(float(sum_nomenclature))
             if call_back.message.caption:
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = " \
-                       f"{self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {price_by_format} = " \
+                       f"{sum_nomenclature_by_format}"
                 try:
                     await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
                     return True
@@ -1242,8 +1238,8 @@ class DispatcherMessage(Dispatcher):
                     return True
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = " \
-                       f"{self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {price_by_format} = " \
+                       f"{sum_nomenclature_by_format}"
                 try:
                     await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
                     return True
@@ -1258,19 +1254,21 @@ class DispatcherMessage(Dispatcher):
         menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
-            amount = self.get_amount_delete(call_back.message.caption)
+            amount = await self.get_amount_delete(call_back.message.caption)
         else:
-            amount = self.get_amount_delete(call_back.message.text)
+            amount = await self.get_amount_delete(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = self.get_dealer(arr_description[8], arr_description[9])
+            price = await self.get_dealer(arr_description, call_back.id)
         else:
-            price = arr_description[8]
+            price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
+            price_by_format = self.format_price(float(price))
+            sum_nomenclature_by_format = self.format_price(float(sum_nomenclature))
             if call_back.message.caption:
                 text = f"{call_back.message.caption.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = " \
-                       f"{self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {price_by_format} = " \
+                       f"{sum_nomenclature_by_format}"
                 try:
                     await self.edit_caption(call_back.message, text, self.build_keyboard(menu_button, 3))
                     return True
@@ -1278,8 +1276,8 @@ class DispatcherMessage(Dispatcher):
                     return True
             else:
                 text = f"{call_back.message.text.split(whitespace)[0]}{whitespace}" \
-                       f"{amount} шт. х {self.format_price(float(price))} = " \
-                       f"{self.format_price(float(sum_nomenclature))}"
+                       f"{amount} шт. х {price_by_format} = " \
+                       f"{sum_nomenclature_by_format}"
                 try:
                     await self.edit_message(call_back.message, text, self.build_keyboard(menu_button, 3))
                     return True
@@ -1297,9 +1295,9 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = self.get_dealer(arr_description[8], arr_description[9])
+            price = await self.get_dealer(arr_description, call_back.id)
         else:
-            price = arr_description[8]
+            price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
             sum_nomenclature = float(amount) * float(price)
             check_nomenclature_in_basket = await self.execute.current_nomenclature_basket(call_back.from_user.id,
@@ -1312,7 +1310,7 @@ class DispatcherMessage(Dispatcher):
                 new_sum_nomenclature = sum_nomenclature + float(check_nomenclature_in_basket[3])
                 await self.execute.update_basket_nomenclature(call_back.from_user.id, id_nomenclature,
                                                               float(new_amount), new_sum_nomenclature)
-            text = f"Вы добавили {arr_description[2]} в количестве:{whitespace}" \
+            text = f"Вы добавили {arr_description['NAME_NOMENCLATURE']} в количестве:{whitespace}" \
                    f"{amount} шт. на сумму {self.format_price(float(sum_nomenclature))} в корзину."
             basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
             current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
@@ -1355,23 +1353,52 @@ class DispatcherMessage(Dispatcher):
         return amount
 
     @staticmethod
-    def get_availability(amount: str) -> str:
-        if amount == "0":
+    async def get_text_description(arr_info_nomenclature: dict) -> str:
+        whitespace = '\n'
+        if arr_info_nomenclature['Дилерская цена'] is None:
+            info_nomenclature = f"{arr_info_nomenclature['Наименование']}{whitespace}" \
+                                f"Артикул: {arr_info_nomenclature['Артикул']}{whitespace}" \
+                                f"Бренд: {arr_info_nomenclature['Бренд']}{whitespace}" \
+                                f"Цена: {arr_info_nomenclature['Цена']}{whitespace}" \
+                                f"Дилерская цена: {arr_info_nomenclature['Дилерская цена']}{whitespace}" \
+                                f"Наличие: {arr_info_nomenclature['Наличие']}{whitespace}"
+        else:
+            info_nomenclature = f"{arr_info_nomenclature['Наименование']}{whitespace}" \
+                                f"Артикул: {arr_info_nomenclature['Артикул']}{whitespace}" \
+                                f"Бренд: {arr_info_nomenclature['Бренд']}{whitespace}" \
+                                f"Цена: {arr_info_nomenclature['Цена']}{whitespace}" \
+                                f"Наличие: {arr_info_nomenclature['Наличие']}{whitespace}"
+        return info_nomenclature
+
+    @staticmethod
+    async def get_availability(amount: float) -> str:
+        if int(amount) == 0:
             availability = "Нет на складе"
         else:
-            availability = amount
+            availability = str(int(amount))
         return availability
 
-    @staticmethod
-    def get_dealer(price: str, dealer: str) -> str:
-        if any([dealer is None, dealer == '', dealer == '0']):
-            value = price
+    async def get_dealer(self, info_nomenclature: dict, id_call_back: str) -> float:
+        if info_nomenclature['DEALER_NOMENCLATURE'] is None or \
+                info_nomenclature['DEALER_NOMENCLATURE'] == '' or \
+                int(info_nomenclature['DEALER_NOMENCLATURE']) == 0:
+            await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
+            dealer = info_nomenclature['PRICE_NOMENCLATURE']
         else:
-            value = dealer
-        return value
+            dealer = info_nomenclature['DEALER_NOMENCLATURE']
+        return dealer
 
     @staticmethod
-    def get_amount(text_message: str, button: str) -> str:
+    async def get_description(info_nomenclature: dict) -> str:
+        whitespace = '\n'
+        description_text = f"{info_nomenclature['DESCRIPTION_NOMENCLATURE']}{whitespace}" \
+                           f"{info_nomenclature['SPECIFICATION_NOMENCLATURE']}"
+        if re.sub(r"[^ \w]", '', description_text) == "":
+            description_text = "Нет подробной информации"
+        return description_text
+
+    @staticmethod
+    async def get_amount(text_message: str, button: str) -> str:
         whitespace = '\n'
         arr_string = text_message.split(whitespace)
         if len(arr_string) == 2:
@@ -1383,7 +1410,7 @@ class DispatcherMessage(Dispatcher):
         return amount
 
     @staticmethod
-    def get_amount_minus(text_message: str):
+    async def get_amount_minus(text_message: str):
         whitespace = '\n'
         arr_string = text_message.split(whitespace)
         if len(arr_string) == 2:
@@ -1397,7 +1424,7 @@ class DispatcherMessage(Dispatcher):
         return amount
 
     @staticmethod
-    def get_amount_plus(text_message: str):
+    async def get_amount_plus(text_message: str):
         whitespace = '\n'
         arr_string = text_message.split(whitespace)
         if len(arr_string) == 2:
@@ -1411,7 +1438,7 @@ class DispatcherMessage(Dispatcher):
         return amount
 
     @staticmethod
-    def get_amount_delete(text_message: str):
+    async def get_amount_delete(text_message: str):
         whitespace = '\n'
         arr_string = text_message.split(whitespace)
         if len(arr_string) == 2:
@@ -1458,7 +1485,8 @@ class DispatcherMessage(Dispatcher):
             if current_basket_dict is None:
                 text = 'Ваша корзина пуста 😭😔💔'
                 menu_button = {'back': '◀ 👈 Назад'}
-                answer = await self.bot.push_photo(call_back.message.chat.id, self.format_text(text),
+                text_by_format = await self.format_text(text)
+                answer = await self.bot.push_photo(call_back.message.chat.id, text_by_format,
                                                    self.build_keyboard(menu_button, 1), self.bot.basket_logo)
                 await self.delete_messages(call_back.from_user.id)
                 await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
@@ -1467,26 +1495,30 @@ class DispatcherMessage(Dispatcher):
                 for page in current_basket_dict.keys():
                     pages[page] = page
                 sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
+                sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
                 text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
-                       f"{self.format_text(self.format_price(float(sum_basket)))}:"
+                       f"{sum_basket_by_format}:"
                 menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                'choice_delivery': 'Оформить заказ 📧📦📲'}
                 if call_back.message.caption:
+                    number_page_by_format = await self.format_text(number_page)
                     if "Сейчас в Вашу корзину добавлены товары на общую сумму " in call_back.message.caption:
+
                         heading = await self.edit_caption_by_basket(call_back.message,
-                                                                    text + self.format_text(number_page),
+                                                                    text + number_page_by_format,
                                                                     self.build_keyboard(pages, 3, menu_button))
                         await self.delete_messages(call_back.from_user.id, heading.message_id)
                         arr_answers = []
                     else:
                         heading = await self.bot.push_photo(call_back.message.chat.id,
-                                                            text + self.format_text(number_page),
+                                                            text + number_page_by_format,
                                                             self.build_keyboard(pages, 3, menu_button),
                                                             self.bot.basket_logo)
                         await self.delete_messages(call_back.from_user.id)
                         arr_answers = [str(heading.message_id)]
                 else:
-                    heading = await self.bot.push_photo(call_back.message.chat.id, text + self.format_text(number_page),
+                    number_page_by_format = await self.format_text(number_page)
+                    heading = await self.bot.push_photo(call_back.message.chat.id, text + number_page_by_format,
                                                         self.build_keyboard(pages, 3, menu_button),
                                                         self.bot.basket_logo)
                     await self.delete_messages(call_back.from_user.id)
@@ -1494,9 +1526,11 @@ class DispatcherMessage(Dispatcher):
                 if f'Корзина_Стр.{number}' not in current_basket_dict.keys():
                     number = '1'
                 for key, item in current_basket_dict[f'Корзина_Стр.{number}'].items():
-                    name = await self.execute.current_description(key)
-                    text = f"{name[2]}:{whitespace}{self.format_text(str(int(item[0])))} шт. на сумму " \
-                           f"{self.format_text(self.format_price(float(item[1])))}"
+                    arr_description = await self.execute.current_description(key)
+                    amount_by_format = await self.format_text(str(int(item[0])))
+                    sum_by_format = await self.format_text(self.format_price(float(item[1])))
+                    text = f"{arr_description['NAME_NOMENCLATURE']}:{whitespace}{amount_by_format} шт. на сумму " \
+                           f"{sum_by_format}"
                     menu_button = {f'{key}basket_minus': '➖', f'{key}basket_plus': '➕', key: 'Подробнее 👀📸'}
                     answer = await self.answer_message_by_basket(heading, text, self.build_keyboard(menu_button, 2))
                     arr_answers.append(str(answer.message_id))
@@ -1509,7 +1543,8 @@ class DispatcherMessage(Dispatcher):
         if current_basket_dict is None:
             text = 'Ваша корзина пуста 😭😔💔'
             menu_button = {'back': '◀ 👈 Назад'}
-            answer = await self.bot.push_photo(message.chat.id, self.format_text(text),
+            text_by_basket = await self.format_text(text)
+            answer = await self.bot.push_photo(message.chat.id, text_by_basket,
                                                self.build_keyboard(menu_button, 1), self.bot.basket_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
@@ -1519,20 +1554,23 @@ class DispatcherMessage(Dispatcher):
             for page in current_basket_dict.keys():
                 pages[page] = page
             sum_basket = await self.execute.current_sum_basket(id_user)
-            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
-                   f"{self.format_text(self.format_price(float(sum_basket)))}:"
+            sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
+            text = f"Сейчас в Вашу корзину добавлены товары на общую сумму {sum_basket_by_format}:"
             menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                            'choice_delivery': 'Оформить заказ 📧📦📲'}
-            heading = await self.bot.push_photo(message.chat.id, text + self.format_text(number_page),
+            number_page_by_format = await self.format_text(number_page)
+            heading = await self.bot.push_photo(message.chat.id, text + number_page_by_format,
                                                 self.build_keyboard(pages, 3, menu_button), self.bot.basket_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
             await self.execute.add_element_message(message.from_user.id, heading.message_id)
             arr_answers = []
             for key, item in current_basket_dict['Корзина_Стр.1'].items():
-                name = await self.execute.current_description(key)
-                text = f"{name[2]}:{whitespace}{self.format_text(str(int(item[0])))} шт. на сумму " \
-                       f"{self.format_text(self.format_price(float(item[1])))}"
+                arr_description = await self.execute.current_description(key)
+                amount_by_format = await self.format_text(str(int(item[0])))
+                sum_by_format = await self.format_text(self.format_price(float(item[1])))
+                text = f"{arr_description['NAME_NOMENCLATURE']}:{whitespace}{amount_by_format} шт. на сумму " \
+                       f"{sum_by_format}"
                 menu_button = {f'{key}basket_minus': '➖', f'{key}basket_plus': '➕', key: 'Подробнее 👀📸'}
                 answer = await self.answer_message_by_basket(heading, text, self.build_keyboard(menu_button, 2))
                 arr_answers.append(str(answer.message_id))
@@ -1576,9 +1614,11 @@ class DispatcherMessage(Dispatcher):
                                                               self.button_basket_minus[call_back.data],
                                                               new_amount,
                                                               new_sum)
-                name = await self.execute.current_description(self.button_basket_minus[call_back.data])
-                text = f"{name[2]}:{whitespace}{self.format_text(str(int(new_amount)))} шт. на сумму " \
-                       f"{self.format_text(self.format_price(float(new_sum)))}"
+                arr_description = await self.execute.current_description(self.button_basket_minus[call_back.data])
+                amount_by_format = await self.format_text(str(int(new_amount)))
+                sum_by_format = await self.format_text(self.format_price(float(new_sum)))
+                text = f"{arr_description['NAME_NOMENCLATURE']}:{whitespace}{amount_by_format} шт. на сумму " \
+                       f"{sum_by_format}"
                 menu_button = {f'{self.button_basket_minus[call_back.data]}basket_minus': '➖',
                                f'{self.button_basket_minus[call_back.data]}basket_plus': '➕',
                                self.button_basket_minus[call_back.data]: 'Подробнее 👀📸'}
@@ -1588,12 +1628,14 @@ class DispatcherMessage(Dispatcher):
                 for page in current_basket_dict.keys():
                     pages[page] = page
                 sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
+                sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
                 head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
-                            f"{self.format_text(self.format_price(float(sum_basket)))}:"
+                            f"{sum_basket_by_format}:"
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                await self.bot.edit_head_caption_by_basket(head_text + self.format_text(number_page_basket),
+                number_page_basket_by_format = await self.format_text(number_page_basket)
+                await self.bot.edit_head_caption_by_basket(head_text + number_page_basket_by_format,
                                                            call_back.message.chat.id, arr_messages[0],
                                                            self.build_keyboard(pages, 3, head_menu_button))
                 return number_page
@@ -1606,7 +1648,8 @@ class DispatcherMessage(Dispatcher):
                     head_text = 'Ваша корзина пуста 😭😔💔'
                     head_menu_button = {'back': '◀ 👈 Назад'}
                     arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                    await self.bot.edit_head_caption_by_basket(self.format_text(head_text),
+                    head_text_by_format = await self.format_text(head_text)
+                    await self.bot.edit_head_caption_by_basket(head_text_by_format,
                                                                call_back.message.chat.id,
                                                                arr_messages[0],
                                                                self.build_keyboard(head_menu_button, 1))
@@ -1617,8 +1660,9 @@ class DispatcherMessage(Dispatcher):
                     for page in current_basket_dict.keys():
                         pages[page] = page
                     sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
+                    sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
                     head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
-                                f"{self.format_text(self.format_price(float(sum_basket)))}:"
+                                f"{sum_basket_by_format}:"
                     head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                         'choice_delivery': 'Оформить заказ 📧📦📲'}
                     arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
@@ -1627,17 +1671,20 @@ class DispatcherMessage(Dispatcher):
                     else:
                         new_number = number
                     number_page_basket = f'{whitespace}Страница №{str(new_number)}'
+                    number_page_basket_by_format = await self.format_text(number_page_basket)
                     heading = await self.bot.edit_head_caption_by_basket(head_text +
-                                                                         self.format_text(number_page_basket),
+                                                                         number_page_basket_by_format,
                                                                          call_back.message.chat.id, arr_messages[0],
                                                                          self.build_keyboard(pages, 3,
                                                                                              head_menu_button))
                     await self.delete_messages(call_back.from_user.id, heading.message_id)
                     arr_answers = []
                     for key, item in current_basket_dict[f'Корзина_Стр.{str(new_number)}'].items():
-                        name = await self.execute.current_description(key)
-                        text = f"{name[2]}:{whitespace}{self.format_text(str(int(item[0])))} шт. на сумму " \
-                               f"{self.format_text(self.format_price(float(item[1])))}"
+                        arr_description = await self.execute.current_description(key)
+                        amount_by_format = await self.format_text(str(int(item[0])))
+                        sum_by_format = await self.format_text(self.format_price(float(item[1])))
+                        text = f"{arr_description['NAME_NOMENCLATURE']}:{whitespace}{amount_by_format} шт. на сумму " \
+                               f"{sum_by_format}"
                         menu_button = {f'{key}basket_minus': '➖', f'{key}basket_plus': '➕', key: 'Подробнее 👀📸'}
                         answer = await self.answer_message_by_basket(heading, text, self.build_keyboard(menu_button, 2))
                         arr_answers.append(str(answer.message_id))
@@ -1667,8 +1714,9 @@ class DispatcherMessage(Dispatcher):
             current_amount = current_nomenclature[2]
             current_sum = current_nomenclature[3]
             price = float(current_sum / current_amount)
-            availability = await self.execute.current_description(self.button_basket_plus[call_back.data])
-            if str(int(current_amount)) == availability[7] or availability[7] == "Нет на складе":
+            arr_description = await self.execute.current_description(self.button_basket_plus[call_back.data])
+            if str(int(current_amount)) == arr_description['AVAILABILITY_NOMENCLATURE'] or \
+                    arr_description['AVAILABILITY_NOMENCLATURE'] == "Нет на складе":
                 await self.bot.alert_message(call_back.id, 'Нельзя добавить товара больше, чем есть на остатках!')
             else:
                 new_amount = current_amount + 1
@@ -1677,9 +1725,10 @@ class DispatcherMessage(Dispatcher):
                                                               self.button_basket_plus[call_back.data],
                                                               new_amount,
                                                               new_sum)
-                name = await self.execute.current_description(self.button_basket_plus[call_back.data])
-                text = f"{name[2]}:{whitespace}{self.format_text(str(int(new_amount)))} шт. на сумму " \
-                       f"{self.format_text(self.format_price(float(new_sum)))}"
+                amount_by_format = await self.format_text(str(int(new_amount)))
+                sum_by_format = await self.format_text(self.format_price(float(new_sum)))
+                text = f"{arr_description['NAME_NOMENCLATURE']}:{whitespace}{amount_by_format} шт. на сумму " \
+                       f"{sum_by_format}"
                 menu_button = {f'{self.button_basket_plus[call_back.data]}basket_minus': '➖',
                                f'{self.button_basket_plus[call_back.data]}basket_plus': '➕',
                                self.button_basket_plus[call_back.data]: 'Подробнее 👀📸'}
@@ -1689,12 +1738,14 @@ class DispatcherMessage(Dispatcher):
                 for page in current_basket_dict.keys():
                     pages[page] = page
                 sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
+                sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
                 head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
-                            f"{self.format_text(self.format_price(float(sum_basket)))}:"
+                            f"{sum_basket_by_format}:"
                 head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
                                     'choice_delivery': 'Оформить заказ 📧📦📲'}
                 arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                await self.bot.edit_head_caption_by_basket(head_text + self.format_text(number_page_basket),
+                number_page_basket_by_format = await self.format_text(number_page_basket)
+                await self.bot.edit_head_caption_by_basket(head_text + number_page_basket_by_format,
                                                            call_back.message.chat.id, arr_messages[0],
                                                            self.build_keyboard(pages, 3, head_menu_button))
             return number_page
@@ -1818,7 +1869,8 @@ class DispatcherMessage(Dispatcher):
     async def find_nothing(self, id_user: int, message: Message):
         await self.execute.add_element_message(id_user, message.message_id)
         menu_button = {'back': '◀ 👈 Назад'}
-        answer = await self.bot.push_photo(message.chat.id, self.format_text("Сожалеем, но ничего не найдено."),
+        text_by_format = await self.format_text("Сожалеем, но ничего не найдено.")
+        answer = await self.bot.push_photo(message.chat.id, text_by_format,
                                            self.build_keyboard(menu_button, 1), self.bot.search_logo)
         await self.delete_messages(id_user)
         await self.execute.add_element_message(id_user, answer.message_id)
@@ -1829,7 +1881,8 @@ class DispatcherMessage(Dispatcher):
         pages = {}
         for page in result_search.keys():
             pages[page] = page
-        heading = await self.bot.push_photo(message.chat.id, self.format_text(f"Результаты поиска:{number_page}"),
+        text_result_by_format = await self.format_text(f"Результаты поиска:{number_page}")
+        heading = await self.bot.push_photo(message.chat.id, text_result_by_format,
                                             self.build_keyboard(pages, 3), self.bot.search_logo)
         await self.delete_messages(id_user)
         arr_answers = [str(heading.message_id)]
@@ -1859,23 +1912,23 @@ class DispatcherMessage(Dispatcher):
                 pages[page] = page
             if call_back.message.caption:
                 if "Результаты поиска:" in call_back.message.caption:
-                    heading = await self.edit_caption_by_basket(call_back.message,
-                                                                f"{call_back.message.caption.split('№')[0]}"
-                                                                f"№{self.pages_search[call_back.data]}",
+                    text_result_by_format = await self.format_text(f"{call_back.message.caption.split('№')[0]}"
+                                                                   f"№{self.pages_search[call_back.data]}")
+                    heading = await self.edit_caption_by_basket(call_back.message, text_result_by_format,
                                                                 self.build_keyboard(pages, 3))
                     await self.delete_messages(call_back.from_user.id, heading.message_id)
                     arr_answers = []
                 else:
-                    heading = await self.bot.push_photo(call_back.message.chat.id,
-                                                        f"{call_back.message.caption.split('№')[0]}"
-                                                        f"№{self.pages_search[call_back.data]}",
+                    text_result_by_format = await self.format_text(f"{call_back.message.caption.split('№')[0]}"
+                                                                   f"№{self.pages_search[call_back.data]}")
+                    heading = await self.bot.push_photo(call_back.message.chat.id, text_result_by_format,
                                                         self.build_keyboard(pages, 3), self.bot.search_logo)
                     await self.delete_messages(call_back.from_user.id)
                     arr_answers = [str(heading.message_id)]
             else:
-                heading = await self.bot.push_photo(call_back.message.chat.id,
-                                                    f"{call_back.message.caption.split('№')[0]}"
-                                                    f"№{self.pages_search[call_back.data]}",
+                text_result_by_format = await self.format_text(f"{call_back.message.caption.split('№')[0]}"
+                                                               f"№{self.pages_search[call_back.data]}")
+                heading = await self.bot.push_photo(call_back.message.chat.id, text_result_by_format,
                                                     self.build_keyboard(pages, 3), self.bot.search_logo)
                 await self.delete_messages(call_back.from_user.id)
                 arr_answers = [str(heading.message_id)]
@@ -1897,20 +1950,23 @@ class DispatcherMessage(Dispatcher):
             pages[page] = page
         if call_back.message.caption:
             if "Результаты поиска:" in call_back.message.caption:
+                number_page_by_format = await self.format_text(f"Результаты поиска:{number_page}")
                 heading = await self.edit_caption_by_basket(call_back.message,
-                                                            self.format_text(f"Результаты поиска:{number_page}"),
+                                                            number_page_by_format,
                                                             self.build_keyboard(pages, 3))
                 await self.delete_messages(call_back.from_user.id, heading.message_id)
                 arr_answers = []
             else:
+                number_page_by_format = await self.format_text(f"Результаты поиска:{number_page}")
                 heading = await self.bot.push_photo(call_back.message.chat.id,
-                                                    self.format_text(f"Результаты поиска:{number_page}"),
+                                                    number_page_by_format,
                                                     self.build_keyboard(pages, 3), self.bot.search_logo)
                 await self.delete_messages(call_back.from_user.id)
                 arr_answers = [str(heading.message_id)]
         else:
+            number_page_by_format = await self.format_text(f"Результаты поиска:{number_page}")
             heading = await self.bot.push_photo(call_back.message.chat.id,
-                                                self.format_text(f"Результаты поиска:{number_page}"),
+                                                number_page_by_format,
                                                 self.build_keyboard(pages, 3), self.bot.search_logo)
             await self.delete_messages(call_back.from_user.id)
             arr_answers = [str(heading.message_id)]
@@ -2093,24 +2149,32 @@ class DispatcherMessage(Dispatcher):
         head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                             'post': 'Отправить заказ 📫'}
         button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
+        message_text = 'Заполните реквизиты для отправки заказа!'
+        message_text_by_format = await self.format_text(message_text)
+        shipping_method_by_format = await self.format_text(info_order[6])
+        kind_pickup_by_format = await self.format_text(self.kind_pickup[kind_pickup])
+        inn_by_format = await self.format_text(info_order[10])
+        name_by_format = await self.format_text(info_order[11])
+        email_by_format = await self.format_text(info_order[12])
+        phone_by_format = await self.format_text(info_order[13])
+        comment_by_format = await self.format_text(string_messages)
         if info_order[10] == '':
-            message_text = 'Заполните реквизиты для отправки заказа!'
-            head_text = f"{self.format_text(message_text)}{whitespace}" \
-                        f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
-                        f"TK или пункт самовывоза: {self.format_text(self.kind_pickup[kind_pickup])}{whitespace}" \
-                        f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
-                        f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
-                        f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
-                        f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
-                        f"Комментарий: {self.format_text(string_messages)}"
+            head_text = f"{message_text_by_format}{whitespace}" \
+                        f"Способ доставки: {shipping_method_by_format}{whitespace}" \
+                        f"TK или пункт самовывоза: {kind_pickup_by_format}{whitespace}" \
+                        f"ИНН: {inn_by_format}{whitespace}" \
+                        f"ФИО или наименование компании: {name_by_format}{whitespace}" \
+                        f"E-mail: {email_by_format}{whitespace}" \
+                        f"Телефон: {phone_by_format}{whitespace}" \
+                        f"Комментарий: {comment_by_format}"
         else:
-            head_text = f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
-                        f"TK или пункт самовывоза: {self.format_text(self.kind_pickup[kind_pickup])}{whitespace}" \
-                        f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
-                        f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
-                        f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
-                        f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
-                        f"Комментарий: {self.format_text(string_messages)}"
+            head_text = f"Способ доставки: {shipping_method_by_format}{whitespace}" \
+                        f"TK или пункт самовывоза: {kind_pickup_by_format}{whitespace}" \
+                        f"ИНН: {inn_by_format}{whitespace}" \
+                        f"ФИО или наименование компании: {name_by_format}{whitespace}" \
+                        f"E-mail: {email_by_format}{whitespace}" \
+                        f"Телефон: {phone_by_format}{whitespace}" \
+                        f"Комментарий: {comment_by_format}"
         if call_back.message.caption:
             answer = await self.answer_message_by_basket(call_back.message, head_text,
                                                          self.build_keyboard(head_menu_button, 2,
@@ -2136,15 +2200,22 @@ class DispatcherMessage(Dispatcher):
                                 f'delete_record{contact[0]}': 'Удалить запись 🗑️',
                                 f'nested{contact[0]}': f'Вложения 🗃️ ({str(amount_content)})',
                                 'back': '◀ 👈 Назад'}
-                text_contact = f"Способ доставки: {self.format_text(contact[1])}{whitespace}" \
-                               f"TK или пункт самовывоза: {self.format_text(contact[2])}" \
+                shipping_method_by_format = await self.format_text(contact[1])
+                kind_pickup_by_format = await self.format_text(contact[2])
+                inn_by_format = await self.format_text(contact[5])
+                name_by_format = await self.format_text(contact[6])
+                email_by_format = await self.format_text(contact[7])
+                phone_by_format = await self.format_text(contact[8])
+                comment_by_format = await self.format_text(string_messages)
+                text_contact = f"Способ доставки: {shipping_method_by_format}{whitespace}" \
+                               f"TK или пункт самовывоза: {kind_pickup_by_format}" \
                                f"{whitespace}" \
-                               f"ИНН: {self.format_text(contact[5])}{whitespace}" \
-                               f"ФИО или наименование компании: {self.format_text(contact[6])}" \
+                               f"ИНН: {inn_by_format}{whitespace}" \
+                               f"ФИО или наименование компании: {name_by_format}" \
                                f"{whitespace}" \
-                               f"E-mail: {self.format_text(contact[7])}{whitespace}" \
-                               f"Телефон: {self.format_text(contact[8])}{whitespace}" \
-                               f"Комментарий: {self.format_text(string_messages)}"
+                               f"E-mail: {email_by_format}{whitespace}" \
+                               f"Телефон: {phone_by_format}{whitespace}" \
+                               f"Комментарий: {comment_by_format}"
                 answer_contact = await self.answer_message_by_basket(answer, text_contact,
                                                                      self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
@@ -2171,24 +2242,32 @@ class DispatcherMessage(Dispatcher):
         head_menu_button = {'back': '◀ 👈 Назад', 'new_attachments': f'Вложения 🗃️ ({str(amount_content)})',
                             'post': 'Отправить заказ 📫'}
         button_fill_details = {'fill_details': 'Заполнить реквизиты 📝'}
+        message_text = 'Заполните реквизиты для отправки заказа!'
+        message_text_by_format = await self.format_text(message_text)
+        shipping_method_by_format = await self.format_text(info_order[6])
+        kind_pickup_by_format = await self.format_text(self.kind_delivery[kind_delivery])
+        inn_by_format = await self.format_text(info_order[10])
+        name_by_format = await self.format_text(info_order[11])
+        email_by_format = await self.format_text(info_order[12])
+        phone_by_format = await self.format_text(info_order[13])
+        comment_by_format = await self.format_text(string_messages)
         if info_order[10] == '':
-            message_text = 'Заполните реквизиты для отправки заказа!'
-            head_text = f"{self.format_text(message_text)}{whitespace}" \
-                        f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
-                        f"TK или пункт самовывоза: {self.format_text(self.kind_delivery[kind_delivery])}{whitespace}" \
-                        f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
-                        f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
-                        f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
-                        f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
-                        f"Комментарий: {self.format_text(string_messages)}"
+            head_text = f"{message_text_by_format}{whitespace}" \
+                        f"Способ доставки: {shipping_method_by_format}{whitespace}" \
+                        f"TK или пункт самовывоза: {kind_pickup_by_format}{whitespace}" \
+                        f"ИНН: {inn_by_format}{whitespace}" \
+                        f"ФИО или наименование компании: {name_by_format}{whitespace}" \
+                        f"E-mail: {email_by_format}{whitespace}" \
+                        f"Телефон: {phone_by_format}{whitespace}" \
+                        f"Комментарий: {comment_by_format}"
         else:
-            head_text = f"Способ доставки: {self.format_text(info_order[6])}{whitespace}" \
-                        f"TK или пункт самовывоза: {self.format_text(self.kind_delivery[kind_delivery])}{whitespace}" \
-                        f"ИНН: {self.format_text(info_order[10])}{whitespace}" \
-                        f"ФИО или наименование компании: {self.format_text(info_order[11])}{whitespace}" \
-                        f"E-mail: {self.format_text(info_order[12])}{whitespace}" \
-                        f"Телефон: {self.format_text(info_order[13])}{whitespace}" \
-                        f"Комментарий: {self.format_text(string_messages)}"
+            head_text = f"Способ доставки: {shipping_method_by_format}{whitespace}" \
+                        f"TK или пункт самовывоза: {kind_pickup_by_format}{whitespace}" \
+                        f"ИНН: {inn_by_format}{whitespace}" \
+                        f"ФИО или наименование компании: {name_by_format}{whitespace}" \
+                        f"E-mail: {email_by_format}{whitespace}" \
+                        f"Телефон: {phone_by_format}{whitespace}" \
+                        f"Комментарий: {comment_by_format}"
         if call_back.message.caption:
             answer = await self.answer_message_by_basket(call_back.message, head_text,
                                                          self.build_keyboard(head_menu_button, 2,
@@ -2214,15 +2293,22 @@ class DispatcherMessage(Dispatcher):
                                 f'delete_record{contact[0]}': 'Удалить запись 🗑️',
                                 f'nested{contact[0]}': f'Вложения 🗃️ ({str(amount_content)})',
                                 'back': '◀ 👈 Назад'}
-                text_contact = f"Способ доставки: {self.format_text(contact[1])}{whitespace}" \
-                               f"TK или пункт самовывоза: {self.format_text(contact[2])}" \
+                shipping_method_by_format = await self.format_text(contact[1])
+                kind_pickup_by_format = await self.format_text(contact[2])
+                inn_by_format = await self.format_text(contact[5])
+                name_by_format = await self.format_text(contact[6])
+                email_by_format = await self.format_text(contact[7])
+                phone_by_format = await self.format_text(contact[8])
+                comment_by_format = await self.format_text(string_messages)
+                text_contact = f"Способ доставки: {shipping_method_by_format}{whitespace}" \
+                               f"TK или пункт самовывоза: {kind_pickup_by_format}" \
                                f"{whitespace}" \
-                               f"ИНН: {self.format_text(contact[5])}{whitespace}" \
-                               f"ФИО или наименование компании: {self.format_text(contact[6])}" \
+                               f"ИНН: {inn_by_format}{whitespace}" \
+                               f"ФИО или наименование компании: {name_by_format}" \
                                f"{whitespace}" \
-                               f"E-mail: {self.format_text(contact[7])}{whitespace}" \
-                               f"Телефон: {self.format_text(contact[8])}{whitespace}" \
-                               f"Комментарий: {self.format_text(string_messages)}"
+                               f"E-mail: {email_by_format}{whitespace}" \
+                               f"Телефон: {phone_by_format}{whitespace}" \
+                               f"Комментарий: {comment_by_format}"
                 answer_contact = await self.answer_message_by_basket(answer, text_contact,
                                                                      self.build_keyboard(menu_contact, 1))
                 arr_answers.append(str(answer_contact.message_id))
@@ -2373,7 +2459,8 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад'}
             text = 'Вложенные файлы.\n' \
                    'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
-            answer_return = await self.answer_message(call_back.message, self.format_text(text),
+            text_by_format = await self.format_text(text)
+            answer_return = await self.answer_message(call_back.message, text_by_format,
                                                       self.build_keyboard(menu_button, 1))
             arr_message.append(str(answer_return.message_id))
             await self.delete_messages(call_back.from_user.id)
@@ -2416,7 +2503,8 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад'}
             text = 'Вложенные файлы.\n' \
                    'Нажмите на кнопку ниже, чтобы вернуться к отправке заказа!'
-            answer_return = await self.answer_message(call_back.message, self.format_text(text),
+            text_by_format = await self.format_text(text)
+            answer_return = await self.answer_message(call_back.message, text_by_format,
                                                       self.build_keyboard(menu_button, 1))
             arr_message.append(str(answer_return.message_id))
             await self.delete_messages(call_back.from_user.id)
@@ -3112,25 +3200,29 @@ class DispatcherMessage(Dispatcher):
         return number_order, filepath
 
     async def answer_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
-        return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        text_by_format = await self.format_text(text)
+        return await message.answer(text=text_by_format, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     @staticmethod
     async def answer_message_by_basket(message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.answer(text=text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def edit_message(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
-        return await message.edit_text(text=self.format_text(text), parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        text_by_format = await self.format_text(text)
+        return await message.edit_text(text=text_by_format, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     @staticmethod
     async def edit_message_by_basket(message: Message, text: str, keyboard: InlineKeyboardMarkup):
         return await message.edit_text(text=text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
     async def answer_text(self, message: Message, text: str):
-        return await message.answer(text=self.format_text(text), parse_mode=ParseMode.HTML,
+        text_by_format = await self.format_text(text)
+        return await message.answer(text=text_by_format, parse_mode=ParseMode.HTML,
                                     reply_to_message_id=message.message_id)
 
     async def edit_caption(self, message: Message, text: str, keyboard: InlineKeyboardMarkup):
-        return await message.edit_caption(caption=self.format_text(text), parse_mode=ParseMode.HTML,
+        text_by_format = await self.format_text(text)
+        return await message.edit_caption(caption=text_by_format, parse_mode=ParseMode.HTML,
                                           reply_markup=keyboard)
 
     @staticmethod
@@ -3139,11 +3231,13 @@ class DispatcherMessage(Dispatcher):
 
     async def answer_photo(self, message: Message, photo: str, caption: str, keyboard: InlineKeyboardMarkup):
         try:
-            return await message.answer_photo(photo=photo, caption=self.format_text(caption), parse_mode=ParseMode.HTML,
+            text_by_format = await self.format_text(caption)
+            return await message.answer_photo(photo=photo, caption=text_by_format, parse_mode=ParseMode.HTML,
                                               reply_markup=keyboard)
         except TelegramBadRequest:
             photo = "https://www.rossvik.moscow/images/no_foto.png"
-            return await message.answer_photo(photo=photo, caption=self.format_text(caption), parse_mode=ParseMode.HTML,
+            text_by_format = await self.format_text(caption)
+            return await message.answer_photo(photo=photo, caption=text_by_format, parse_mode=ParseMode.HTML,
                                               reply_markup=keyboard)
 
     async def send_photo(self, message: Message, photo: str, text: str, amount_photo: int):
@@ -3306,7 +3400,7 @@ class DispatcherMessage(Dispatcher):
         return menu
 
     @staticmethod
-    def format_text(text_message: str) -> str:
+    async def format_text(text_message: str) -> str:
         cleaner = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
         clean_text = re.sub(cleaner, '', text_message)
         return f'<b>{clean_text}</b>'

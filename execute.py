@@ -497,14 +497,14 @@ class Execute:
             row_table = await cursor.fetchall()
             return self.assembling_nomenclatures(row_table)
 
-    async def current_description(self, kod_nomenclature: str):
+    async def current_description(self, kod_nomenclature: str) -> dict:
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
                 return await self.execute_current_description(kod_nomenclature)
         except Exception as e:
             await send_message('Ошибка запроса в методе current_description', os.environ["EMAIL"], str(e))
 
-    async def execute_current_description(self, kod_nomenclature: str):
+    async def execute_current_description(self, kod_nomenclature: str) -> dict:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_nomenclature = f"SELECT ARTICLE, BRAND, NAME_NOMENCLATURE, DISCOUNT_NOMENCLATURE, " \
                                f"DESCRIPTION_NOMENCLATURE, SPECIFICATION_NOMENCLATURE, PHOTO_NOMENCLATURE, " \
@@ -514,7 +514,12 @@ class Execute:
                                f"WHERE ID = '{kod_nomenclature}' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchone()
-            return row_table
+            dict_nomenclature = {'ARTICLE': row_table[0], 'BRAND': row_table[1], 'NAME_NOMENCLATURE': row_table[2],
+                                 'DISCOUNT_NOMENCLATURE': row_table[3], 'DESCRIPTION_NOMENCLATURE': row_table[4],
+                                 'SPECIFICATION_NOMENCLATURE': row_table[5], 'PHOTO_NOMENCLATURE': row_table[6],
+                                 'AVAILABILITY_NOMENCLATURE': row_table[7], 'PRICE_NOMENCLATURE': row_table[8],
+                                 'DEALER_NOMENCLATURE': row_table[9], 'DISTRIBUTOR_NOMENCLATURE': row_table[10]}
+            return dict_nomenclature
 
     async def search_in_base_article(self, search_text: str):
         try:

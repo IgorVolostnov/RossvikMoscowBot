@@ -1007,11 +1007,11 @@ class DispatcherMessage(Dispatcher):
     async def description_nomenclature(self, id_item: str, id_user: int, id_call_back: str):
         arr_description = await self.execute.current_description(id_item)
         availability = await self.get_availability(arr_description['AVAILABILITY_NOMENCLATURE'])
+        amount = await self.format_text(str(availability))
         name = await self.format_text(arr_description['NAME_NOMENCLATURE'])
         article = await self.format_text(arr_description['ARTICLE'])
         brand = await self.format_text(arr_description['BRAND'])
         price = await self.format_text(self.format_price(float(arr_description['PRICE_NOMENCLATURE'])))
-        amount = await self.format_text(str(availability))
         if self.arr_auth_user[id_user]['status'] == 'dealer':
             dealer = await self.get_dealer(arr_description, id_call_back)
             dealer_price = await self.format_text(self.format_price(dealer))
@@ -1122,6 +1122,10 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = self.dict_back_add[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
+        if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+            dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
+        else:
+            dict_hide = None
         if current_history in self.dict_add:
             description_text = await self.get_description(arr_description)
             basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
@@ -1133,9 +1137,9 @@ class DispatcherMessage(Dispatcher):
             menu_button = {'back': '◀ 👈 Назад', id_nomenclature: 'Подробнее 👀📸',
                            f'{id_nomenclature}add': 'Добавить ✅🗑️'}
         if call_back.message.caption:
-            await self.edit_caption(call_back.message, description_text, self.build_keyboard(menu_button, 2))
+            await self.edit_caption(call_back.message, description_text, self.build_keyboard(menu_button, 2, dict_hide))
         else:
-            await self.edit_message(call_back.message, description_text, self.build_keyboard(menu_button, 3))
+            await self.edit_message(call_back.message, description_text, self.build_keyboard(menu_button, 2, dict_hide))
         return True
 
     async def change_amount(self, call_back: CallbackQuery):
@@ -1291,9 +1295,11 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = self.dict_done[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         if call_back.message.caption:
-            amount = await self.check_amount(call_back.message.caption, call_back.id, arr_description[7])
+            amount = await self.check_amount(call_back.message.caption, call_back.id,
+                                             arr_description['AVAILABILITY_NOMENCLATURE'])
         else:
-            amount = await self.check_amount(call_back.message.text, call_back.id, arr_description[7])
+            amount = await self.check_amount(call_back.message.text, call_back.id,
+                                             arr_description['AVAILABILITY_NOMENCLATURE'])
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id)
         else:
@@ -1360,13 +1366,13 @@ class DispatcherMessage(Dispatcher):
                                 f"Артикул: {arr_info_nomenclature['Артикул']}{whitespace}" \
                                 f"Бренд: {arr_info_nomenclature['Бренд']}{whitespace}" \
                                 f"Цена: {arr_info_nomenclature['Цена']}{whitespace}" \
-                                f"Дилерская цена: {arr_info_nomenclature['Дилерская цена']}{whitespace}" \
                                 f"Наличие: {arr_info_nomenclature['Наличие']}{whitespace}"
         else:
             info_nomenclature = f"{arr_info_nomenclature['Наименование']}{whitespace}" \
                                 f"Артикул: {arr_info_nomenclature['Артикул']}{whitespace}" \
                                 f"Бренд: {arr_info_nomenclature['Бренд']}{whitespace}" \
                                 f"Цена: {arr_info_nomenclature['Цена']}{whitespace}" \
+                                f"Дилерская цена: {arr_info_nomenclature['Дилерская цена']}{whitespace}" \
                                 f"Наличие: {arr_info_nomenclature['Наличие']}{whitespace}"
         return info_nomenclature
 
@@ -3296,11 +3302,10 @@ class DispatcherMessage(Dispatcher):
                                          name_logo: FSInputFile):
         menu_button = {'back': '◀ 👈 Назад'}
         text = await self.execute.text_category(id_category)
-        answer = await self.bot.push_photo(call_back.message.chat.id,
-                                           self.format_text(text),
+        text_by_format = await self.format_text(text)
+        answer = await self.bot.push_photo(call_back.message.chat.id, text_by_format,
                                            self.build_keyboard(self.assembling_category_dict(list_category),
-                                                               1, menu_button),
-                                           name_logo)
+                                                               1, menu_button), name_logo)
         await self.delete_messages(call_back.from_user.id)
         await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
 

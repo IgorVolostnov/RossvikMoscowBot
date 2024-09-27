@@ -272,6 +272,7 @@ class Execute:
                           f"WHERE ID_USER = {self.quote(id_user)} "
             await cursor.execute(sql_history)
             row_table = await cursor.fetchone()
+            print(row_table)
             return row_table[0].split()[index]
 
     async def get_arr_history(self, user_id: int):

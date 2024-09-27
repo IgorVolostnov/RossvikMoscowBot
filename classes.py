@@ -1401,10 +1401,10 @@ class DispatcherMessage(Dispatcher):
                                 f"Цена: {price}{whitespace}" \
                                 f"Наличие: {arr_info['Наличие']}{whitespace}"
         elif arr_info['Дистрибьюторская цена'] is None:
-            price = await self.format_text(self.format_price(arr_info['Цена']))
+            price = await self.format_text(self.format_price(round(arr_info['Цена'])))
             percent_dealer = str(round(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена'], 2))
             percent_dealer_text = await self.format_text(f'{percent_dealer}%')
-            dealer_text = await self.format_text(self.format_price(arr_info['Дилерская цена']))
+            dealer_text = await self.format_text(self.format_price(round(arr_info['Дилерская цена'], 2)))
             dealer_price = f"{dealer_text} скидка {percent_dealer_text}"
             info_nomenclature = f"{arr_info['Наименование']}{whitespace}" \
                                 f"Артикул: {arr_info['Артикул']}{whitespace}" \
@@ -1413,14 +1413,14 @@ class DispatcherMessage(Dispatcher):
                                 f"Дилер: {dealer_price}{whitespace}" \
                                 f"Наличие: {arr_info['Наличие']}{whitespace}"
         else:
-            price = await self.format_text(self.format_price(arr_info['Цена']))
+            price = await self.format_text(self.format_price(round(arr_info['Цена'], 2)))
             percent_dealer = str(round(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена'], 2))
             percent_dealer_text = await self.format_text(f'{percent_dealer}%')
-            dealer_text = await self.format_text(self.format_price(arr_info['Дилерская цена']))
+            dealer_text = await self.format_text(self.format_price(round(arr_info['Дилерская цена'], 2)))
             dealer_price = f"{dealer_text} скидка {percent_dealer_text}"
             percent_distributor = str(round(100 - 100 * arr_info['Дистрибьюторская цена'] / arr_info['Цена'], 2))
             percent_distributor_text = await self.format_text(f'{percent_distributor}%')
-            distributor_text = await self.format_text(self.format_price(arr_info['Дистрибьюторская цена']))
+            distributor_text = await self.format_text(self.format_price(round(arr_info['Дистрибьюторская цена'], 2)))
             distributor_price = f"{distributor_text} скидка {percent_distributor_text}"
             info_nomenclature = f"{arr_info['Наименование']}{whitespace}" \
                                 f"Артикул: {arr_info['Артикул']}{whitespace}" \
@@ -1569,7 +1569,7 @@ class DispatcherMessage(Dispatcher):
                 answer = await self.bot.push_photo(call_back.message.chat.id, text_by_format,
                                                    self.build_keyboard(menu_button, 1), self.bot.basket_logo)
                 await self.delete_messages(call_back.from_user.id)
-                await self.execute.add_element_message(call_back.from_user.id, answer.message_id)
+                await self.execute.record_message(call_back.from_user.id, str(answer.message_id))
             else:
                 pages = {}
                 for page in current_basket_dict.keys():
@@ -1588,7 +1588,7 @@ class DispatcherMessage(Dispatcher):
                                                                     text + number_page_by_format,
                                                                     self.build_keyboard(pages, 3, menu_button))
                         await self.delete_messages(call_back.from_user.id, heading.message_id)
-                        arr_answers = []
+                        arr_answers = [str(heading.message_id)]
                     else:
                         heading = await self.bot.push_photo(call_back.message.chat.id,
                                                             text + number_page_by_format,
@@ -1614,7 +1614,8 @@ class DispatcherMessage(Dispatcher):
                     menu_button = {f'{key}basket_minus': '➖', f'{key}basket_plus': '➕', key: 'Подробнее 👀📸'}
                     answer = await self.answer_message_by_basket(heading, text, self.build_keyboard(menu_button, 2))
                     arr_answers.append(str(answer.message_id))
-                await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
+                record_messages = ' '.join(arr_answers)
+                await self.execute.record_message(call_back.from_user.id, record_messages)
 
     async def show_basket_by_command(self, message: Message, id_user: int):
         whitespace = '\n'
@@ -1628,7 +1629,7 @@ class DispatcherMessage(Dispatcher):
                                                self.build_keyboard(menu_button, 1), self.bot.basket_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
-            await self.execute.add_element_message(message.from_user.id, answer.message_id)
+            await self.execute.record_message(message.from_user.id, str(answer.message_id))
         else:
             pages = {}
             for page in current_basket_dict.keys():
@@ -1643,8 +1644,7 @@ class DispatcherMessage(Dispatcher):
                                                 self.build_keyboard(pages, 3, menu_button), self.bot.basket_logo)
             await self.execute.add_element_message(message.from_user.id, message.message_id)
             await self.delete_messages(message.from_user.id)
-            await self.execute.add_element_message(message.from_user.id, heading.message_id)
-            arr_answers = []
+            arr_answers = [str(heading.message_id)]
             for key, item in current_basket_dict['Корзина_Стр.1'].items():
                 arr_description = await self.execute.current_description(key)
                 amount_by_format = await self.format_text(str(int(item[0])))
@@ -1670,6 +1670,7 @@ class DispatcherMessage(Dispatcher):
 
     async def task_basket_minus(self, call_back: CallbackQuery):
         current_page_basket = await self.execute.get_element_history(call_back.from_user.id, -1)
+        print(current_page_basket)
         new_page_basket = await self.minus_amount_basket(call_back, current_page_basket)
         if new_page_basket != current_page_basket:
             await self.execute.delete_element_history(call_back.from_user.id, 1)
@@ -1708,6 +1709,7 @@ class DispatcherMessage(Dispatcher):
                 for page in current_basket_dict.keys():
                     pages[page] = page
                 sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
+                print(sum_basket)
                 sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
                 head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
                             f"{sum_basket_by_format}:"
@@ -1740,6 +1742,7 @@ class DispatcherMessage(Dispatcher):
                     for page in current_basket_dict.keys():
                         pages[page] = page
                     sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
+                    print(sum_basket)
                     sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
                     head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
                                 f"{sum_basket_by_format}:"
@@ -1771,12 +1774,13 @@ class DispatcherMessage(Dispatcher):
                     await self.execute.add_arr_messages(call_back.from_user.id, arr_answers)
                 return f'Корзина_Стр.{str(new_number)}'
         except TelegramBadRequest:
-            pass
+            return number_page
         except IndexError:
-            pass
+            return number_page
 
     async def task_basket_plus(self, call_back: CallbackQuery):
         current_page_basket = await self.execute.get_element_history(call_back.from_user.id, -1)
+        print(current_page_basket)
         new_page_basket = await self.plus_amount_basket(call_back, current_page_basket)
         if new_page_basket != current_page_basket:
             await self.execute.delete_element_history(call_back.from_user.id, 1)
@@ -1784,53 +1788,57 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def plus_amount_basket(self, call_back: CallbackQuery, number_page: str):
-        try:
-            whitespace = '\n'
-            number = number_page.split('Корзина_Стр.')[1]
-            number_page_basket = f'{whitespace}Страница №{number}'
-            current_nomenclature = await self.execute.current_nomenclature_basket(call_back.from_user.id,
-                                                                                  self.button_basket_plus[
-                                                                                      call_back.data])
-            current_amount = current_nomenclature[2]
-            current_sum = current_nomenclature[3]
-            price = float(current_sum / current_amount)
-            arr_description = await self.execute.current_description(self.button_basket_plus[call_back.data])
-            if str(int(current_amount)) == arr_description['AVAILABILITY_NOMENCLATURE'] or \
-                    arr_description['AVAILABILITY_NOMENCLATURE'] == "Нет на складе":
-                await self.bot.alert_message(call_back.id, 'Нельзя добавить товара больше, чем есть на остатках!')
-            else:
-                new_amount = current_amount + 1
-                new_sum = new_amount * price
-                await self.execute.update_basket_nomenclature(call_back.from_user.id,
-                                                              self.button_basket_plus[call_back.data],
-                                                              new_amount,
-                                                              new_sum)
-                amount_by_format = await self.format_text(str(int(new_amount)))
-                sum_by_format = await self.format_text(self.format_price(float(new_sum)))
-                text = f"{arr_description['NAME_NOMENCLATURE']}:{whitespace}{amount_by_format} шт. на сумму " \
-                       f"{sum_by_format}"
-                menu_button = {f'{self.button_basket_plus[call_back.data]}basket_minus': '➖',
-                               f'{self.button_basket_plus[call_back.data]}basket_plus': '➕',
-                               self.button_basket_plus[call_back.data]: 'Подробнее 👀📸'}
-                await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 2))
-                current_basket_dict = await self.execute.current_basket(call_back.from_user.id)
-                pages = {}
-                for page in current_basket_dict.keys():
-                    pages[page] = page
-                sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
-                sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
-                head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
-                            f"{sum_basket_by_format}:"
-                head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
-                                    'choice_delivery': 'Оформить заказ 📧📦📲'}
-                arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
-                number_page_basket_by_format = await self.format_text(number_page_basket)
-                await self.bot.edit_head_caption_by_basket(head_text + number_page_basket_by_format,
-                                                           call_back.message.chat.id, arr_messages[0],
-                                                           self.build_keyboard(pages, 3, head_menu_button))
-            return number_page
-        except TelegramBadRequest:
-            pass
+        # try:
+        whitespace = '\n'
+        number = number_page.split('Корзина_Стр.')[1]
+        number_page_basket = f'Страница №{number}'
+        current_nomenclature = await self.execute.current_nomenclature_basket(call_back.from_user.id,
+                                                                              self.button_basket_plus[
+                                                                                  call_back.data])
+        current_amount = current_nomenclature[2]
+        current_sum = current_nomenclature[3]
+        price = float(current_sum / current_amount)
+        arr_description = await self.execute.current_description(self.button_basket_plus[call_back.data])
+        if float(current_amount) == float(arr_description['AVAILABILITY_NOMENCLATURE']) or \
+                arr_description['AVAILABILITY_NOMENCLATURE'] == 0:
+            await self.bot.alert_message(call_back.id, 'Нельзя добавить товара больше, чем есть на остатках!')
+        else:
+            new_amount = current_amount + 1
+            new_sum = new_amount * price
+            await self.execute.update_basket_nomenclature(call_back.from_user.id,
+                                                          self.button_basket_plus[call_back.data],
+                                                          new_amount,
+                                                          new_sum)
+            amount_by_format = await self.format_text(str(int(new_amount)))
+            sum_by_format = await self.format_text(self.format_price(float(new_sum)))
+            text = f"{arr_description['NAME_NOMENCLATURE']}:{whitespace}{amount_by_format} шт. на сумму " \
+                   f"{sum_by_format}"
+            menu_button = {f'{self.button_basket_plus[call_back.data]}basket_minus': '➖',
+                           f'{self.button_basket_plus[call_back.data]}basket_plus': '➕',
+                           self.button_basket_plus[call_back.data]: 'Подробнее 👀📸'}
+            await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 2))
+            current_basket_dict = await self.execute.current_basket(call_back.from_user.id)
+            pages = {}
+            for page in current_basket_dict.keys():
+                pages[page] = page
+            sum_basket = await self.execute.current_sum_basket(call_back.from_user.id)
+            print(sum_basket)
+            sum_basket_by_format = await self.format_text(self.format_price(float(sum_basket)))
+            print(sum_basket_by_format)
+            number_page_basket_by_format = await self.format_text(number_page_basket)
+            head_text = f"Сейчас в Вашу корзину добавлены товары на общую сумму " \
+                        f"{sum_basket_by_format}:{whitespace}{number_page_basket_by_format}"
+            print(head_text)
+            head_menu_button = {'back': '◀ 👈 Назад', 'clean': 'Очистить корзину 🧹',
+                                'choice_delivery': 'Оформить заказ 📧📦📲'}
+            arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
+            print(arr_messages)
+            await self.bot.edit_head_caption_by_basket(head_text, call_back.message.chat.id, int(arr_messages[1]),
+                                                       self.build_keyboard(pages, 3, head_menu_button))
+            print('Головное сообщение поменялось')
+        return number_page
+        # except TelegramBadRequest:
+        #     return number_page
 
     async def delete_history_basket(self, id_user: int, delete_item_history: str):
         arr_history = await self.execute.get_arr_history(id_user)

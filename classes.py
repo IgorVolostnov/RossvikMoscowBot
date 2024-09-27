@@ -979,13 +979,11 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = call_back.data.split('remove_dealer_price')[0]
         current_description = await self.description_nomenclature(id_nomenclature, call_back.from_user.id,
                                                                   call_back.id)
-        arr_text = current_description[1].split('\n')
-        arr_text.pop(4)
-        new_text = '\n'.join(arr_text)
+        new_text = f"{current_description[1].split('Дилер')[0]}Наличие{current_description[1].split('Наличие')[1]}"
         basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                        'basket': basket[self.arr_auth_user[call_back.from_user.id]['lang']]}
-        dict_show = {f'{id_nomenclature}show_dealer_price': '👀 Показать дилерскую цену'}
+        dict_show = {f'{id_nomenclature}show_dealer_price': '👀 Показать оптовые цены'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(new_text, call_back.message.chat.id, arr_messages[0])
         await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_show))
@@ -998,7 +996,7 @@ class DispatcherMessage(Dispatcher):
         basket = await self.keyboard_bot.get_basket(call_back.from_user.id)
         menu_button = {'back': '◀ 👈 Назад', f'{id_nomenclature}add': 'Добавить ✅🗑️',
                        'basket': basket[self.arr_auth_user[call_back.from_user.id]['lang']]}
-        dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
+        dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть оптовые цены'}
         arr_messages = await self.execute.get_arr_messages(call_back.from_user.id)
         await self.bot.hide_dealer_caption(current_description[1], call_back.message.chat.id, arr_messages[0])
         await self.edit_keyboard(call_back.message, self.build_keyboard(menu_button, 2, dict_hide))
@@ -1412,7 +1410,7 @@ class DispatcherMessage(Dispatcher):
                                 f"Артикул: {arr_info['Артикул']}{whitespace}" \
                                 f"Бренд: {arr_info['Бренд']}{whitespace}" \
                                 f"Цена: {price}{whitespace}" \
-                                f"Дилерская цена: {dealer_price}{whitespace}" \
+                                f"Дилер: {dealer_price}{whitespace}" \
                                 f"Наличие: {arr_info['Наличие']}{whitespace}"
         else:
             price = await self.format_text(self.format_price(arr_info['Цена']))
@@ -1428,8 +1426,8 @@ class DispatcherMessage(Dispatcher):
                                 f"Артикул: {arr_info['Артикул']}{whitespace}" \
                                 f"Бренд: {arr_info['Бренд']}{whitespace}" \
                                 f"Цена: {price}{whitespace}" \
-                                f"Дилерская цена: {dealer_price}{whitespace}" \
-                                f"Дистрибьюторская цена: {distributor_price}{whitespace}" \
+                                f"Дилер: {dealer_price}{whitespace}" \
+                                f"Дистр: {distributor_price}{whitespace}" \
                                 f"Наличие: {arr_info['Наличие']}{whitespace}"
         return info_nomenclature
 
@@ -3148,7 +3146,7 @@ class DispatcherMessage(Dispatcher):
                f"2. Скидка на расходные материалы: {discount}"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(first_keyboard, 1))
         await self.execute.set_discount_amount(id_user, int(discount_amount))
-        self.arr_auth_user[id_user]['discount_user'] = int(discount_amount)
+        self.arr_auth_user[int(id_user)]['discount_user'] = int(discount_amount)
         return True
 
     @staticmethod

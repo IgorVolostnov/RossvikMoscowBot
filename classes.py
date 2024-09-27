@@ -1404,7 +1404,7 @@ class DispatcherMessage(Dispatcher):
                                 f"Наличие: {arr_info['Наличие']}{whitespace}"
         elif arr_info['Дистрибьюторская цена'] is None:
             price = await self.format_text(self.format_price(arr_info['Цена']))
-            percent_dealer = str(int(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена']))
+            percent_dealer = str(round(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена'], 2))
             percent_dealer_text = await self.format_text(f'{percent_dealer}%')
             dealer_text = await self.format_text(self.format_price(arr_info['Дилерская цена']))
             dealer_price = f"{dealer_text} скидка {percent_dealer_text}"
@@ -1416,11 +1416,11 @@ class DispatcherMessage(Dispatcher):
                                 f"Наличие: {arr_info['Наличие']}{whitespace}"
         else:
             price = await self.format_text(self.format_price(arr_info['Цена']))
-            percent_dealer = str(int(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена']))
+            percent_dealer = str(round(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена'], 2))
             percent_dealer_text = await self.format_text(f'{percent_dealer}%')
             dealer_text = await self.format_text(self.format_price(arr_info['Дилерская цена']))
             dealer_price = f"{dealer_text} скидка {percent_dealer_text}"
-            percent_distributor = str(int(100 - 100 * arr_info['Дистрибьюторская цена'] / arr_info['Цена']))
+            percent_distributor = str(round(100 - 100 * arr_info['Дистрибьюторская цена'] / arr_info['Цена'], 2))
             percent_distributor_text = await self.format_text(f'{percent_distributor}%')
             distributor_text = await self.format_text(self.format_price(arr_info['Дистрибьюторская цена']))
             distributor_price = f"{distributor_text} скидка {percent_distributor_text}"
@@ -2954,11 +2954,13 @@ class DispatcherMessage(Dispatcher):
     async def add_status(self, call_back: CallbackQuery):
         whitespace = '\n'
         back_button = {'back': '◀ 👈 Назад'}
-        text = f"Отправьте сообщение с {self.format_text('username')} пользователя, чтобы найти его.{whitespace} " \
-               f"Если у пользователя нет {self.format_text('username')}:{whitespace}" \
-               f"1. Попросите его создать {self.format_text('username')} в личных настройках Telegram.{whitespace}" \
-               f"2. Попросите нажать в меню бота команду {self.format_text('Главное меню - start')}{whitespace}" \
-               f"3. Отправьте снова сообщение с {self.format_text('username')} пользователя, чтобы найти его."
+        username = await self.format_text('username')
+        main_menu = await self.format_text('Главное меню - start')
+        text = f"Отправьте сообщение с {username} пользователя, чтобы найти его.{whitespace} " \
+               f"Если у пользователя нет {username}:{whitespace}" \
+               f"1. Попросите его создать {username} в личных настройках Telegram.{whitespace}" \
+               f"2. Попросите нажать в меню бота команду {main_menu}{whitespace}" \
+               f"3. Отправьте снова сообщение с {username} пользователя, чтобы найти его."
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(back_button, 1))
         return True
 
@@ -2982,11 +2984,13 @@ class DispatcherMessage(Dispatcher):
     async def find_nothing_for_add_status(self, message: Message):
         whitespace = '\n'
         menu_button = {'back': '◀ 👈 Назад'}
-        text = f"Сожалеем, но пользователь с {self.format_text('username')}: {message.text} не найден." \
-               f"Если у пользователя нет {self.format_text('username')}:{whitespace}" \
-               f"1. Попросите его создать {self.format_text('username')} в личных настройках Telegram.{whitespace}" \
-               f"2. Попросите нажать в меню бота команду {self.format_text('Главное меню - start')}{whitespace}" \
-               f"3. Отправьте снова сообщение с {self.format_text('username')} пользователя, чтобы найти его."
+        username = await self.format_text('username')
+        main_menu = await self.format_text('Главное меню - start')
+        text = f"Сожалеем, но пользователь с {username}: {message.text} не найден." \
+               f"Если у пользователя нет {username}:{whitespace}" \
+               f"1. Попросите его создать {username} в личных настройках Telegram.{whitespace}" \
+               f"2. Попросите нажать в меню бота команду {main_menu}{whitespace}" \
+               f"3. Отправьте снова сообщение с {username} пользователя, чтобы найти его."
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
         head_message = arr_messages[0]
         try:
@@ -2998,7 +3002,8 @@ class DispatcherMessage(Dispatcher):
 
     async def show_user_for_add_status(self, message: Message, dict_user: dict):
         dict_user['back'] = '◀ 👈 Назад'
-        text = f"Выберите пользователя с нужным {self.format_text('username')}."
+        username = await self.format_text('username')
+        text = f"Выберите пользователя с нужным {username}."
         arr_messages = await self.execute.get_arr_messages(message.from_user.id)
         head_message = arr_messages[0]
         await self.bot.edit_head_message_by_basket(text, message.from_user.id, head_message,
@@ -3010,7 +3015,8 @@ class DispatcherMessage(Dispatcher):
     async def back_show_user_for_add_status(self, call_back: CallbackQuery, list_user: str):
         dict_user = await self.get_dict_user_for_add_status(list_user)
         dict_user['back'] = '◀ 👈 Назад'
-        text = f"Выберите пользователя с нужным {self.format_text('username')}."
+        username = await self.format_text('username')
+        text = f"Выберите пользователя с нужным {username}."
         if call_back.message.caption:
             answer = await self.answer_message_by_basket(call_back.message, text, self.build_keyboard(dict_user, 1))
             await self.delete_messages(call_back.from_user.id)
@@ -3031,7 +3037,8 @@ class DispatcherMessage(Dispatcher):
                        f'dealer{id_user}': 'Дилер',
                        f'distributor{id_user}': 'Дистрибьютор',
                        'back': '◀ 👈 Назад'}
-        text = f"Выберите {self.format_text('статус')} пользователя по оборудованию:"
+        status = await self.format_text('статус')
+        text = f"Выберите {status} пользователя по оборудованию:"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 1))
         return id_user
 
@@ -3041,7 +3048,8 @@ class DispatcherMessage(Dispatcher):
                        f'dealer{id_user}': 'Дилер',
                        f'distributor{id_user}': 'Дистрибьютор',
                        'back': '◀ 👈 Назад'}
-        text = f"Выберите {self.format_text('статус')} пользователя по оборудованию:"
+        status = await self.format_text('статус')
+        text = f"Выберите {status} пользователя по оборудованию:"
         if call_back.message.caption:
             answer = await self.answer_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 1))
             await self.delete_messages(call_back.from_user.id)
@@ -3085,7 +3093,8 @@ class DispatcherMessage(Dispatcher):
                        f'discount_amount31_{id_user}': '31%',
                        f'discount_amount32_{id_user}': '32%',
                        'back': '◀ 👈 Назад'}
-        text = f"Выберите {self.format_text('скидку')} пользователя на расходные материалы для шиноремонта:"
+        discount = await self.format_text('скидку')
+        text = f"Выберите {discount} пользователя на расходные материалы для шиноремонта:"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 5))
         return id_user
 
@@ -3107,7 +3116,8 @@ class DispatcherMessage(Dispatcher):
                        f'discount_amount31_{id_user}': '31%',
                        f'discount_amount32_{id_user}': '32%',
                        'back': '◀ 👈 Назад'}
-        text = f"Выберите {self.format_text('скидку')} пользователя на расходные материалы для шиноремонта:"
+        discount = await self.format_text('скидку')
+        text = f"Выберите {discount} пользователя на расходные материалы для шиноремонта:"
         if call_back.message.caption:
             answer = await self.answer_message_by_basket(call_back.message, text, self.build_keyboard(menu_button, 5))
             await self.delete_messages(call_back.from_user.id)
@@ -3130,9 +3140,12 @@ class DispatcherMessage(Dispatcher):
                                                                     self.arr_auth_user[call_back.from_user.id][
                                                                         'status'],
                                                                     self.arr_auth_user[call_back.from_user.id]['lang'])
-        text = f"Пользователю ID: {self.format_text(id_user)} назначен:\n" \
-               f"1. Статус по оборудованию: {self.format_text(status_user)}\n" \
-               f"2. Скидка на расходные материалы: {self.format_text(discount_amount)}"
+        text_user = await self.format_text(id_user)
+        status = await self.format_text(status_user)
+        discount = await self.format_text(discount_amount)
+        text = f"Пользователю ID: {text_user} назначен:\n" \
+               f"1. Статус по оборудованию: {status}\n" \
+               f"2. Скидка на расходные материалы: {discount}"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(first_keyboard, 1))
         await self.execute.set_discount_amount(id_user, int(discount_amount))
         self.arr_auth_user[id_user]['discount_user'] = int(discount_amount)

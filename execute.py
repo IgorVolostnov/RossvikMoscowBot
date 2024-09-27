@@ -492,7 +492,7 @@ class Execute:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_nomenclature = f"SELECT ID, NAME_NOMENCLATURE, SORT_NOMENCLATURE, PHOTO_NOMENCLATURE " \
                                f"FROM NOMENCLATURE " \
-                               f"WHERE CATEGORY_ID = '{id_parent}' "
+                               f"WHERE CATEGORY_ID = '{id_parent}' AND VISIBILITY_NOMENCLATURE = '1' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
             return self.assembling_nomenclatures(row_table)
@@ -511,7 +511,7 @@ class Execute:
                                f"AVAILABILITY_NOMENCLATURE, PRICE_NOMENCLATURE, DEALER_NOMENCLATURE, " \
                                f"DISTRIBUTOR_NOMENCLATURE " \
                                f"FROM NOMENCLATURE " \
-                               f"WHERE ID = '{kod_nomenclature}' "
+                               f"WHERE ID = '{kod_nomenclature}' AND VISIBILITY_NOMENCLATURE = '1' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchone()
             dict_nomenclature = {'ARTICLE': row_table[0], 'BRAND': row_table[1], 'NAME_NOMENCLATURE': row_table[2],
@@ -532,7 +532,7 @@ class Execute:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_nomenclature = f"SELECT ID, NAME_NOMENCLATURE, SORT_NOMENCLATURE, PHOTO_NOMENCLATURE " \
                                f"FROM NOMENCLATURE " \
-                               f"WHERE ARTICLE_CHANGE LIKE '%{search_text}%' "
+                               f"WHERE ARTICLE_CHANGE LIKE '%{search_text}%' AND VISIBILITY_NOMENCLATURE = '1' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
             return set(row_table)
@@ -548,7 +548,7 @@ class Execute:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_nomenclature = f"SELECT ID, NAME_NOMENCLATURE, SORT_NOMENCLATURE, PHOTO_NOMENCLATURE " \
                                f"FROM NOMENCLATURE " \
-                               f"WHERE NAME_NOMENCLATURE LIKE '%{search_text}%' "
+                               f"WHERE NAME_NOMENCLATURE LIKE '%{search_text}%' AND VISIBILITY_NOMENCLATURE = '1' "
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchall()
             return set(row_table)

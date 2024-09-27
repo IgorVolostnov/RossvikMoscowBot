@@ -1011,16 +1011,16 @@ class DispatcherMessage(Dispatcher):
         name = await self.format_text(arr_description['NAME_NOMENCLATURE'])
         article = await self.format_text(arr_description['ARTICLE'])
         brand = await self.format_text(arr_description['BRAND'])
-        price = await self.format_text(self.format_price(float(arr_description['PRICE_NOMENCLATURE'])))
+        price = float(arr_description['PRICE_NOMENCLATURE'])
         if self.arr_auth_user[id_user]['status'] == 'dealer':
-            dealer = await self.get_dealer(arr_description, id_call_back)
+            dealer = await self.get_dealer(arr_description, id_call_back, self.arr_auth_user[id_user]['discount_user'])
             dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                       'Дилерская цена': dealer, 'Дистрибьюторская цена': None, 'Наличие': amount}
             text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             dict_hide = {f'{id_item}remove_dealer_price': '🙈 Скрыть оптовые цены'}
         elif self.arr_auth_user[id_user]['status'] == 'distributor':
-            dealer = await self.get_dealer(arr_description, id_call_back)
-            distributor = await self.get_distributor(arr_description)
+            dealer = await self.get_dealer(arr_description, id_call_back, self.arr_auth_user[id_user]['discount_user'])
+            distributor = await self.get_distributor(arr_description, self.arr_auth_user[id_user]['discount_user'])
             dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                       'Дилерская цена': dealer, 'Дистрибьюторская цена': distributor, 'Наличие': amount}
             text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
@@ -1098,7 +1098,7 @@ class DispatcherMessage(Dispatcher):
         name = await self.format_text(arr_description['NAME_NOMENCLATURE'])
         article = await self.format_text(arr_description['ARTICLE'])
         brand = await self.format_text(arr_description['BRAND'])
-        price = await self.format_text(self.format_price(float(arr_description['PRICE_NOMENCLATURE'])))
+        price = float(arr_description['PRICE_NOMENCLATURE'])
         amount = await self.format_text(str(availability))
         if current_history in self.nomenclatures:
             text_description_nomenclature = f'Введите количество, которое нужно добавить в корзину:{whitespace}'
@@ -1106,14 +1106,23 @@ class DispatcherMessage(Dispatcher):
         else:
             await self.get_availability(arr_description['AVAILABILITY_NOMENCLATURE'])
             if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-                dealer = await self.get_dealer(arr_description, call_back.id)
-                dealer_price = await self.format_text(self.format_price(dealer))
+                dealer = await self.get_dealer(arr_description, call_back.id,
+                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
                 dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
-                                          'Дилерская цена': dealer_price, 'Наличие': amount}
+                                          'Дилерская цена': dealer, 'Дистрибьюторская цена': None, 'Наличие': amount}
+                text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
+            elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+                dealer = await self.get_dealer(arr_description, call_back.id,
+                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                distributor = await self.get_distributor(arr_description,
+                                                         self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
+                                          'Дилерская цена': dealer, 'Дистрибьюторская цена': distributor,
+                                          'Наличие': amount}
                 text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             else:
                 dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
-                                          'Дилерская цена': None, 'Наличие': amount}
+                                          'Дилерская цена': None, 'Дистрибьюторская цена': None, 'Наличие': amount}
                 text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
         menu_button = await self.keyboard_bot.get_calculater(call_back.from_user.id, id_nomenclature)
         if call_back.message.caption:
@@ -1129,7 +1138,7 @@ class DispatcherMessage(Dispatcher):
         arr_description = await self.execute.current_description(id_nomenclature)
         current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть дилерскую цену'}
+            dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть оптовые цены'}
         else:
             dict_hide = None
         if current_history in self.dict_add:
@@ -1159,7 +1168,11 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = await self.get_amount(call_back.message.text, button)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = await self.get_dealer(arr_description, call_back.id)
+            price = await self.get_dealer(arr_description, call_back.id,
+                                          self.arr_auth_user[call_back.from_user.id]['discount_user'])
+        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+            price = await self.get_distributor(arr_description,
+                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         sum_nomenclature = float(amount) * float(price)
@@ -1192,7 +1205,11 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = await self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = await self.get_dealer(arr_description, call_back.id)
+            price = await self.get_dealer(arr_description, call_back.id,
+                                          self.arr_auth_user[call_back.from_user.id]['discount_user'])
+        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+            price = await self.get_distributor(arr_description,
+                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
@@ -1230,7 +1247,11 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = await self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = await self.get_dealer(arr_description, call_back.id)
+            price = await self.get_dealer(arr_description, call_back.id,
+                                          self.arr_auth_user[call_back.from_user.id]['discount_user'])
+        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+            price = await self.get_distributor(arr_description,
+                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
@@ -1268,7 +1289,11 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = await self.get_amount_delete(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = await self.get_dealer(arr_description, call_back.id)
+            price = await self.get_dealer(arr_description, call_back.id,
+                                          self.arr_auth_user[call_back.from_user.id]['discount_user'])
+        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+            price = await self.get_distributor(arr_description,
+                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
@@ -1307,7 +1332,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.check_amount(call_back.message.text, call_back.id,
                                              arr_description['AVAILABILITY_NOMENCLATURE'])
         if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
-            price = await self.get_dealer(arr_description, call_back.id)
+            price = await self.get_dealer(arr_description, call_back.id,
+                                          self.arr_auth_user[call_back.from_user.id]['discount_user'])
+        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+            price = await self.get_distributor(arr_description,
+                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
@@ -1364,36 +1393,44 @@ class DispatcherMessage(Dispatcher):
             amount = None
         return amount
 
-    async def get_text_description(self, arr_info_nomenclature: dict) -> str:
+    async def get_text_description(self, arr_info: dict) -> str:
         whitespace = '\n'
-        if arr_info_nomenclature['Дилерская цена'] is None and arr_info_nomenclature['Дистрибьюторская цена'] is None:
-            info_nomenclature = f"{arr_info_nomenclature['Наименование']}{whitespace}" \
-                                f"Артикул: {arr_info_nomenclature['Артикул']}{whitespace}" \
-                                f"Бренд: {arr_info_nomenclature['Бренд']}{whitespace}" \
-                                f"Цена: {arr_info_nomenclature['Цена']}{whitespace}" \
-                                f"Наличие: {arr_info_nomenclature['Наличие']}{whitespace}"
-        elif arr_info_nomenclature['Дистрибьюторская цена'] is None:
-            percent_dealer = str(int(100 - 100 * arr_info_nomenclature['Дилерская цена'] /
-                                     arr_info_nomenclature['Цена']))
-            dealer_price = f"{self.format_price(arr_info_nomenclature['Дилерская цена'])} скидка {percent_dealer}%"
-            info_nomenclature = f"{arr_info_nomenclature['Наименование']}{whitespace}" \
-                                f"Артикул: {arr_info_nomenclature['Артикул']}{whitespace}" \
-                                f"Бренд: {arr_info_nomenclature['Бренд']}{whitespace}" \
-                                f"Цена: {arr_info_nomenclature['Цена']}{whitespace}" \
+        if arr_info['Дилерская цена'] is None and arr_info['Дистрибьюторская цена'] is None:
+            price = await self.format_text(self.format_price(arr_info['Цена']))
+            info_nomenclature = f"{arr_info['Наименование']}{whitespace}" \
+                                f"Артикул: {arr_info['Артикул']}{whitespace}" \
+                                f"Бренд: {arr_info['Бренд']}{whitespace}" \
+                                f"Цена: {price}{whitespace}" \
+                                f"Наличие: {arr_info['Наличие']}{whitespace}"
+        elif arr_info['Дистрибьюторская цена'] is None:
+            price = await self.format_text(self.format_price(arr_info['Цена']))
+            percent_dealer = str(int(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена']))
+            percent_dealer_text = await self.format_text(f'{percent_dealer}%')
+            dealer_text = await self.format_text(self.format_price(arr_info['Дилерская цена']))
+            dealer_price = f"{dealer_text} скидка {percent_dealer_text}"
+            info_nomenclature = f"{arr_info['Наименование']}{whitespace}" \
+                                f"Артикул: {arr_info['Артикул']}{whitespace}" \
+                                f"Бренд: {arr_info['Бренд']}{whitespace}" \
+                                f"Цена: {price}{whitespace}" \
                                 f"Дилерская цена: {dealer_price}{whitespace}" \
-                                f"Наличие: {arr_info_nomenclature['Наличие']}{whitespace}"
+                                f"Наличие: {arr_info['Наличие']}{whitespace}"
         else:
-            percent_dealer = str(int(100 - 100 * arr_info_nomenclature['Дилерская цена'] / arr_info_nomenclature['Цена']))
-            dealer_price = f"{self.format_price(arr_info_nomenclature['Дилерская цена'])} скидка {percent_dealer}%"
-            percent_distributor = str(int(100 - 100 * arr_info_nomenclature['Дистрибьюторская цена'] / arr_info_nomenclature['Цена']))
-            distributor_price = f"{self.format_price(arr_info_nomenclature['Дистрибьюторская цена'])} скидка {percent_distributor}%"
-            info_nomenclature = f"{arr_info_nomenclature['Наименование']}{whitespace}" \
-                                f"Артикул: {arr_info_nomenclature['Артикул']}{whitespace}" \
-                                f"Бренд: {arr_info_nomenclature['Бренд']}{whitespace}" \
-                                f"Цена: {arr_info_nomenclature['Цена']}{whitespace}" \
+            price = await self.format_text(self.format_price(arr_info['Цена']))
+            percent_dealer = str(int(100 - 100 * arr_info['Дилерская цена'] / arr_info['Цена']))
+            percent_dealer_text = await self.format_text(f'{percent_dealer}%')
+            dealer_text = await self.format_text(self.format_price(arr_info['Дилерская цена']))
+            dealer_price = f"{dealer_text} скидка {percent_dealer_text}"
+            percent_distributor = str(int(100 - 100 * arr_info['Дистрибьюторская цена'] / arr_info['Цена']))
+            percent_distributor_text = await self.format_text(f'{percent_distributor}%')
+            distributor_text = await self.format_text(self.format_price(arr_info['Дистрибьюторская цена']))
+            distributor_price = f"{distributor_text} скидка {percent_distributor_text}"
+            info_nomenclature = f"{arr_info['Наименование']}{whitespace}" \
+                                f"Артикул: {arr_info['Артикул']}{whitespace}" \
+                                f"Бренд: {arr_info['Бренд']}{whitespace}" \
+                                f"Цена: {price}{whitespace}" \
                                 f"Дилерская цена: {dealer_price}{whitespace}" \
                                 f"Дистрибьюторская цена: {distributor_price}{whitespace}" \
-                                f"Наличие: {arr_info_nomenclature['Наличие']}{whitespace}"
+                                f"Наличие: {arr_info['Наличие']}{whitespace}"
         return info_nomenclature
 
     @staticmethod
@@ -1404,25 +1441,33 @@ class DispatcherMessage(Dispatcher):
             availability = str(int(amount))
         return availability
 
-    async def get_dealer(self, info_nomenclature: dict, id_call_back: str) -> float:
+    async def get_dealer(self, info_nomenclature: dict, id_call_back: str, discount_user: int) -> float:
         if info_nomenclature['DEALER_NOMENCLATURE'] is None or \
                 info_nomenclature['DEALER_NOMENCLATURE'] == '' or \
                 int(info_nomenclature['DEALER_NOMENCLATURE']) == 0:
             await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
             dealer = info_nomenclature['PRICE_NOMENCLATURE']
         else:
-            dealer = info_nomenclature['DEALER_NOMENCLATURE']
+            if info_nomenclature['DISCOUNT_NOMENCLATURE']:
+                dealer = info_nomenclature['PRICE_NOMENCLATURE'] - info_nomenclature['PRICE_NOMENCLATURE'] / \
+                         100 * discount_user
+            else:
+                dealer = info_nomenclature['DEALER_NOMENCLATURE']
         return dealer
 
     @staticmethod
-    async def get_distributor(info_nomenclature: dict) -> float:
+    async def get_distributor(info_nomenclature: dict, discount_user: int) -> float:
         if info_nomenclature['DISTRIBUTOR_NOMENCLATURE'] is None or \
                 info_nomenclature['DISTRIBUTOR_NOMENCLATURE'] == '' or \
                 int(info_nomenclature['DISTRIBUTOR_NOMENCLATURE']) == 0:
             distributor = info_nomenclature['PRICE_NOMENCLATURE']
         else:
-            distributor = info_nomenclature['PRICE_NOMENCLATURE'] - info_nomenclature['PRICE_NOMENCLATURE'] / 100 * \
-                          info_nomenclature['DISTRIBUTOR_NOMENCLATURE']
+            if info_nomenclature['DISCOUNT_NOMENCLATURE']:
+                distributor = info_nomenclature['PRICE_NOMENCLATURE'] - info_nomenclature['PRICE_NOMENCLATURE'] / \
+                         100 * discount_user
+            else:
+                distributor = info_nomenclature['PRICE_NOMENCLATURE'] - info_nomenclature['PRICE_NOMENCLATURE'] / \
+                              100 * info_nomenclature['DISTRIBUTOR_NOMENCLATURE']
         return distributor
 
     @staticmethod
@@ -3090,6 +3135,7 @@ class DispatcherMessage(Dispatcher):
                f"2. Скидка на расходные материалы: {self.format_text(discount_amount)}"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(first_keyboard, 1))
         await self.execute.set_discount_amount(id_user, int(discount_amount))
+        self.arr_auth_user[id_user]['discount_user'] = int(discount_amount)
         return True
 
     @staticmethod

@@ -6,6 +6,7 @@ import datetime
 import openpyxl
 import requests
 import phonenumbers
+import json
 from keyboard_bot import DATA
 from language import Language
 from aiogram import F
@@ -719,8 +720,9 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def help_message(self, message: Message):
+        status_user = self.arr_auth_user[message.from_user.id]['status']['status']
         first_keyboard = await self.keyboard_bot.get_first_keyboard(message.from_user.id,
-                                                                    self.arr_auth_user[message.from_user.id]['status'],
+                                                                    status_user,
                                                                     self.arr_auth_user[message.from_user.id]['lang'])
         text_help = await self.keyboard_bot.get_info_help(self.arr_auth_user[message.from_user.id]['lang'])
         answer = await self.bot.push_photo(message.chat.id, text_help,
@@ -732,9 +734,9 @@ class DispatcherMessage(Dispatcher):
         await self.execute.record_message(message.from_user.id, record_message)
 
     async def return_help_message(self, call_back: CallbackQuery):
+        status_user = self.arr_auth_user[call_back.from_user.id]['status']['status']
         first_keyboard = await self.keyboard_bot.get_first_keyboard(call_back.from_user.id,
-                                                                    self.arr_auth_user[call_back.from_user.id][
-                                                                        'status'],
+                                                                    status_user,
                                                                     self.arr_auth_user[call_back.from_user.id]['lang'])
         text_help = await self.keyboard_bot.get_info_help(self.arr_auth_user[call_back.from_user.id]['lang'])
         answer = await self.bot.push_photo(call_back.message.chat.id, text_help,
@@ -757,7 +759,7 @@ class DispatcherMessage(Dispatcher):
                 self.arr_auth_user[data_user[0]] = {'status': data_user[1], 'lang': data_user[2]}
             first_keyboard = await self.keyboard_bot.get_first_keyboard(message.from_user.id,
                                                                         self.arr_auth_user[message.from_user.id][
-                                                                            'status'],
+                                                                            'status']['status'],
                                                                         self.arr_auth_user[message.from_user.id][
                                                                             'lang'])
             text_message = await self.keyboard_bot.get_start_message
@@ -770,9 +772,9 @@ class DispatcherMessage(Dispatcher):
         return True
 
     async def return_start(self, call_back: CallbackQuery):
+        status_user = self.arr_auth_user[call_back.from_user.id]['status']['status']
         first_keyboard = await self.keyboard_bot.get_first_keyboard(call_back.from_user.id,
-                                                                    self.arr_auth_user[call_back.from_user.id][
-                                                                        'status'],
+                                                                    status_user,
                                                                     self.arr_auth_user[call_back.from_user.id]['lang'])
         text_message = await self.keyboard_bot.get_start_message
         answer = await self.answer_message(call_back.message,
@@ -785,8 +787,9 @@ class DispatcherMessage(Dispatcher):
 
     async def start_for_timer(self, user_id: int):
         try:
+            status_user = self.arr_auth_user[user_id]['status']['status']
             first_keyboard = await self.keyboard_bot.get_first_keyboard(user_id,
-                                                                        self.arr_auth_user[user_id]['status'],
+                                                                        status_user,
                                                                         self.arr_auth_user[user_id]['lang'])
             text_message = await self.keyboard_bot.get_start_message
             answer = await self.bot.send_message_start(user_id, self.build_keyboard(first_keyboard, 1),
@@ -811,8 +814,9 @@ class DispatcherMessage(Dispatcher):
 
     async def start_for_news(self, user_id: int, current_news: str):
         try:
+            status_user = self.arr_auth_user[user_id]['status']['status']
             first_keyboard = await self.keyboard_bot.get_first_keyboard(user_id,
-                                                                        self.arr_auth_user[user_id]['status'],
+                                                                        status_user,
                                                                         self.arr_auth_user[user_id]['lang'])
             text_message = await self.language.translated_from_russian(self.arr_auth_user[user_id]['lang'],
                                                                        [current_news])
@@ -1010,16 +1014,16 @@ class DispatcherMessage(Dispatcher):
         article = await self.format_text(arr_description['ARTICLE'])
         brand = await self.format_text(arr_description['BRAND'])
         price = float(arr_description['PRICE_NOMENCLATURE'])
-        if self.arr_auth_user[id_user]['status'] == 'dealer':
+        if self.arr_auth_user[id_user]['status']['status'] == 'dealer':
             dealer = await self.get_dealer(arr_description, id_call_back, self.arr_auth_user[id_user]['discount_user'],
-                                           self.arr_auth_user[id_user]['status'])
+                                           self.arr_auth_user[id_user]['status']['status'])
             dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                       'Дилерская цена': dealer, 'Дистрибьюторская цена': None, 'Наличие': amount}
             text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             dict_hide = {f'{id_item}remove_dealer_price': '🙈 Скрыть оптовые цены'}
-        elif self.arr_auth_user[id_user]['status'] == 'distributor':
+        elif self.arr_auth_user[id_user]['status']['status'] == 'distributor':
             dealer = await self.get_dealer(arr_description, id_call_back, self.arr_auth_user[id_user]['discount_user'],
-                                           self.arr_auth_user[id_user]['status'])
+                                           self.arr_auth_user[id_user]['status']['status'])
             distributor = await self.get_distributor(arr_description, self.arr_auth_user[id_user]['discount_user'])
             dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                       'Дилерская цена': dealer, 'Дистрибьюторская цена': distributor, 'Наличие': amount}
@@ -1105,17 +1109,17 @@ class DispatcherMessage(Dispatcher):
             await self.execute.add_element_history(call_back.from_user.id, call_back.data)
         else:
             await self.get_availability(arr_description['AVAILABILITY_NOMENCLATURE'])
-            if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+            if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
                 dealer = await self.get_dealer(arr_description, call_back.id,
                                                self.arr_auth_user[call_back.from_user.id]['discount_user'],
-                                               self.arr_auth_user[call_back.from_user.id]['status'])
+                                               self.arr_auth_user[call_back.from_user.id]['status']['status'])
                 dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                           'Дилерская цена': dealer, 'Дистрибьюторская цена': None, 'Наличие': amount}
                 text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
-            elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+            elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
                 dealer = await self.get_dealer(arr_description, call_back.id,
                                                self.arr_auth_user[call_back.from_user.id]['discount_user'],
-                                               self.arr_auth_user[call_back.from_user.id]['status'])
+                                               self.arr_auth_user[call_back.from_user.id]['status']['status'])
                 distributor = await self.get_distributor(arr_description,
                                                          self.arr_auth_user[call_back.from_user.id]['discount_user'])
                 dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
@@ -1139,7 +1143,7 @@ class DispatcherMessage(Dispatcher):
         id_nomenclature = self.dict_back_add[call_back.data]
         arr_description = await self.execute.current_description(id_nomenclature)
         current_history = await self.execute.get_element_history(call_back.from_user.id, -1)
-        if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+        if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             dict_hide = {f'{id_nomenclature}remove_dealer_price': '🙈 Скрыть оптовые цены'}
         else:
             dict_hide = None
@@ -1169,11 +1173,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount(call_back.message.caption, button)
         else:
             amount = await self.get_amount(call_back.message.text, button)
-        if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+        if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
                                           self.arr_auth_user[call_back.from_user.id]['discount_user'],
-                                          self.arr_auth_user[call_back.from_user.id]['status'])
-        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+                                          self.arr_auth_user[call_back.from_user.id]['status']['status'])
+        elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
                                                self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
@@ -1207,11 +1211,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount_minus(call_back.message.caption)
         else:
             amount = await self.get_amount_minus(call_back.message.text)
-        if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+        if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
                                           self.arr_auth_user[call_back.from_user.id]['discount_user'],
-                                          self.arr_auth_user[call_back.from_user.id]['status'])
-        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+                                          self.arr_auth_user[call_back.from_user.id]['status']['status'])
+        elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
                                                self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
@@ -1250,11 +1254,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount_minus(call_back.message.caption)
         else:
             amount = await self.get_amount_minus(call_back.message.text)
-        if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+        if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
                                           self.arr_auth_user[call_back.from_user.id]['discount_user'],
-                                          self.arr_auth_user[call_back.from_user.id]['status'])
-        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+                                          self.arr_auth_user[call_back.from_user.id]['status']['status'])
+        elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
                                                self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
@@ -1293,11 +1297,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount_delete(call_back.message.caption)
         else:
             amount = await self.get_amount_delete(call_back.message.text)
-        if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+        if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
                                           self.arr_auth_user[call_back.from_user.id]['discount_user'],
-                                          self.arr_auth_user[call_back.from_user.id]['status'])
-        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+                                          self.arr_auth_user[call_back.from_user.id]['status']['status'])
+        elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
                                                self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
@@ -1337,11 +1341,11 @@ class DispatcherMessage(Dispatcher):
         else:
             amount = await self.check_amount(call_back.message.text, call_back.id,
                                              arr_description['AVAILABILITY_NOMENCLATURE'])
-        if self.arr_auth_user[call_back.from_user.id]['status'] == 'dealer':
+        if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
                                           self.arr_auth_user[call_back.from_user.id]['discount_user'],
-                                          self.arr_auth_user[call_back.from_user.id]['status'])
-        elif self.arr_auth_user[call_back.from_user.id]['status'] == 'distributor':
+                                          self.arr_auth_user[call_back.from_user.id]['status']['status'])
+        elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
                                                self.arr_auth_user[call_back.from_user.id]['discount_user'])
         else:
@@ -1455,7 +1459,7 @@ class DispatcherMessage(Dispatcher):
             await self.bot.alert_message(id_call_back, 'На данный товар нет дилерской цены!')
             dealer = info_nomenclature['PRICE_NOMENCLATURE']
         else:
-            if info_nomenclature['DISCOUNT_NOMENCLATURE'] and status == 'dealer':
+            if info_nomenclature['TYPE_NOMENCLATURE'] == 'consumables' and status == 'dealer':
                 dealer = info_nomenclature['PRICE_NOMENCLATURE'] - info_nomenclature['PRICE_NOMENCLATURE'] / \
                          100 * discount_user
             else:
@@ -1469,7 +1473,7 @@ class DispatcherMessage(Dispatcher):
                 int(info_nomenclature['DISTRIBUTOR_NOMENCLATURE']) == 0:
             distributor = info_nomenclature['PRICE_NOMENCLATURE']
         else:
-            if info_nomenclature['DISCOUNT_NOMENCLATURE']:
+            if info_nomenclature['TYPE_NOMENCLATURE'] == 'consumables':
                 distributor = info_nomenclature['PRICE_NOMENCLATURE'] - info_nomenclature['PRICE_NOMENCLATURE'] / \
                          100 * discount_user
             else:
@@ -3140,16 +3144,19 @@ class DispatcherMessage(Dispatcher):
     async def show_discount_amount(self, call_back: CallbackQuery):
         if 'retail_customer' in call_back.data:
             id_user = call_back.data.split('retail_customer')[1]
-            await self.execute.set_retail_customer(id_user)
-            self.arr_auth_user[int(id_user)]['status'] = None
+            self.arr_auth_user[int(id_user)]['status']['status'] = "buyer"
+            status_user = json.dumps(self.arr_auth_user[int(id_user)]['status'])
+            await self.execute.set_retail_customer(id_user, status_user)
         elif 'dealer' in call_back.data:
             id_user = call_back.data.split('dealer')[1]
-            await self.execute.set_dealer(id_user)
-            self.arr_auth_user[int(id_user)]['status'] = 'dealer'
+            self.arr_auth_user[int(id_user)]['status']['status'] = "dealer"
+            status_user = json.dumps(self.arr_auth_user[int(id_user)]['status'])
+            await self.execute.set_dealer(id_user, status_user)
         else:
             id_user = call_back.data.split('distributor')[1]
-            await self.execute.set_distributor(id_user)
-            self.arr_auth_user[int(id_user)]['status'] = 'distributor'
+            self.arr_auth_user[int(id_user)]['status']['status'] = "distributor"
+            status_user = json.dumps(self.arr_auth_user[int(id_user)]['status'])
+            await self.execute.set_distributor(id_user, status_user)
         menu_button = {f'discount_amount0_{id_user}': '0%',
                        f'discount_amount3_{id_user}': '3%',
                        f'discount_amount5_{id_user}': '5%',
@@ -3211,7 +3218,7 @@ class DispatcherMessage(Dispatcher):
         discount_amount = call_back.data.split('discount_amount')[1].split('_')[0]
         first_keyboard = await self.keyboard_bot.get_first_keyboard(call_back.from_user.id,
                                                                     self.arr_auth_user[call_back.from_user.id][
-                                                                        'status'],
+                                                                        'status']['status'],
                                                                     self.arr_auth_user[call_back.from_user.id]['lang'])
         text_user = await self.format_text(id_user)
         status = await self.format_text(status_user)
@@ -3220,8 +3227,9 @@ class DispatcherMessage(Dispatcher):
                f"1. Статус по оборудованию: {status}\n" \
                f"2. Скидка на расходные материалы: {discount}"
         await self.edit_message_by_basket(call_back.message, text, self.build_keyboard(first_keyboard, 1))
-        await self.execute.set_discount_amount(id_user, int(discount_amount))
-        self.arr_auth_user[int(id_user)]['discount_user'] = int(discount_amount)
+        self.arr_auth_user[int(id_user)]['status']['consumables'] = int(discount_amount)
+        status_user = json.dumps(self.arr_auth_user[int(id_user)]['status'])
+        await self.execute.set_discount_amount(id_user, status_user)
         return True
 
     @staticmethod

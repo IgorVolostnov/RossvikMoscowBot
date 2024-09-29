@@ -6,7 +6,6 @@ import aiosqlite
 import requests
 import re
 import os
-from prettytable import PrettyTable
 from dotenv import load_dotenv
 from exception import send_message
 from bs4 import BeautifulSoup
@@ -196,16 +195,16 @@ class UpdateBase:
                 dealer = 0
             try:
                 sort_element = dict_nomenclature[id_element][16]
-                discount = dict_nomenclature[id_element][5]
+                type_nomenclature = dict_nomenclature[id_element][5]
                 specification = dict_nomenclature[id_element][7]
                 distributor = dict_nomenclature[id_element][13]
                 views = dict_nomenclature[id_element][15]
-                dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, discount,
+                dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, type_nomenclature,
                                                  description, specification, picture, url, float(amount), float(price),
                                                  float(dealer), distributor, date, views, sort_element]
             except KeyError:
                 # print(f'Код {id_element} не нашли в базе')
-                dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, 0,
+                dict_nomenclature[id_element] = [category_id, article_change, article, vendor, name, 'other',
                                                  description, '', picture, url, float(amount), float(price),
                                                  float(dealer), 0, date, 0, 1000]
         print(len(dict_nomenclature))
@@ -245,7 +244,7 @@ class UpdateBase:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"INSERT INTO NOMENCLATURE " \
                          f"(ID, CATEGORY_ID, ARTICLE_CHANGE, ARTICLE, BRAND, NAME_NOMENCLATURE, " \
-                         f"DISCOUNT_NOMENCLATURE, DESCRIPTION_NOMENCLATURE, SPECIFICATION_NOMENCLATURE, " \
+                         f"TYPE_NOMENCLATURE, DESCRIPTION_NOMENCLATURE, SPECIFICATION_NOMENCLATURE, " \
                          f"PHOTO_NOMENCLATURE, URL_NOMENCLATURE, AVAILABILITY_NOMENCLATURE, PRICE_NOMENCLATURE, " \
                          f"DEALER_NOMENCLATURE, DISTRIBUTOR_NOMENCLATURE, DATE_UPDATE_NOMENCLATURE, " \
                          f"VIEWS_NOMENCLATURE, SORT_NOMENCLATURE) " \
@@ -258,7 +257,7 @@ class UpdateBase:
                          f"ARTICLE = '{data[3]}', " \
                          f"BRAND = '{data[4]}', " \
                          f"NAME_NOMENCLATURE = '{data[5]}', " \
-                         f"DISCOUNT_NOMENCLATURE = '{data[6]}', " \
+                         f"TYPE_NOMENCLATURE = '{data[6]}', " \
                          f"DESCRIPTION_NOMENCLATURE = '{data[7]}', " \
                          f"SPECIFICATION_NOMENCLATURE = '{data[8]}', " \
                          f"PHOTO_NOMENCLATURE = '{data[9]}', " \

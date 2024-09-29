@@ -1,3 +1,4 @@
+import json
 import logging
 import aiosqlite
 import os
@@ -30,7 +31,8 @@ class Execute:
             dict_user = {}
             row_table = await cursor.fetchall()
             for item in row_table:
-                dict_user[int(item[0])] = {'status': item[1], 'lang': item[2], 'discount_user': item[3]}
+                status_user = json.loads(item[1])
+                dict_user[int(item[0])] = {'status': status_user, 'lang': item[2], 'discount_user': item[3]}
             return dict_user
 
     async def status_user(self, id_user: int):
@@ -48,7 +50,9 @@ class Execute:
             row_table = await cursor.fetchone()
             if row_table is None:
                 print('No user')
-            return row_table[0]
+            else:
+                status_user = json.loads(row_table[0])
+            return status_user["status"]
 
     @property
     async def get_user_admin(self):
@@ -103,62 +107,62 @@ class Execute:
                     dict_user[f'identifier{item[0]}'] = item[1]
             return dict_user
 
-    async def set_retail_customer(self, user_id: str):
+    async def set_retail_customer(self, user_id: str, status_user: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_set_retail_customer(user_id)
+                return await self.execute_set_retail_customer(user_id, status_user)
         except Exception as e:
             await send_message('Ошибка запроса в методе set_retail_customer', os.environ["EMAIL"], str(e))
 
-    async def execute_set_retail_customer(self, user_id: str):
+    async def execute_set_retail_customer(self, user_id: str, status_user: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"STATUS = NULL " \
+                         f"STATUS = '{status_user}' " \
                          f"WHERE ID_USER = {self.quote(user_id)} "
             await cursor.execute(sql_record)
             await self.conn.commit()
 
-    async def set_dealer(self, user_id: str):
+    async def set_dealer(self, user_id: str, status_user: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_set_dealer(user_id)
+                return await self.execute_set_dealer(user_id, status_user)
         except Exception as e:
             await send_message('Ошибка запроса в методе set_dealer', os.environ["EMAIL"], str(e))
 
-    async def execute_set_dealer(self, user_id: str):
+    async def execute_set_dealer(self, user_id: str, status_user: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"STATUS = 'dealer' " \
+                         f"STATUS = '{status_user}' " \
                          f"WHERE ID_USER = {self.quote(user_id)} "
             await cursor.execute(sql_record)
             await self.conn.commit()
 
-    async def set_distributor(self, user_id: str):
+    async def set_distributor(self, user_id: str, status_user: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_set_distributor(user_id)
+                return await self.execute_set_distributor(user_id, status_user)
         except Exception as e:
             await send_message('Ошибка запроса в методе set_distributor', os.environ["EMAIL"], str(e))
 
-    async def execute_set_distributor(self, user_id: str):
+    async def execute_set_distributor(self, user_id: str, status_user: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"STATUS = 'distributor' " \
+                         f"STATUS = '{status_user}' " \
                          f"WHERE ID_USER = {self.quote(user_id)} "
             await cursor.execute(sql_record)
             await self.conn.commit()
 
-    async def set_discount_amount(self, user_id: str, amount: int):
+    async def set_discount_amount(self, user_id: str, status_user: str):
         try:
             async with aiosqlite.connect(self.connect_string) as self.conn:
-                return await self.execute_set_discount_amount(user_id, amount)
+                return await self.execute_set_discount_amount(user_id, status_user)
         except Exception as e:
             await send_message('Ошибка запроса в методе set_discount_amount', os.environ["EMAIL"], str(e))
 
-    async def execute_set_discount_amount(self, user_id: str, amount: int):
+    async def execute_set_discount_amount(self, user_id: str, status_user: str):
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
             sql_record = f"UPDATE TELEGRAMMBOT SET " \
-                         f"DISCOUNT = '{amount}' " \
+                         f"STATUS = '{status_user}' " \
                          f"WHERE ID_USER = {self.quote(user_id)} "
             await cursor.execute(sql_record)
             await self.conn.commit()
@@ -219,12 +223,15 @@ class Execute:
 
     async def execute_start_record_new_user(self, message: Message) -> list:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, FIRST_NAME_USER, LAST_NAME_USER, " \
-                         f"USER_NAME_USER, DISCOUNT, LANGUAGE) " \
+            status_user = {'status': 'buyer', 'consumables': 0, 'tool': 0, 'compressor': 0, 'extra_discount': 0}
+            status_user_str = json.dumps(status_user)
+            sql_record = f"INSERT INTO TELEGRAMMBOT (ID_USER, HISTORY, MESSAGES, STATUS, FIRST_NAME_USER, " \
+                         f"LAST_NAME_USER, USER_NAME_USER, DISCOUNT, LANGUAGE) " \
                          f"VALUES (" \
                          f"'{str(message.from_user.id)}', " \
                          f"'/start', " \
                          f"'{str(message.message_id)}', " \
+                         f"'{status_user_str}', " \
                          f"'{message.from_user.first_name}', " \
                          f"'{message.from_user.last_name}', " \
                          f"'{message.from_user.username}', " \
@@ -235,7 +242,7 @@ class Execute:
                   f'{message.from_user.last_name} c username: {message.from_user.username} '
                   f'зашел с сообщением: {str(message.message_id)}')
             await self.conn.commit()
-            return [message.from_user.id, None, 'russian']
+            return [message.from_user.id, status_user, 'russian']
 
     async def restart_catalog(self, message: Message, element_history: str):
         try:
@@ -506,7 +513,7 @@ class Execute:
 
     async def execute_current_description(self, kod_nomenclature: str) -> dict:
         async with self.conn.execute('PRAGMA journal_mode=wal') as cursor:
-            sql_nomenclature = f"SELECT ARTICLE, BRAND, NAME_NOMENCLATURE, DISCOUNT_NOMENCLATURE, " \
+            sql_nomenclature = f"SELECT ARTICLE, BRAND, NAME_NOMENCLATURE, TYPE_NOMENCLATURE, " \
                                f"DESCRIPTION_NOMENCLATURE, SPECIFICATION_NOMENCLATURE, PHOTO_NOMENCLATURE, " \
                                f"AVAILABILITY_NOMENCLATURE, PRICE_NOMENCLATURE, DEALER_NOMENCLATURE, " \
                                f"DISTRIBUTOR_NOMENCLATURE " \
@@ -515,7 +522,7 @@ class Execute:
             await cursor.execute(sql_nomenclature)
             row_table = await cursor.fetchone()
             dict_nomenclature = {'ARTICLE': row_table[0], 'BRAND': row_table[1], 'NAME_NOMENCLATURE': row_table[2],
-                                 'DISCOUNT_NOMENCLATURE': row_table[3], 'DESCRIPTION_NOMENCLATURE': row_table[4],
+                                 'TYPE_NOMENCLATURE': row_table[3], 'DESCRIPTION_NOMENCLATURE': row_table[4],
                                  'SPECIFICATION_NOMENCLATURE': row_table[5], 'PHOTO_NOMENCLATURE': row_table[6],
                                  'AVAILABILITY_NOMENCLATURE': row_table[7], 'PRICE_NOMENCLATURE': row_table[8],
                                  'DEALER_NOMENCLATURE': row_table[9], 'DISTRIBUTOR_NOMENCLATURE': row_table[10]}

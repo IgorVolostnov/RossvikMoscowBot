@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from classes import BotTelegram
+from dispatcher import BotTelegram
 
 if __name__ == '__main__':
     load_dotenv()

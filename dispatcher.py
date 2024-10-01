@@ -729,7 +729,7 @@ class DispatcherMessage(Dispatcher):
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         await self.execute.add_element_message(message.from_user.id, message.message_id)
         arr_messages_for_record = await self.delete_messages(message.from_user.id)
-        arr_messages_for_record.append(answer.message_id)
+        arr_messages_for_record.append(str(answer.message_id))
         record_message = ' '.join(arr_messages_for_record)
         await self.execute.record_message(message.from_user.id, record_message)
 
@@ -742,7 +742,7 @@ class DispatcherMessage(Dispatcher):
         answer = await self.bot.push_photo(call_back.message.chat.id, text_help,
                                            self.build_keyboard(first_keyboard, 1), self.bot.help_logo)
         arr_messages_for_record = await self.delete_messages(call_back.from_user.id)
-        arr_messages_for_record.append(answer.message_id)
+        arr_messages_for_record.append(str(answer.message_id))
         record_message = ' '.join(arr_messages_for_record)
         await self.execute.record_message(call_back.from_user.id, record_message)
 
@@ -1015,16 +1015,20 @@ class DispatcherMessage(Dispatcher):
         brand = await self.format_text(arr_description['BRAND'])
         price = float(arr_description['PRICE_NOMENCLATURE'])
         if self.arr_auth_user[id_user]['status']['status'] == 'dealer':
-            dealer = await self.get_dealer(arr_description, id_call_back, self.arr_auth_user[id_user]['discount_user'],
+            dealer = await self.get_dealer(arr_description, id_call_back,
+                                           self.arr_auth_user[id_user]['status']['consumables'],
                                            self.arr_auth_user[id_user]['status']['status'])
             dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                       'Дилерская цена': dealer, 'Дистрибьюторская цена': None, 'Наличие': amount}
             text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             dict_hide = {f'{id_item}remove_dealer_price': '🙈 Скрыть оптовые цены'}
         elif self.arr_auth_user[id_user]['status']['status'] == 'distributor':
-            dealer = await self.get_dealer(arr_description, id_call_back, self.arr_auth_user[id_user]['discount_user'],
+            discount_consumables = self.arr_auth_user[id_user]['status']['consumables']
+            dealer = await self.get_dealer(arr_description, id_call_back,
+                                           self.arr_auth_user[id_user]['status']['consumables'],
                                            self.arr_auth_user[id_user]['status']['status'])
-            distributor = await self.get_distributor(arr_description, self.arr_auth_user[id_user]['discount_user'])
+            distributor = await self.get_distributor(arr_description,
+                                                     self.arr_auth_user[id_user]['status']['consumables'])
             dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                       'Дилерская цена': dealer, 'Дистрибьюторская цена': distributor, 'Наличие': amount}
             text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
@@ -1111,17 +1115,18 @@ class DispatcherMessage(Dispatcher):
             await self.get_availability(arr_description['AVAILABILITY_NOMENCLATURE'])
             if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
                 dealer = await self.get_dealer(arr_description, call_back.id,
-                                               self.arr_auth_user[call_back.from_user.id]['discount_user'],
+                                               self.arr_auth_user[call_back.from_user.id]['status']['consumables'],
                                                self.arr_auth_user[call_back.from_user.id]['status']['status'])
                 dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                           'Дилерская цена': dealer, 'Дистрибьюторская цена': None, 'Наличие': amount}
                 text_description_nomenclature = await self.get_text_description(dict_info_nomenclature)
             elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
                 dealer = await self.get_dealer(arr_description, call_back.id,
-                                               self.arr_auth_user[call_back.from_user.id]['discount_user'],
+                                               self.arr_auth_user[call_back.from_user.id]['status']['consumables'],
                                                self.arr_auth_user[call_back.from_user.id]['status']['status'])
                 distributor = await self.get_distributor(arr_description,
-                                                         self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                                                         self.arr_auth_user[
+                                                             call_back.from_user.id]['status']['consumables'])
                 dict_info_nomenclature = {'Наименование': name, 'Артикул': article, 'Бренд': brand, 'Цена': price,
                                           'Дилерская цена': dealer, 'Дистрибьюторская цена': distributor,
                                           'Наличие': amount}
@@ -1175,11 +1180,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount(call_back.message.text, button)
         if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
-                                          self.arr_auth_user[call_back.from_user.id]['discount_user'],
+                                          self.arr_auth_user[call_back.from_user.id]['status']['consumables'],
                                           self.arr_auth_user[call_back.from_user.id]['status']['status'])
         elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
-                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                                               self.arr_auth_user[call_back.from_user.id]['status']['consumables'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         sum_nomenclature = float(amount) * float(price)
@@ -1213,11 +1218,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
-                                          self.arr_auth_user[call_back.from_user.id]['discount_user'],
+                                          self.arr_auth_user[call_back.from_user.id]['status']['consumables'],
                                           self.arr_auth_user[call_back.from_user.id]['status']['status'])
         elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
-                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                                               self.arr_auth_user[call_back.from_user.id]['status']['consumables'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
@@ -1256,11 +1261,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount_minus(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
-                                          self.arr_auth_user[call_back.from_user.id]['discount_user'],
+                                          self.arr_auth_user[call_back.from_user.id]['status']['consumables'],
                                           self.arr_auth_user[call_back.from_user.id]['status']['status'])
         elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
-                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                                               self.arr_auth_user[call_back.from_user.id]['status']['consumables'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
@@ -1299,11 +1304,11 @@ class DispatcherMessage(Dispatcher):
             amount = await self.get_amount_delete(call_back.message.text)
         if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
-                                          self.arr_auth_user[call_back.from_user.id]['discount_user'],
+                                          self.arr_auth_user[call_back.from_user.id]['status']['consumables'],
                                           self.arr_auth_user[call_back.from_user.id]['status']['status'])
         elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
-                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                                               self.arr_auth_user[call_back.from_user.id]['status']['consumables'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
@@ -1343,11 +1348,11 @@ class DispatcherMessage(Dispatcher):
                                              arr_description['AVAILABILITY_NOMENCLATURE'])
         if self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'dealer':
             price = await self.get_dealer(arr_description, call_back.id,
-                                          self.arr_auth_user[call_back.from_user.id]['discount_user'],
+                                          self.arr_auth_user[call_back.from_user.id]['status']['consumables'],
                                           self.arr_auth_user[call_back.from_user.id]['status']['status'])
         elif self.arr_auth_user[call_back.from_user.id]['status']['status'] == 'distributor':
             price = await self.get_distributor(arr_description,
-                                               self.arr_auth_user[call_back.from_user.id]['discount_user'])
+                                               self.arr_auth_user[call_back.from_user.id]['status']['consumables'])
         else:
             price = arr_description['PRICE_NOMENCLATURE']
         if amount is not None:
